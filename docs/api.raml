@@ -1,0 +1,314 @@
+#%RAML 1.0
+title: 金影子黄金增值 (GoldValueAdded) API
+version: v1
+baseUri: http://localhost:3000/api
+mediaType: application/json
+
+types:
+  User:
+    type: object
+    properties:
+      id: string
+      username: string
+      nickname: string
+      avatar: string
+      balance?: number
+      accountStatus?: string
+      level?: string
+  
+  NewsItem:
+    type: object
+    properties:
+      id: integer
+      title: string
+      date: string
+      summary?: string
+      thumbnail?: string
+      views?: integer
+      author?: string
+      image?: string
+      content?: string
+
+  Asset:
+    type: object
+    properties:
+      label: string
+      value: string
+      unit: string
+      trend?: string
+
+  Position:
+    type: object
+    properties:
+      level: string
+      weight: string
+      price: string
+      count: integer
+      bgImage: string
+
+/auth:
+  /send-otp:
+    post:
+      description: 发送短信验证码
+      body:
+        properties:
+          phone: string
+      responses:
+        200:
+          body:
+            properties:
+              code: integer
+              message: string
+
+  /register:
+    post:
+      description: 用户注册
+      body:
+        properties:
+          username: string
+      responses:
+        200:
+          body:
+            properties:
+              code: integer
+              message: string
+
+  /login:
+    post:
+      description: 用户登录
+      body:
+        properties:
+          username: string
+          password: string
+      responses:
+        200:
+          body:
+            properties:
+              code: integer
+              message: string
+              data:
+                properties:
+                  token: string
+                  user: User
+
+  /logout:
+    post:
+      description: 退出登录
+      responses:
+        200:
+          body:
+            properties:
+              code: integer
+              message: string
+
+  /reset-password:
+    post:
+      description: 重置密码
+      responses:
+        200:
+          body:
+            properties:
+              code: integer
+              message: string
+
+/notice:
+  get:
+    description: 获取滚动公告
+    responses:
+      200:
+        body:
+          properties:
+            code: integer
+            text: string
+
+/activities:
+  get:
+    description: 获取热门活动列表
+    responses:
+      200:
+        body:
+          properties:
+            code: integer
+            data:
+              type: array
+              items:
+                properties:
+                  id: integer
+                  title: string
+                  image: string
+  /{id}:
+    get:
+      description: 获取活动详情
+      responses:
+        200:
+          body:
+            properties:
+              code: integer
+              data: NewsItem
+
+/news:
+  get:
+    description: 获取新闻列表（支持分页）
+    queryParameters:
+      page:
+        type: integer
+        default: 1
+      limit:
+        type: integer
+        default: 5
+    responses:
+      200:
+        body:
+          properties:
+            code: integer
+            data:
+              properties:
+                items: NewsItem[]
+                total: integer
+                page: integer
+                limit: integer
+                totalPages: integer
+  /{id}:
+    get:
+      description: 获取新闻详情
+      responses:
+        200:
+          body:
+            properties:
+              code: integer
+              data: NewsItem
+
+/market:
+  /prices:
+    get:
+      description: 获取实时行情列表
+      responses:
+        200:
+          body:
+            properties:
+              code: integer
+              data:
+                type: array
+                items:
+                  properties:
+                    id: string
+                    name: string
+                    price: string
+                    change: string
+                    up: boolean
+  /kline:
+    get:
+      description: 获取K线数据
+      queryParameters:
+        period:
+          enum: [1m, daily, weekly, monthly]
+          default: 1m
+        asset:
+          enum: [AU9999, AG9999, USDX, OIL]
+          default: AU9999
+      responses:
+        200:
+          body:
+            properties:
+              code: integer
+              data: array
+
+/trade:
+  /orders:
+    get:
+      description: 获取最近订单
+      responses:
+        200:
+          body:
+            properties:
+              code: integer
+              data: array
+  /order:
+    post:
+      description: 提交交易下单
+      body:
+        properties:
+          assetId: string
+          type:
+            enum: [buy, sell]
+          quantity: number
+      responses:
+        200:
+          body:
+            properties:
+              code: integer
+              message: string
+              data: object
+
+/user:
+  /profile:
+    get:
+      description: 获取个人资产及持仓详情
+      responses:
+        200:
+          body:
+            properties:
+              code: integer
+              data:
+                properties:
+                  id: string
+                  username: string
+                  nickname: string
+                  avatar: string
+                  level: string
+                  assets: Asset[]
+                  goldPositions: Position[]
+                  silverPositions: Position[]
+
+/chat:
+  /list:
+    get:
+      description: 获取会话列表
+      responses:
+        200:
+          body:
+            properties:
+              code: integer
+              data:
+                type: array
+                items:
+                  properties:
+                    id: integer
+                    name: string
+                    lastMsg: string
+                    time: string
+                    type: string
+  /messages/{id}:
+    get:
+      description: 获取会话历史消息
+      queryParameters:
+        page:
+          type: integer
+          default: 1
+        limit:
+          type: integer
+          default: 20
+    responses:
+      200:
+        body:
+          properties:
+            code: integer
+            data:
+              properties:
+                items: array
+                total: integer
+                hasMore: boolean
+  /send:
+    post:
+      description: 发送消息
+      body:
+        properties:
+          chatId: integer
+          text: string
+      responses:
+        200:
+          body:
+            properties:
+              code: integer
+              data: object
+

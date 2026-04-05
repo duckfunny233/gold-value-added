@@ -1,0 +1,185 @@
+{
+  "nav": {
+    "home": "ホーム",
+    "chat": "チャット",
+    "market": "マーケット",
+    "trade": "取引",
+    "profile": "資産"
+  },
+  "chat": {
+    "addFriend": "友達を追加",
+    "createGroup": "グループ作成",
+    "scan": "スキャン",
+    "qrCode": "マイQRコード",
+    "refreshing": "更新中...",
+    "noSession": "会話はありません",
+    "reload": "再読み込み",
+    "placeholder": "メッセージを入力...",
+    "loadMore": "履歴を表示",
+    "syncing": "同期中..."
+  },
+  "language": "言語",
+  "common": {
+    "loading": "読み込み中...",
+    "noData": "データなし",
+    "error": "エラー",
+    "retry": "再試行",
+    "cancel": "キャンセル",
+    "confirm": "確認",
+    "submit": "送信",
+    "submitting": "送信中...",
+    "success": "成功",
+    "failed": "失敗",
+    "viewMore": "もっと見る",
+    "back": "戻る",
+    "save": "保存",
+    "edit": "編集",
+    "delete": "削除",
+    "refresh": "更新",
+    "search": "検索",
+    "all": "すべて",
+    "yes": "はい",
+    "no": "いいえ",
+    "ok": "OK",
+    "noMore": "--- これ以上ありません ---"
+  },
+  "auth": {
+    "login": {
+      "title": "ログイン",
+      "username": "ユーザー名",
+      "password": "パスワード",
+      "loginBtn": "ログイン",
+      "registerLink": "新規登録",
+      "forgotPassword": "パスワードを忘れた",
+      "usernamePlaceholder": "ユーザー名を入力",
+      "passwordPlaceholder": "パスワードを入力",
+      "fillAll": "すべての項目を入力してください",
+      "loginFailed": "ログイン失敗。ユーザー名またはパスワードを確認してください"
+    },
+    "register": {
+      "title": "アカウント登録",
+      "username": "ユーザー名",
+      "phone": "電話番号",
+      "code": "認証コード",
+      "password": "パスワード",
+      "realName": "実名",
+      "idNumber": "身分証番号",
+      "idMaterial": "身分証資料",
+      "workCert": "在職証明",
+      "bizLicense": "営業許可証",
+      "workProof": "勤務証明",
+      "uploadArea": "資料をアップロード",
+      "uploadFormat": "JPG / PNG 対応",
+      "uploadChange": "再アップロード可能",
+      "registerBtn": "登録する",
+      "getCode": "コード取得",
+      "usernamePlaceholder": "6-18文字の英数字",
+      "phonePlaceholder": "電話番号を入力",
+      "codePlaceholder": "認証コードを入力",
+      "passwordPlaceholder": "6-16文字の英数字",
+      "realNamePlaceholder": "実名を入力",
+      "idNumberPlaceholder": "18桁の身分証番号",
+      "preview": "プレビュー",
+      "fillAll": "すべての項目を入力してください",
+      "success": "登録に成功しました"
+    },
+    "forgotPassword": {
+      "title": "パスワード再設定",
+      "phone": "電話番号",
+      "code": "認証コード",
+      "newPassword": "新しいパスワード",
+      "getCode": "コード取得",
+      "confirmReset": "リセットを確認",
+      "phonePlaceholder": "登録済み電話番号を入力",
+      "codePlaceholder": "認証コードを入力",
+      "newPasswordPlaceholder": "新しいパスワードを入力",
+      "fillAll": "すべての項目を入力してください"
+    }
+  },
+  "home": {
+    "loadingNotice": "お知らせを読み込み中...",
+    "newsTitle": "ニュース",
+    "viewMore": "もっと見る",
+    "loadingNews": "ニュースを読み込み中...",
+    "noNotice": "お知らせはありません",
+    "connectionFailed": "接続に失敗しました"
+  },
+  "market": {
+    "realTime": "リアルタイム相場",
+    "connecting": "相場サーバーに接続中...",
+    "selectAsset": "銘柄を選択してください",
+    "timeShare": "分時",
+    "dailyK": "日足",
+    "weeklyK": "週足",
+    "monthlyK": "月足",
+    "quarterlyK": "四半期",
+    "yearlyK": "年足",
+    "buyAnchor": "買いアンカー",
+    "sellUnhook": "売りアンカー解除"
+  },
+  "trade": {
+    "quantity": "数量（{{ assetName }}）",
+    "currentPrice": "現在価格",
+    "quantityPlaceholder": "数量を入力",
+    "estimatedAmount": "概算金額",
+    "confirmBuy": "買いを確認",
+    "confirmSell": "売りを確認",
+    "submitting": "送信中...",
+    "recentOrders": "最近の注文",
+    "refresh": "更新",
+    "noOrders": "注文履歴がありません",
+    "orderSuccess": "注文成功"
+  },
+  "profile": {
+    "idPrefix": "ID:",
+    "recharge": "入金",
+    "withdraw": "出金",
+    "transfer": "振替",
+    "exchange": "交換",
+    "tempAssets": "暫定資産",
+    "gold": "金",
+    "silver": "銀",
+    "currentHold": "現在保有",
+    "weight": "重量",
+    "marketValue": "時価",
+    "security": "セキュリティ",
+    "holdings": "保有資産",
+    "logout": "ログアウト",
+    "loading": "読み込み中...",
+    "comingSoon": "この機能は準備中です",
+    "fee": "手数料",
+    "myGold": "私の黄金",
+    "assets": {
+      "total": "総資産",
+      "balance": "利用可能残高",
+      "marketValue": "時価評価額",
+      "yesterdayProfit": "前日損益",
+      "accumulatedProfit": "累計損益"
+    }
+  },
+  "news": {
+    "newsListTitle": "ニュース一覧",
+    "loading": "読み込み中...",
+    "noContent": "コンテンツなし",
+    "viewMore": "さらに表示",
+    "loadedAll": "--- すべて読み込みました ---",
+    "activityDetail": "活動詳細",
+    "newsDetail": "ニュース詳細",
+    "loadingDetail": "詳細を読み込み中...",
+    "returnList": "一覧へ戻る",
+    "loadFailed": "読み込み失敗。再試行してください",
+    "views": "閲覧数"
+  },
+  "components": {
+    "imageCarousel": {
+      "recommendation": "おすすめ {{ index }}"
+    }
+  },
+  "logo": {
+    "title": "金影子・ゴールド増値"
+  },
+  "errors": {
+    "sessionExpired": "セッションの有効期限が切れました。再ログインしてください",
+    "networkError": "ネットワークエラー"
+  }
+}

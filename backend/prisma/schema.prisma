@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  FROZEN
+  DISABLED
+}
+
+enum RealNameStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  REVIEWING
+  APPROVED
+  REJECTED
+  COMPLETED
+  MUTED
+}
+
+enum RechargeStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum TradeSide {
+  BUY
+  SELL
+}
+
+enum TradeStatus {
+  OPEN
+  PARTIALLY_FILLED
+  FILLED
+  CANCELLED
+  REJECTED
+}
+
+enum AssetChangeType {
+  RECHARGE
+  WITHDRAW_FREEZE
+  WITHDRAW_RELEASE
+  WITHDRAW_COMPLETE
+  TRADE_BUY
+  TRADE_SELL
+  MANUAL_ADJUST
+}
+
+enum NoticeStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model User {
+  id               String          @id @default(cuid())
+  uid              String          @unique
+  username         String          @unique
+  passwordHash     String
+  nickname         String?
+  phone            String?         @unique
+  email            String?         @unique
+  status           UserStatus      @default(ACTIVE)
+  realNameStatus   RealNameStatus  @default(PENDING)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  asset            Asset?
+  rechargeOrders   RechargeOrder[]
+  withdrawalOrders WithdrawalOrder[]
+  tradeOrders      TradeOrder[]
+  auditLogs        AuditLog[]
+}
+
+model Asset {
+  id                   String        @id @default(cuid())
+  userId               String        @unique
+  tentativeAsset       Decimal       @db.Decimal(18, 2)
+  cashAsset            Decimal       @db.Decimal(18, 2)
+  appreciationIncome   Decimal       @db.Decimal(18, 2)
+  goldHoldingGrams     Decimal       @db.Decimal(18, 4)
+  withdrawFrozenAmount Decimal       @db.Decimal(18, 2)
+  totalAsset           Decimal       @db.Decimal(18, 2)
+  updatedAt            DateTime      @updatedAt
+  user                 User          @relation(fields: [userId], references: [id])
+  ledgerEntries        LedgerEntry[]
+}
+
+model RechargeOrder {
+  id               String         @id @default(cuid())
+  userId           String
+  channel          String
+  amount           Decimal        @db.Decimal(18, 2)
+  status           RechargeStatus @default(PENDING)
+  traceId          String         @unique
+  channelReference String?
+  autoSettleAt     DateTime
+  settledAt        DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  user             User           @relation(fields: [userId], references: [id])
+  hashRecords      HashRecord[]
+}
+
+model WithdrawalOrder {
+  id                String           @id @default(cuid())
+  userId            String
+  amount            Decimal          @db.Decimal(18, 2)
+  status            WithdrawalStatus @default(PENDING)
+  queueNo           Int
+  traceId           String           @unique
+  submittedAt       DateTime         @default(now())
+  reviewedAt        DateTime?
+  completedAt       DateTime?
+  payeeName         String?
+  wechatReceiptUrl  String?
+  alipayReceiptUrl  String?
+  bankName          String?
+  bankAccountNo     String?
+  bankAccountHolder String?
+  reviewerId        String?
+  isVoiceMuted      Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  user              User             @relation(fields: [userId], references: [id])
+  hashRecords       HashRecord[]
+}
+
+model TradeOrder {
+  id            String       @id @default(cuid())
+  userId        String
+  side          TradeSide
+  status        TradeStatus  @default(OPEN)
+  assetCode     String
+  price         Decimal      @db.Decimal(18, 2)
+  quantityGrams Decimal      @db.Decimal(18, 4)
+  filledGrams   Decimal      @db.Decimal(18, 4) @default(0)
+  traceId       String       @unique
+  submittedAt   DateTime     @default(now())
+  completedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  user          User         @relation(fields: [userId], references: [id])
+  buyMatches    TradeMatch[] @relation("buyOrder")
+  sellMatches   TradeMatch[] @relation("sellOrder")
+  hashRecords   HashRecord[]
+}
+
+model TradeMatch {
+  id           String     @id @default(cuid())
+  buyOrderId   String
+  sellOrderId  String
+  matchedPrice Decimal    @db.Decimal(18, 2)
+  matchedGrams Decimal    @db.Decimal(18, 4)
+  traceId      String     @unique
+  matchedAt    DateTime   @default(now())
+  buyOrder     TradeOrder @relation("buyOrder", fields: [buyOrderId], references: [id])
+  sellOrder    TradeOrder @relation("sellOrder", fields: [sellOrderId], references: [id])
+}
+
+model LedgerEntry {
+  id           String          @id @default(cuid())
+  assetId       String
+  userId        String
+  changeType    AssetChangeType
+  amount        Decimal         @db.Decimal(18, 2)
+  traceId       String
+  balanceAfter  Decimal         @db.Decimal(18, 2)
+  referenceType String
+  referenceId   String
+  createdAt     DateTime        @default(now())
+  asset         Asset           @relation(fields: [assetId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([traceId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  actorType String
+  actorId   String?
+  module    String
+  action    String
+  traceId   String
+  payload   Json
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([module, createdAt])
+  @@index([traceId])
+}
+
+model HashRecord {
+  id                String           @id @default(cuid())
+  referenceType     String
+  referenceId       String
+  traceId           String
+  sha256            String           @db.Char(64)
+  syncStatus        String
+  syncedAt          DateTime?
+  createdAt         DateTime         @default(now())
+  rechargeOrder     RechargeOrder?   @relation(fields: [rechargeOrderId], references: [id])
+  rechargeOrderId   String?
+  withdrawalOrder   WithdrawalOrder? @relation(fields: [withdrawalOrderId], references: [id])
+  withdrawalOrderId String?
+  tradeOrder        TradeOrder?      @relation(fields: [tradeOrderId], references: [id])
+  tradeOrderId      String?
+
+  @@index([referenceType, referenceId])
+  @@index([traceId])
+}
+
+model Notice {
+  id          String       @id @default(cuid())
+  title       String
+  content     String
+  status      NoticeStatus @default(DRAFT)
+  sortOrder   Int          @default(0)
+  publishedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model SystemConfig {
+  id          String   @id @default(cuid())
+  configKey   String   @unique
+  configValue Json
+  updatedAt   DateTime @updatedAt
+}

@@ -1,0 +1,553 @@
+openapi: 3.1.0
+info:
+  title: Jinlian GYC API
+  version: 4.2.0
+  description: |
+    金链·GYC 最新接口规范。
+    当前版本关键约束：
+    - UID 是业务主标识
+    - 充值 24 小时自动入账，仅做对账查看
+    - 提现仅交易时间可发起，提交即冻结并扣减暂定资产/总资产，确认完成不得二次扣款
+    - 交易支持买入和卖出，自动撮合
+    - 撮合规则必须写入代码，遵循价格优先、时间优先
+    - 哈希使用 SHA-256，输出固定 64 位，并同步半公开金链
+servers:
+  - url: http://localhost:3000
+    description: Local development
+tags:
+  - name: Auth
+  - name: AppAssets
+  - name: AppRecharge
+  - name: AppWithdraw
+  - name: AppTrade
+  - name: AppMarket
+  - name: AppNotice
+  - name: AdminDashboard
+  - name: AdminUsers
+  - name: AdminFunds
+  - name: AdminTrades
+  - name: AdminLeaderboard
+  - name: AdminRisk
+  - name: AdminAudit
+  - name: AdminReports
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: 用户注册并分配 UID
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseRegister'
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: 用户登录
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseLogin'
+  /app/assets/overview:
+    get:
+      tags: [AppAssets]
+      summary: 获取用户资产总览
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAssetOverview'
+  /app/recharges:
+    post:
+      tags: [AppRecharge]
+      summary: 创建充值订单并进入 24 小时自动入账流程
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseRechargeOrder'
+    get:
+      tags: [AppRecharge]
+      summary: 查询充值记录
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseRechargeOrderList'
+  /app/withdrawals:
+    post:
+      tags: [AppWithdraw]
+      summary: 发起提现申请
+      description: 仅交易时间可发起，提交后立即冻结金额并扣减暂定资产/总资产，进入按提交时间排序的提现队列
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWithdrawOrder'
+    get:
+      tags: [AppWithdraw]
+      summary: 查询提现记录
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWithdrawOrderList'
+  /app/trades/buy:
+    post:
+      tags: [AppTrade]
+      summary: 提交买单
+      description: 撮合规则为价格优先、时间优先
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseTradeOrder'
+  /app/trades/sell:
+    post:
+      tags: [AppTrade]
+      summary: 提交卖单
+      description: 撮合规则为价格优先、时间优先
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseTradeOrder'
+  /app/trades:
+    get:
+      tags: [AppTrade]
+      summary: 查询交易记录
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseTradeOrderList'
+  /app/market/au9999/ticker:
+    get:
+      tags: [AppMarket]
+      summary: 获取 AU9999 实时行情
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAuTicker'
+  /app/notices:
+    get:
+      tags: [AppNotice]
+      summary: 获取首页公告轮播
+      description: 前端按轮巡方式展示
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseNoticeList'
+  /admin/dashboard/overview:
+    get:
+      tags: [AdminDashboard]
+      summary: 获取仪表盘总览
+      description: 包含提现语音提醒中的订单数量
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDashboardOverview'
+  /admin/dashboard/notices:
+    post:
+      tags: [AdminDashboard]
+      summary: 发布公告
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseNotice'
+  /admin/funds/recharges:
+    get:
+      tags: [AdminFunds]
+      summary: 查询充值对账列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseRechargeOrderList'
+  /admin/funds/withdrawals:
+    get:
+      tags: [AdminFunds]
+      summary: 查询提现审核列表
+      description: 按提交时间升序返回，确保队列顺序稳定；新单默认触发语音持续提醒
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWithdrawOrderList'
+  /admin/funds/withdrawals/{orderId}/mute-alert:
+    post:
+      tags: [AdminFunds]
+      summary: 停止提现语音提醒
+      description: 工作人员进入订单详情或手动静音时调用
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWithdrawOrder'
+  /admin/funds/withdrawals/{orderId}/reject:
+    post:
+      tags: [AdminFunds]
+      summary: 驳回提现并解冻回补资产
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWithdrawOrder'
+  /admin/funds/withdrawals/{orderId}/confirm-completed:
+    post:
+      tags: [AdminFunds]
+      summary: 线下转账后确认提现完成
+      description: 只允许更新订单为 completed，不允许二次扣减资产
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWithdrawOrder'
+  /admin/trades:
+    get:
+      tags: [AdminTrades]
+      summary: 查询交易列表
+      description: 前后台交易数据需实时同步，资产变动一秒更新
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseTradeOrderList'
+  /admin/trades/session:
+    put:
+      tags: [AdminTrades]
+      summary: 更新交易时间配置
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseMessage'
+  /admin/audit/traces/{traceId}:
+    get:
+      tags: [AdminAudit]
+      summary: 按 traceId 查询全链路追踪
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAuditTrace'
+  /admin/audit/hash-records:
+    get:
+      tags: [AdminAudit]
+      summary: 查询哈希记录
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseHashRecordList'
+components:
+  schemas:
+    UserSummary:
+      type: object
+      properties:
+        userId:
+          type: string
+        uid:
+          type: integer
+        sequenceNo:
+          type: integer
+    AssetOverview:
+      type: object
+      properties:
+        uid:
+          type: integer
+        tentativeAsset:
+          type: number
+        withdrawFrozenAmount:
+          type: number
+        cashAsset:
+          type: number
+        totalAsset:
+          type: number
+    RechargeOrder:
+      type: object
+      properties:
+        orderId:
+          type: string
+        uid:
+          type: integer
+        amount:
+          type: number
+        status:
+          type: string
+          enum: [auto_credited, reconciling, reconciled]
+        traceId:
+          type: string
+    WithdrawOrder:
+      type: object
+      properties:
+        orderId:
+          type: string
+        queueNo:
+          type: integer
+          description: 提现队列号，按提交时间递增
+        uid:
+          type: integer
+        amount:
+          type: number
+        frozenAmount:
+          type: number
+        status:
+          type: string
+          enum: [pending_review, transfer_processing, completed, rejected]
+        submittedAt:
+          type: string
+          format: date-time
+        freezeAppliedAt:
+          type: string
+          format: date-time
+        confirmCompletedAt:
+          type: string
+          format: date-time
+        alertStatus:
+          type: string
+          enum: [ringing, muted, stopped]
+        alertStoppedAt:
+          type: string
+          format: date-time
+        alertStopReason:
+          type: string
+          enum: [open_detail, manual_mute]
+        wechatQrCodeUrl:
+          type: string
+        alipayQrCodeUrl:
+          type: string
+        bankCardNo:
+          type: string
+        traceId:
+          type: string
+    TradeOrder:
+      type: object
+      properties:
+        tradeNo:
+          type: string
+        tradeType:
+          type: string
+          enum: [buy, sell]
+        uid:
+          type: integer
+        amount:
+          type: number
+        grams:
+          type: number
+        status:
+          type: string
+        syncStatus:
+          type: string
+        syncLagMs:
+          type: integer
+          description: 交易同步延迟毫秒，目标不超过 1000ms
+        traceId:
+          type: string
+    DashboardOverview:
+      type: object
+      properties:
+        pendingAuditCount:
+          type: integer
+        frozenUserCount:
+          type: integer
+        goldReferencePrice:
+          type: number
+        tradingStatus:
+          type: string
+        syncDelay:
+          type: number
+        withdrawAlertRingingCount:
+          type: integer
+        pollingEnabled:
+          type: boolean
+    Notice:
+      type: object
+      properties:
+        noticeId:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        pollingEnabled:
+          type: boolean
+    HashRecord:
+      type: object
+      properties:
+        hashValue:
+          type: string
+          minLength: 64
+          maxLength: 64
+          description: SHA-256 64 位哈希值
+        traceId:
+          type: string
+        uid:
+          type: integer
+        chainSyncStatus:
+          type: string
+    ApiResponseMessage:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+    ApiResponseRegister:
+      type: object
+      properties:
+        code:
+          type: integer
+    ApiResponseLogin:
+      type: object
+      properties:
+        code:
+          type: integer
+    ApiResponseAssetOverview:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/AssetOverview'
+    ApiResponseRechargeOrder:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/RechargeOrder'
+    ApiResponseRechargeOrderList:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/RechargeOrder'
+    ApiResponseWithdrawOrder:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/WithdrawOrder'
+    ApiResponseWithdrawOrderList:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WithdrawOrder'
+    ApiResponseTradeOrder:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/TradeOrder'
+    ApiResponseTradeOrderList:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TradeOrder'
+    ApiResponseAuTicker:
+      type: object
+      properties:
+        code:
+          type: integer
+    ApiResponseNotice:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/Notice'
+    ApiResponseNoticeList:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notice'
+    ApiResponseDashboardOverview:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/DashboardOverview'
+    ApiResponseAuditTrace:
+      type: object
+      properties:
+        code:
+          type: integer
+    ApiResponseHashRecordList:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/HashRecord'

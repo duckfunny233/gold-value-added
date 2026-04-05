@@ -1,0 +1,185 @@
+{
+  "nav": {
+    "home": "Home",
+    "chat": "Chat",
+    "market": "Market",
+    "trade": "Trade",
+    "profile": "My Assets"
+  },
+  "chat": {
+    "addFriend": "Add Friend",
+    "createGroup": "Create Group",
+    "scan": "Scan",
+    "qrCode": "My QR Code",
+    "refreshing": "Refreshing...",
+    "noSession": "No conversation",
+    "reload": "Reload",
+    "placeholder": "Type a message...",
+    "loadMore": "View history",
+    "syncing": "Syncing..."
+  },
+  "language": "Language",
+  "common": {
+    "loading": "Loading...",
+    "noData": "No data",
+    "error": "Error",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "submit": "Submit",
+    "submitting": "Submitting...",
+    "success": "Success",
+    "failed": "Failed",
+    "viewMore": "View more",
+    "back": "Back",
+    "save": "Save",
+    "edit": "Edit",
+    "delete": "Delete",
+    "refresh": "Refresh",
+    "search": "Search",
+    "all": "All",
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "noMore": "--- End of content ---"
+  },
+  "auth": {
+    "login": {
+      "title": "Welcome",
+      "username": "Phone/Username",
+      "password": "Password",
+      "loginBtn": "Login now",
+      "registerLink": "Register now",
+      "forgotPassword": "Forgot password?",
+      "usernamePlaceholder": "Enter phone/username",
+      "passwordPlaceholder": "Enter password",
+      "fillAll": "Please fill in all fields",
+      "loginFailed": "Login failed, please check username or password"
+    },
+    "register": {
+      "title": "Create account",
+      "username": "Username",
+      "phone": "Phone",
+      "code": "Verification code",
+      "password": "Password",
+      "realName": "Real name",
+      "idNumber": "ID number",
+      "idMaterial": "Proof material (optional)",
+      "workCert": "Work permit",
+      "bizLicense": "Business license",
+      "workProof": "Work proof (stamped)",
+      "uploadArea": "Click to upload proof",
+      "uploadFormat": "Supports JPG, PNG formats",
+      "uploadChange": "Click or drag to change file",
+      "registerBtn": "Register with real-name verification",
+      "getCode": "Get code",
+      "usernamePlaceholder": "6-18 letters/numbers",
+      "phonePlaceholder": "Enter phone number",
+      "codePlaceholder": "Enter verification code",
+      "passwordPlaceholder": "6-16 letters+numbers",
+      "realNamePlaceholder": "Enter your real name",
+      "idNumberPlaceholder": "18-digit ID number",
+      "preview": "Preview:",
+      "fillAll": "Please fill in all fields",
+      "success": "Registration and real-name verification successful!"
+    },
+    "forgotPassword": {
+      "title": "Retrieve password",
+      "phone": "Phone number",
+      "code": "Verification code",
+      "newPassword": "New password",
+      "getCode": "Get verification code",
+      "confirmReset": "Confirm reset",
+      "phonePlaceholder": "Enter bound phone number",
+      "codePlaceholder": "Enter verification code",
+      "newPasswordPlaceholder": "Enter new password",
+      "fillAll": "Please fill in all fields"
+    }
+  },
+  "home": {
+    "loadingNotice": "Loading announcement...",
+    "newsTitle": "News",
+    "viewMore": "View more",
+    "loadingNews": "Getting latest updates...",
+    "noNotice": "No announcement",
+    "connectionFailed": "Unable to connect to server"
+  },
+  "market": {
+    "realTime": "Real-time quotes",
+    "connecting": "Connecting to market server...",
+    "selectAsset": "Please select an asset",
+    "timeShare": "1D",
+    "dailyK": "1W",
+    "weeklyK": "1M",
+    "monthlyK": "1Y",
+    "quarterlyK": "Quarter",
+    "yearlyK": "Year",
+    "buyAnchor": "Buy anchor",
+    "sellUnhook": "Sell unhook"
+  },
+  "trade": {
+    "quantity": "Quantity ({ assetName })",
+    "currentPrice": "Current price:",
+    "quantityPlaceholder": "Enter quantity (g)",
+    "estimatedAmount": "Estimated amount",
+    "confirmBuy": "Confirm buy order",
+    "confirmSell": "Confirm sell order",
+    "submitting": "Submitting...",
+    "recentOrders": "Recent orders",
+    "refresh": "Refresh",
+    "noOrders": "No order records",
+    "orderSuccess": "Order successful!"
+  },
+  "profile": {
+    "idPrefix": "ID:",
+    "recharge": "Recharge",
+    "withdraw": "Withdraw",
+    "transfer": "Transfer",
+    "exchange": "Exchange",
+    "tempAssets": "Temp assets",
+    "gold": "Gold",
+    "silver": "Silver",
+    "currentHold": "Current holding:",
+    "weight": "Weight",
+    "marketValue": "Market value",
+    "security": "Security settings",
+    "holdings": "Holdings management",
+    "logout": "Logout",
+    "loading": "Loading...",
+    "comingSoon": "Feature under development, stay tuned",
+    "fee": "Fee",
+    "myGold": "My Gold",
+    "assets": {
+      "total": "Total Assets",
+      "balance": "Available Balance",
+      "marketValue": "Gold Market Value",
+      "yesterdayProfit": "Yesterday's Profit",
+      "accumulatedProfit": "Cumulative Profit"
+    }
+  },
+  "news": {
+    "newsListTitle": "News",
+    "loading": "Getting latest news...",
+    "noContent": "No content available",
+    "viewMore": "View more historical news",
+    "loadedAll": "--- All content loaded ---",
+    "activityDetail": "Activity details",
+    "newsDetail": "News details",
+    "loadingDetail": "Loading details...",
+    "returnList": "Return to list",
+    "loadFailed": "Failed to load, please retry",
+    "views": "views"
+  },
+  "components": {
+    "imageCarousel": {
+      "recommendation": "Recommendation {{ index }}"
+    }
+  },
+  "logo": {
+    "title": "Gold Value Added"
+  },
+  "errors": {
+    "sessionExpired": "Session expired, please login again",
+    "networkError": "Network connection error"
+  }
+}

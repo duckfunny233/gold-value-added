@@ -1,0 +1,185 @@
+{
+  "nav": {
+    "home": "首页",
+    "chat": "消息",
+    "market": "行情",
+    "trade": "交易",
+    "profile": "我的"
+  },
+  "chat": {
+    "addFriend": "添加好友",
+    "createGroup": "创建群聊",
+    "scan": "扫一扫",
+    "qrCode": "我的二维码",
+    "refreshing": "刷新中...",
+    "noSession": "暂无会话",
+    "reload": "重新加载",
+    "placeholder": "请输入消息...",
+    "loadMore": "上拉加载更多",
+    "syncing": "同步中..."
+  },
+  "language": "语言",
+  "common": {
+    "loading": "加载中...",
+    "noData": "暂无数据",
+    "error": "错误",
+    "retry": "重试",
+    "cancel": "取消",
+    "confirm": "确认",
+    "submit": "提交",
+    "submitting": "提交中...",
+    "success": "成功",
+    "failed": "失败",
+    "viewMore": "查看更多",
+    "back": "返回",
+    "save": "保存",
+    "edit": "编辑",
+    "delete": "删除",
+    "refresh": "刷新",
+    "search": "搜索",
+    "all": "全部",
+    "yes": "是",
+    "no": "否",
+    "ok": "好的",
+    "noMore": "--- 没有更多了 ---"
+  },
+  "auth": {
+    "login": {
+      "title": "欢迎登录",
+      "username": "用户名",
+      "password": "密码",
+      "loginBtn": "登录",
+      "registerLink": "立即注册",
+      "forgotPassword": "忘记密码",
+      "usernamePlaceholder": "请输入用户名",
+      "passwordPlaceholder": "请输入密码",
+      "fillAll": "请完整填写信息",
+      "loginFailed": "登录失败，请检查用户名或密码"
+    },
+    "register": {
+      "title": "注册账号",
+      "username": "用户名",
+      "phone": "手机号",
+      "code": "验证码",
+      "password": "密码",
+      "realName": "真实姓名",
+      "idNumber": "身份证号",
+      "idMaterial": "身份证材料",
+      "workCert": "工作证明",
+      "bizLicense": "营业执照",
+      "workProof": "在职证明",
+      "uploadArea": "点击上传材料",
+      "uploadFormat": "支持 JPG / PNG",
+      "uploadChange": "可重复上传并替换",
+      "registerBtn": "完成注册",
+      "getCode": "获取验证码",
+      "usernamePlaceholder": "6-18 位字母或数字",
+      "phonePlaceholder": "请输入手机号",
+      "codePlaceholder": "请输入短信验证码",
+      "passwordPlaceholder": "6-16 位字母或数字",
+      "realNamePlaceholder": "请输入真实姓名",
+      "idNumberPlaceholder": "请输入 18 位身份证号",
+      "preview": "预览",
+      "fillAll": "请完整填写信息",
+      "success": "注册成功"
+    },
+    "forgotPassword": {
+      "title": "找回密码",
+      "phone": "手机号",
+      "code": "验证码",
+      "newPassword": "新密码",
+      "getCode": "获取验证码",
+      "confirmReset": "确认重置",
+      "phonePlaceholder": "请输入绑定手机号",
+      "codePlaceholder": "请输入短信验证码",
+      "newPasswordPlaceholder": "请输入新密码",
+      "fillAll": "请完整填写信息"
+    }
+  },
+  "home": {
+    "loadingNotice": "公告加载中...",
+    "newsTitle": "最新资讯",
+    "viewMore": "查看更多",
+    "loadingNews": "新闻加载中...",
+    "noNotice": "暂无公告",
+    "connectionFailed": "网络连接失败"
+  },
+  "market": {
+    "realTime": "实时行情",
+    "connecting": "正在连接行情服务...",
+    "selectAsset": "请选择交易品种",
+    "timeShare": "分时",
+    "dailyK": "日K",
+    "weeklyK": "周K",
+    "monthlyK": "月K",
+    "quarterlyK": "季K",
+    "yearlyK": "年K",
+    "buyAnchor": "买入锚定",
+    "sellUnhook": "卖出解锚"
+  },
+  "trade": {
+    "quantity": "数量（{{ assetName }}）",
+    "currentPrice": "当前价格",
+    "quantityPlaceholder": "请输入交易数量",
+    "estimatedAmount": "预估金额",
+    "confirmBuy": "确认买入",
+    "confirmSell": "确认卖出",
+    "submitting": "提交中...",
+    "recentOrders": "最近订单",
+    "refresh": "刷新",
+    "noOrders": "暂无订单记录",
+    "orderSuccess": "下单成功"
+  },
+  "profile": {
+    "idPrefix": "ID:",
+    "recharge": "充值",
+    "withdraw": "提现",
+    "transfer": "转账",
+    "exchange": "兑换",
+    "tempAssets": "暂定资产",
+    "gold": "黄金",
+    "silver": "白银",
+    "currentHold": "当前持有:",
+    "weight": "克重",
+    "marketValue": "市值",
+    "security": "安全中心",
+    "holdings": "持仓明细",
+    "logout": "退出登录",
+    "loading": "加载中...",
+    "comingSoon": "该功能即将上线",
+    "fee": "手续费",
+    "myGold": "我的黄金",
+    "assets": {
+      "total": "总资产",
+      "balance": "可用余额",
+      "marketValue": "持仓市值",
+      "yesterdayProfit": "昨日收益",
+      "accumulatedProfit": "累计收益"
+    }
+  },
+  "news": {
+    "newsListTitle": "资讯列表",
+    "loading": "资讯加载中...",
+    "noContent": "暂无资讯内容",
+    "viewMore": "查看更多资讯",
+    "loadedAll": "--- 已加载全部内容 ---",
+    "activityDetail": "活动详情",
+    "newsDetail": "资讯详情",
+    "loadingDetail": "详情加载中...",
+    "returnList": "返回列表",
+    "loadFailed": "加载失败，请稍后重试",
+    "views": "浏览量"
+  },
+  "components": {
+    "imageCarousel": {
+      "recommendation": "推荐位 {{ index }}"
+    }
+  },
+  "logo": {
+    "title": "金影子黄金增值"
+  },
+  "errors": {
+    "sessionExpired": "登录状态已过期，请重新登录",
+    "networkError": "网络异常，请稍后再试"
+  }
+}

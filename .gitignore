@@ -1,0 +1,44 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.swp
+
+# Local tools
+.trae/
+.tmp_docx_extract/
+.agents/plugins/
+
+# Env files
+.env
+.env.*
+!.env.development
+
+# Node
+node_modules/
+frontend/app/node_modules/
+frontend/admin/node_modules/
+
+# Build outputs
+dist/
+build/
+coverage/
+frontend/app/dist/
+frontend/admin/dist/
+backend/dist/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Tauri / Rust
+target/
+frontend/app/src-tauri/target/
+
+# Misc generated files
+*.local

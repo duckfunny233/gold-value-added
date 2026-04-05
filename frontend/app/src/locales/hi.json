@@ -1,0 +1,185 @@
+{
+  "nav": {
+    "home": "होम",
+    "chat": "चैट",
+    "market": "मार्केट",
+    "trade": "ट्रेड",
+    "profile": "मेरी संपत्ति"
+  },
+  "chat": {
+    "addFriend": "दोस्त जोड़ें",
+    "createGroup": "ग्रुप बनाएं",
+    "scan": "स्कैन",
+    "qrCode": "मेरा QR कोड",
+    "refreshing": "रिफ्रेश हो रहा है...",
+    "noSession": "कोई बातचीत नहीं",
+    "reload": "फिर से लोड करें",
+    "placeholder": "संदेश लिखें...",
+    "loadMore": "और देखें",
+    "syncing": "सिंक हो रहा है..."
+  },
+  "language": "भाषा",
+  "common": {
+    "loading": "लोड हो रहा है...",
+    "noData": "कोई डेटा नहीं",
+    "error": "त्रुटि",
+    "retry": "फिर प्रयास करें",
+    "cancel": "रद्द करें",
+    "confirm": "पुष्टि करें",
+    "submit": "सबमिट",
+    "submitting": "सबमिट हो रहा है...",
+    "success": "सफल",
+    "failed": "विफल",
+    "viewMore": "और देखें",
+    "back": "वापस",
+    "save": "सहेजें",
+    "edit": "संपादित करें",
+    "delete": "हटाएं",
+    "refresh": "रिफ्रेश",
+    "search": "खोजें",
+    "all": "सभी",
+    "yes": "हाँ",
+    "no": "नहीं",
+    "ok": "ठीक है",
+    "noMore": "--- और नहीं ---"
+  },
+  "auth": {
+    "login": {
+      "title": "लॉगिन",
+      "username": "यूज़रनेम",
+      "password": "पासवर्ड",
+      "loginBtn": "लॉगिन करें",
+      "registerLink": "रजिस्टर करें",
+      "forgotPassword": "पासवर्ड भूल गए",
+      "usernamePlaceholder": "यूज़रनेम दर्ज करें",
+      "passwordPlaceholder": "पासवर्ड दर्ज करें",
+      "fillAll": "कृपया सभी जानकारी भरें",
+      "loginFailed": "लॉगिन असफल, यूज़रनेम या पासवर्ड जांचें"
+    },
+    "register": {
+      "title": "खाता बनाएं",
+      "username": "यूज़रनेम",
+      "phone": "फोन नंबर",
+      "code": "वेरिफिकेशन कोड",
+      "password": "पासवर्ड",
+      "realName": "पूरा नाम",
+      "idNumber": "पहचान संख्या",
+      "idMaterial": "आईडी सामग्री",
+      "workCert": "कार्य प्रमाणपत्र",
+      "bizLicense": "व्यापार लाइसेंस",
+      "workProof": "कार्य प्रमाण",
+      "uploadArea": "फ़ाइल अपलोड करें",
+      "uploadFormat": "JPG / PNG समर्थित",
+      "uploadChange": "दोबारा अपलोड कर सकते हैं",
+      "registerBtn": "रजिस्टर करें",
+      "getCode": "कोड प्राप्त करें",
+      "usernamePlaceholder": "6-18 अक्षर/संख्या",
+      "phonePlaceholder": "फोन नंबर दर्ज करें",
+      "codePlaceholder": "वेरिफिकेशन कोड दर्ज करें",
+      "passwordPlaceholder": "6-16 अक्षर/संख्या",
+      "realNamePlaceholder": "पूरा नाम दर्ज करें",
+      "idNumberPlaceholder": "18 अंकों की पहचान संख्या",
+      "preview": "पूर्वावलोकन",
+      "fillAll": "कृपया सभी जानकारी भरें",
+      "success": "रजिस्ट्रेशन सफल"
+    },
+    "forgotPassword": {
+      "title": "पासवर्ड रीसेट",
+      "phone": "फोन नंबर",
+      "code": "वेरिफिकेशन कोड",
+      "newPassword": "नया पासवर्ड",
+      "getCode": "कोड प्राप्त करें",
+      "confirmReset": "रीसेट की पुष्टि करें",
+      "phonePlaceholder": "बाउंड फोन नंबर दर्ज करें",
+      "codePlaceholder": "वेरिफिकेशन कोड दर्ज करें",
+      "newPasswordPlaceholder": "नया पासवर्ड दर्ज करें",
+      "fillAll": "कृपया सभी जानकारी भरें"
+    }
+  },
+  "home": {
+    "loadingNotice": "घोषणा लोड हो रही है...",
+    "newsTitle": "समाचार",
+    "viewMore": "और देखें",
+    "loadingNews": "समाचार लोड हो रहा है...",
+    "noNotice": "कोई घोषणा नहीं",
+    "connectionFailed": "कनेक्शन विफल"
+  },
+  "market": {
+    "realTime": "रीयल-टाइम मार्केट",
+    "connecting": "मार्केट सर्वर से कनेक्ट हो रहा है...",
+    "selectAsset": "कृपया एसेट चुनें",
+    "timeShare": "टाइम शेयर",
+    "dailyK": "दैनिक K",
+    "weeklyK": "साप्ताहिक K",
+    "monthlyK": "मासिक K",
+    "quarterlyK": "त्रैमासिक K",
+    "yearlyK": "वार्षिक K",
+    "buyAnchor": "एंकर खरीदें",
+    "sellUnhook": "अनहुक बेचें"
+  },
+  "trade": {
+    "quantity": "मात्रा ({{ assetName }})",
+    "currentPrice": "वर्तमान कीमत",
+    "quantityPlaceholder": "मात्रा दर्ज करें",
+    "estimatedAmount": "अनुमानित राशि",
+    "confirmBuy": "खरीद की पुष्टि",
+    "confirmSell": "बिक्री की पुष्टि",
+    "submitting": "सबमिट हो रहा है...",
+    "recentOrders": "हाल के ऑर्डर",
+    "refresh": "रिफ्रेश",
+    "noOrders": "कोई ऑर्डर रिकॉर्ड नहीं",
+    "orderSuccess": "ऑर्डर सफल"
+  },
+  "profile": {
+    "idPrefix": "ID:",
+    "recharge": "रिचार्ज",
+    "withdraw": "निकासी",
+    "transfer": "ट्रांसफर",
+    "exchange": "एक्सचेंज",
+    "tempAssets": "अस्थायी संपत्ति",
+    "gold": "सोना",
+    "silver": "चांदी",
+    "currentHold": "वर्तमान होल्डिंग",
+    "weight": "वज़न",
+    "marketValue": "मार्केट वैल्यू",
+    "security": "सुरक्षा",
+    "holdings": "होल्डिंग्स",
+    "logout": "लॉगआउट",
+    "loading": "लोड हो रहा है...",
+    "comingSoon": "यह सुविधा जल्द आएगी",
+    "fee": "शुल्क",
+    "myGold": "मेरा सोना",
+    "assets": {
+      "total": "कुल संपत्ति",
+      "balance": "उपलब्ध बैलेंस",
+      "marketValue": "मार्केट वैल्यू",
+      "yesterdayProfit": "कल का लाभ",
+      "accumulatedProfit": "संचित लाभ"
+    }
+  },
+  "news": {
+    "newsListTitle": "समाचार सूची",
+    "loading": "समाचार लोड हो रहा है...",
+    "noContent": "कोई सामग्री नहीं",
+    "viewMore": "और समाचार देखें",
+    "loadedAll": "--- सभी सामग्री लोड हो गई ---",
+    "activityDetail": "गतिविधि विवरण",
+    "newsDetail": "समाचार विवरण",
+    "loadingDetail": "विवरण लोड हो रहा है...",
+    "returnList": "सूची पर वापस जाएं",
+    "loadFailed": "लोड विफल, कृपया पुनः प्रयास करें",
+    "views": "दृश्य"
+  },
+  "components": {
+    "imageCarousel": {
+      "recommendation": "सिफारिश {{ index }}"
+    }
+  },
+  "logo": {
+    "title": "गोल्ड वैल्यू एडेड"
+  },
+  "errors": {
+    "sessionExpired": "सत्र समाप्त हो गया, कृपया फिर से लॉगिन करें",
+    "networkError": "नेटवर्क त्रुटि"
+  }
+}
