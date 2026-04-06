@@ -1,6 +1,7 @@
 ﻿<script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { AdminAuthService } from '../services/auth'
 
 const route = useRoute()
 const router = useRouter()
@@ -19,7 +20,7 @@ const menus = [
 const activePath = computed(() => route.path)
 
 const logout = () => {
-  localStorage.removeItem('admin_token')
+  AdminAuthService.logout()
   router.push('/login')
 }
 </script>

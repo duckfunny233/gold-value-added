@@ -1,19 +1,15 @@
-export const API_BASE = 'http://localhost:3000'
+import { createApiFetch, DEFAULT_API_BASE } from '../../../shared/utils/request-core'
 
-export async function apiFetch(url, options = {}) {
-  const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`
-  const response = await fetch(fullUrl, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  })
+export const API_BASE = DEFAULT_API_BASE
 
-  const data = await response.json()
-  if (!response.ok || data.code !== 200) {
-    throw new Error(data.message || `请求失败 (${response.status})`)
-  }
-
-  return data.data
-}
+export const apiFetch = createApiFetch({
+  apiBase: API_BASE,
+  unwrapData: true,
+  getToken: () => localStorage.getItem('admin_token'),
+  onUnauthorized: () => {
+    localStorage.removeItem('admin_token')
+    localStorage.removeItem('admin_user')
+    localStorage.removeItem('admin_roles')
+    window.location.href = '/login'
+  },
+})

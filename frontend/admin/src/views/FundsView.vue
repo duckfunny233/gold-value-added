@@ -3,6 +3,11 @@ import { onMounted, reactive, ref } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useQueryFilters } from '../composables/useQueryFilters'
 import { AdminService } from '../services/admin'
+import {
+  getWithdrawAlertStatusLabel,
+  getWithdrawStatusLabel,
+  WITHDRAW_STATUS,
+} from '../../../shared/constants/status'
 
 const filters = reactive({
   orderType: '',
@@ -72,9 +77,10 @@ onMounted(loadData)
           <option value="">全部</option>
           <option value="reconciling">对账中</option>
           <option value="reconciled">已对账</option>
-          <option value="pending_review">待审核</option>
-          <option value="approved">已通过</option>
-          <option value="paid">已到账</option>
+          <option :value="WITHDRAW_STATUS.PENDING_REVIEW">待审核</option>
+          <option :value="WITHDRAW_STATUS.TRANSFER_PROCESSING">转账处理中</option>
+          <option :value="WITHDRAW_STATUS.COMPLETED">已完成</option>
+          <option :value="WITHDRAW_STATUS.REJECTED">已拒绝</option>
         </select>
       </label>
     </div>
@@ -147,7 +153,7 @@ onMounted(loadData)
               <th>支付渠道</th>
               <th>金额</th>
               <th>审核状态</th>
-              <th>到账状态</th>
+              <th>提醒状态</th>
               <th>收款信息</th>
             </tr>
           </thead>
@@ -158,8 +164,8 @@ onMounted(loadData)
               <td>{{ row.nickname }}</td>
               <td>{{ row.channel }}</td>
               <td>{{ row.amount }}</td>
-              <td>{{ row.status }}</td>
-              <td>{{ row.paidStatus }}</td>
+              <td>{{ getWithdrawStatusLabel(row.status) }}</td>
+              <td>{{ getWithdrawAlertStatusLabel(row.alertStatus) }}</td>
               <td>{{ row.payout }}</td>
             </tr>
           </tbody>

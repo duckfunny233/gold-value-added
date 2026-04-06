@@ -54,8 +54,8 @@ backend
 - `auth`：注册、登录、UID 分配
 - `user`：用户资料与资产概览
 - `fund`：充值、提现、后台资金审核
-- `trade`：买单、卖单、撮合规则入口
-- `market`：AU9999 行情接口
+- `trade`：买单、卖单、撮合规则入口（开休盘状态由上金所时段同步结果驱动）
+- `market`：上金所 AU9999 行情与交易时段同步接口
 - `dashboard`：仪表盘与公告
 - `risk`：风控预警
 - `audit`：审计记录和哈希存证查询
@@ -126,8 +126,163 @@ npm run start:dev
 1. 接入 `PrismaService` 与真实数据库读写
 2. 给 `fund` 实现提现冻结 / 解冻事务
 3. 给 `trade` 实现价格优先、时间优先撮合
-4. 给 `audit` 接入 SHA-256 存证与链上同步状态
-5. 接入 JWT、RBAC、Redis 队列和 WebSocket 实时广播
+4. 给 `market` 接入上金所官方交易时段自动同步（周一至周五 `09:00-11:30`、`13:30-15:30`、`20:00-次日02:30`；周末和法定节假日自动休市）
+5. 给 `audit` 接入 SHA-256 存证与链上同步状态
+6. 接入 JWT、RBAC、Redis 队列和 WebSocket 实时广播
+
+## 资金模块闭环 V1
+
+`fund` 模块当前已落地的资金闭环口径如下：
+
+1. 充值自动到账
+   - 接口：`POST /api/app/recharges`
+   - 行为：创建充值单后同事务自动入账，订单直接置为 `COMPLETED`
+   - 同步写入：`ledger_entry(RECHARGE)`、`audit_log`、`hash_record(SHA-256 64 位)`
+   - 资产影响：`tentativeAsset`、`cashAsset`、`totalAsset` 同步增加
+
+2. 提现冻结与人工确认
+   - 接口：
+     - `POST /api/app/withdrawals`
+     - `POST /api/admin/funds/withdrawals/:id/approve`
+     - `POST /api/admin/funds/withdrawals/:id/reject`
+     - `POST /api/admin/funds/withdrawals/:id/confirm-completed`
+   - 规则：
+     - 提现提交即冻结
+     - 只从 `tentativeAsset` / `totalAsset` 扣减一次
+     - 完成时只释放 `withdrawFrozenAmount`
+     - 队列按 `queueNo + submittedAt` 升序稳定返回
+
+3. 后台手工转账 / 补款
+   - 接口：
+     - `POST /api/admin/funds/manual-transfer`
+     - `POST /api/admin/funds/manual-adjust`
+   - 要求：管理员鉴权
+   - 行为：实时调整 `tentativeAsset`、`totalAsset`
+   - 同步写入：`ledger_entry(MANUAL_ADJUST)`、`audit_log`、`hash_record`
+
+4. 验证命令
+
+```powershell
+npm --prefix backend run build
+npm --prefix backend run test -- --runInBand
+```
+
+## 交易与风控闭环 V1
+
+`trade`、`market`、`risk` 模块当前已落地的交易与风控闭环口径如下：
+
+1. 交易真实落库与自动撮合
+   - 接口：
+     - `POST /api/app/trades/buy`
+     - `POST /api/app/trades/sell`
+   - 行为：
+     - 买卖单真实写入 `trade_order`
+     - 同事务内执行撮合并生成 `trade_match`
+     - 撮合规则固定为价格优先、时间优先
+   - 资产影响：
+     - 买入成交后扣减 `tentativeAsset`、`cashAsset`，增加 `goldHoldingGrams`
+     - 卖出成交后减少 `goldHoldingGrams`，增加 `tentativeAsset`、`cashAsset`
+   - 同步写入：`ledger_entry`、`audit_log`、`hash_record(SHA-256 64 位)`
+
+2. 交易时段自动同步与交易前校验
+   - 服务：`TradeRuntimeService`
+   - 存储：复用 `system_config`
+     - `trade_sessions`
+     - `trade_runtime_status`
+     - `trade_manual_control`
+     - `trade_holiday_overrides`
+   - 机制：
+     - 模块初始化时同步一次
+     - 定时任务每 30 分钟刷新交易时段
+     - 当前非交易时段或已停盘时，买卖单直接拒绝
+   - 后台接口：
+     - `GET /api/admin/trades/overview`
+     - `GET /api/admin/trades/session-status`
+
+3. AU9999 行情 provider + fallback
+   - 接口：`GET /api/app/market/au9999/ticker`
+   - 环境变量：
+     - `MARKET_TICKER_URL`
+     - `MARKET_TICKER_API_KEY`
+   - 降级顺序：
+     - 实时 provider
+     - `system_config` 行情缓存
+     - 最新成交价
+     - 本地默认价
+   - 返回要求：
+     - 价格精度固定 `0.01`
+     - 返回 `source`、`timestamp`、`refreshSeconds`
+     - 行情失败写错误日志，接口仍可降级返回
+
+4. 后台风控写接口
+   - 接口：
+     - `POST /api/admin/users/:uid/freeze`
+     - `POST /api/admin/users/:uid/unfreeze`
+     - `POST /api/admin/trades/pause`
+     - `POST /api/admin/trades/resume`
+   - 要求：管理员鉴权
+   - 同步写入：
+     - `admin_operation_log`
+     - `audit_log`
+     - `hash_record`
+
+5. 验证命令
+
+```powershell
+npm --prefix backend run build
+npm --prefix backend run test -- --runInBand
+```
+
+## 排行榜治理闭环 V1
+
+`leaderboard` 模块当前已落地的排行榜治理口径如下：
+
+1. 排行榜聚合读接口
+   - 接口：`GET /api/admin/leaderboard`
+   - 入参：
+     - `uid`
+     - `sortRule(goldHoldingGrams|totalAsset)`
+     - `syncStatus(synced|exception|rebuilding)`
+     - `timeRange(today|7d|30d)`
+   - 返回：
+     - `rows`
+     - `monitors`
+   - 排序规则：
+     - `goldHoldingGrams` 按持金克数降序
+     - `totalAsset` 按总资产降序
+     - 同值时按 `uid` 升序，保证稳定顺序
+
+2. 排行榜治理操作
+   - 接口：
+     - `POST /api/admin/leaderboard/rule`
+     - `POST /api/admin/leaderboard/rebuild`
+     - `POST /api/admin/leaderboard/retry-sync`
+   - 要求：管理员鉴权
+   - 留痕：
+     - `admin_operation_log`
+     - `audit_log`
+     - `hash_record(SHA-256 64 位)`
+
+3. 排行榜持久化结构
+   - `LeaderboardConfig`
+     - 保存当前生效规则
+   - `LeaderboardJob`
+     - 保存最近一次重排任务状态，状态为 `REBUILDING / SYNCED / FAILED`
+   - `LeaderboardSnapshot`
+     - 保存排行榜快照数据，包括 `rank / uid / goldHoldingGrams / totalAsset / updatedAt / syncStatus`
+
+4. 排行榜同步与异常修复
+   - 快照重建后会生成独立版本号
+   - 快照同步异常会落到 `FAILED` 状态并在监控面板展示
+   - `retry-sync` 会触发新的重建任务，用于修复异常状态
+
+5. 验证命令
+
+```powershell
+npm --prefix backend run prisma:generate
+npm --prefix backend run build
+npm --prefix backend run test -- --runInBand
+```
 
 ## 开发软件
 

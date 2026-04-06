@@ -9,6 +9,7 @@ import LeaderboardView from '../views/LeaderboardView.vue'
 import RiskView from '../views/RiskView.vue'
 import AuditView from '../views/AuditView.vue'
 import ReportsView from '../views/ReportsView.vue'
+import { AdminAuthService } from '../services/auth'
 
 const routes = [
   { path: '/login', name: 'login', component: LoginView, meta: { title: '管理员登录', public: true } },
@@ -38,7 +39,7 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
-  const isAuthenticated = localStorage.getItem('admin_token')
+  const isAuthenticated = AdminAuthService.isAuthenticated()
   if (!to.meta.public && !isAuthenticated) {
     next({ name: 'login' })
     return

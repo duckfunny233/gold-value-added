@@ -19,6 +19,18 @@ export class ApiResponseInterceptor implements NestInterceptor {
           return data
         }
 
+        if (data && typeof data === 'object') {
+          const payload = data as Record<string, unknown>
+          if ('data' in payload || 'message' in payload) {
+            return {
+              code: statusCode,
+              message: (payload.message as string | undefined) || 'OK',
+              traceId,
+              data: ('data' in payload ? payload.data : null) ?? null,
+            }
+          }
+        }
+
         return {
           code: statusCode,
           message: 'OK',

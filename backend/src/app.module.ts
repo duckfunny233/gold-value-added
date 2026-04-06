@@ -5,6 +5,7 @@ import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core'
 import { HttpExceptionFilter } from './common/filters/http-exception.filter'
 import { ApiResponseInterceptor } from './common/interceptors/api-response.interceptor'
 import { TraceIdMiddleware } from './common/middleware/trace-id.middleware'
+import { AdminAuthModule } from './modules/admin-auth/admin-auth.module'
 import { AuditModule } from './modules/audit/audit.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { DashboardModule } from './modules/dashboard/dashboard.module'
@@ -26,6 +27,7 @@ import { PrismaModule } from './prisma/prisma.module'
     }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    AdminAuthModule,
     SystemModule,
     AuthModule,
     UserModule,

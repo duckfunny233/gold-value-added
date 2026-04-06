@@ -1,14 +1,16 @@
 openapi: 3.1.0
 info:
   title: Jinlian GYC API
-  version: 4.2.0
+  version: 4.3.0
   description: |
     金链·GYC 最新接口规范。
     当前版本关键约束：
     - UID 是业务主标识
-    - 充值 24 小时自动入账，仅做对账查看
+    - 充值创建后自动到账，无人工审核
     - 提现仅交易时间可发起，提交即冻结并扣减暂定资产/总资产，确认完成不得二次扣款
+    - 后台支持手工转账/补款，实时改账并保留 ledger/audit/hash 留痕
     - 交易支持买入和卖出，自动撮合
+    - 交易时段自动同步上金所官方开休盘，无需人工配置固定时段
     - 撮合规则必须写入代码，遵循价格优先、时间优先
     - 哈希使用 SHA-256，输出固定 64 位，并同步半公开金链
 servers:
@@ -67,7 +69,8 @@ paths:
   /app/recharges:
     post:
       tags: [AppRecharge]
-      summary: 创建充值订单并进入 24 小时自动入账流程
+      summary: 创建充值订单并自动到账
+      description: 创建成功后同事务写入资产、资金流水、审计日志和哈希记录
       responses:
         '200':
           description: OK
@@ -110,8 +113,10 @@ paths:
   /app/trades/buy:
     post:
       tags: [AppTrade]
-      summary: 提交买单
-      description: 撮合规则为价格优先、时间优先
+      summary: 提交买单并实时撮合
+      description: |
+        买单真实落库并在事务内执行撮合。
+        撮合规则为价格优先、时间优先；用户被冻结或当前非交易时段/停盘时会直接拦截。
       responses:
         '200':
           description: OK
@@ -122,8 +127,10 @@ paths:
   /app/trades/sell:
     post:
       tags: [AppTrade]
-      summary: 提交卖单
-      description: 撮合规则为价格优先、时间优先
+      summary: 提交卖单并实时撮合
+      description: |
+        卖单真实落库并在事务内执行撮合。
+        撮合规则为价格优先、时间优先；用户被冻结或当前非交易时段/停盘时会直接拦截。
       responses:
         '200':
           description: OK
@@ -145,7 +152,10 @@ paths:
   /app/market/au9999/ticker:
     get:
       tags: [AppMarket]
-      summary: 获取 AU9999 实时行情
+      summary: 获取上金所 AU9999 实时行情
+      description: |
+        优先从实时行情 provider 获取 AU9999 价格，失败时按 system_config 缓存、最新成交价、本地默认值逐级降级。
+        返回 source、timestamp、refreshSeconds，价格精度固定为 0.01 元/克。
       responses:
         '200':
           description: OK
@@ -199,6 +209,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseRechargeOrderList'
+  /admin/funds:
+    get:
+      tags: [AdminFunds]
+      summary: 查询后台资金聚合面板
+      responses:
+        '200':
+          description: OK
   /admin/funds/withdrawals:
     get:
       tags: [AdminFunds]
@@ -211,6 +228,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseWithdrawOrderList'
+  /admin/funds/withdrawals/{orderId}/approve:
+    post:
+      tags: [AdminFunds]
+      summary: 提现审核通过并进入转账处理中
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWithdrawOrder'
   /admin/funds/withdrawals/{orderId}/mute-alert:
     post:
       tags: [AdminFunds]
@@ -246,11 +274,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseWithdrawOrder'
+  /admin/funds/manual-transfer:
+    post:
+      tags: [AdminFunds]
+      summary: 后台手工转账
+      description: 实时调整 tentativeAsset 和 totalAsset，并同步写入 ledger、audit、hash
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseManualFundAction'
+  /admin/funds/manual-adjust:
+    post:
+      tags: [AdminFunds]
+      summary: 后台手工补款/冲正
+      description: 实时调整 tentativeAsset 和 totalAsset，并同步写入 ledger、audit、hash
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseManualFundAction'
   /admin/trades:
     get:
       tags: [AdminTrades]
       summary: 查询交易列表
-      description: 前后台交易数据需实时同步，资产变动一秒更新
+      description: 前后台交易数据需实时同步，资产变动一秒更新；非上金所交易时段自动禁止撮合
       responses:
         '200':
           description: OK
@@ -258,17 +310,108 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseTradeOrderList'
-  /admin/trades/session:
-    put:
+  /admin/trades/session-status:
+    get:
       tags: [AdminTrades]
-      summary: 更新交易时间配置
+      summary: 查询上金所交易时段同步状态
+      description: 只读状态接口，交易时段由系统自动同步，无人工配置入口
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiResponseMessage'
+                $ref: '#/components/schemas/ApiResponseTradeSessionStatus'
+  /admin/leaderboard:
+    get:
+      tags: [AdminLeaderboard]
+      summary: 查询排行榜治理面板
+      description: |
+        返回排行榜快照列表与同步监控信息。
+        支持按黄金克数或总资产排序，同值时按 UID 升序保持稳定顺序。
+      responses:
+        '200':
+          description: OK
+  /admin/leaderboard/rule:
+    post:
+      tags: [AdminLeaderboard]
+      summary: 切换排行榜规则
+      description: 切换当前排行榜规则配置，支持黄金克数排序和总资产排序，并写入治理审计日志
+      responses:
+        '200':
+          description: OK
+  /admin/leaderboard/rebuild:
+    post:
+      tags: [AdminLeaderboard]
+      summary: 触发排行榜重排
+      description: 创建新的排行榜重排任务并持久化最新快照，任务状态按 rebuilding/synced/failed 流转
+      responses:
+        '200':
+          description: OK
+  /admin/leaderboard/retry-sync:
+    post:
+      tags: [AdminLeaderboard]
+      summary: 异常重试与状态修复
+      description: 针对异常排行榜快照重新生成同步结果，并写入 adminOperationLog、auditLog、hashRecord
+      responses:
+        '200':
+          description: OK
+  /admin/trades/overview:
+    get:
+      tags: [AdminTrades]
+      summary: 查询交易总览与当前交易状态
+      description: 返回当前开闭盘状态、当前时段、下次开盘时间、最后同步时间和待同步数量
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseTradeSessionStatus'
+  /admin/trades/pause:
+    post:
+      tags: [AdminTrades]
+      summary: 后台停盘
+      description: 仅管理员可调用，停盘操作会写入 admin_operation_log、audit_log、hash_record
+      responses:
+        '200':
+          description: OK
+  /admin/trades/resume:
+    post:
+      tags: [AdminTrades]
+      summary: 后台恢复交易
+      description: 仅管理员可调用，恢复操作会写入 admin_operation_log、audit_log、hash_record
+      responses:
+        '200':
+          description: OK
+  /admin/users/{uid}/freeze:
+    post:
+      tags: [AdminRisk]
+      summary: 冻结用户
+      description: 仅管理员可调用，冻结后交易与提现流程应按既有规则进行拦截并保留审计留痕
+      parameters:
+        - in: path
+          name: uid
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  /admin/users/{uid}/unfreeze:
+    post:
+      tags: [AdminRisk]
+      summary: 解冻用户
+      description: 仅管理员可调用，恢复用户正常交易资格并保留审计留痕
+      parameters:
+        - in: path
+          name: uid
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
   /admin/audit/traces/{traceId}:
     get:
       tags: [AdminAudit]
@@ -320,15 +463,21 @@ components:
       properties:
         orderId:
           type: string
-        uid:
-          type: integer
+        channel:
+          type: string
         amount:
           type: number
         status:
           type: string
-          enum: [auto_credited, reconciling, reconciled]
+          enum: [PENDING, PROCESSING, COMPLETED, FAILED]
         traceId:
           type: string
+        autoSettleAt:
+          type: string
+          format: date-time
+        settledAt:
+          type: string
+          format: date-time
     WithdrawOrder:
       type: object
       properties:
@@ -372,6 +521,31 @@ components:
           type: string
         traceId:
           type: string
+    ManualFundAction:
+      type: object
+      properties:
+        uid:
+          type: string
+        traceId:
+          type: string
+        amount:
+          type: number
+        direction:
+          type: string
+          enum: [increase, decrease]
+        reason:
+          type: string
+        latestBalance:
+          type: object
+          properties:
+            tentativeAsset:
+              type: number
+            cashAsset:
+              type: number
+            totalAsset:
+              type: number
+            withdrawFrozenAmount:
+              type: number
     TradeOrder:
       type: object
       properties:
@@ -394,6 +568,32 @@ components:
           type: integer
           description: 交易同步延迟毫秒，目标不超过 1000ms
         traceId:
+          type: string
+    TradeSessionStatus:
+      type: object
+      properties:
+        sessionSource:
+          type: string
+          enum: [SGE_OFFICIAL]
+        timezone:
+          type: string
+          example: Asia/Shanghai
+        currentSessionStatus:
+          type: string
+          enum: [open, closed]
+        currentWindow:
+          type: string
+        nextOpenAt:
+          type: string
+          format: date-time
+        nextCloseAt:
+          type: string
+          format: date-time
+        isHoliday:
+          type: boolean
+        holidayName:
+          type: string
+        syncStatus:
           type: string
     DashboardOverview:
       type: object
@@ -466,6 +666,8 @@ components:
       properties:
         code:
           type: integer
+        message:
+          type: string
         data:
           $ref: '#/components/schemas/RechargeOrder'
     ApiResponseRechargeOrderList:
@@ -484,6 +686,15 @@ components:
           type: integer
         data:
           $ref: '#/components/schemas/WithdrawOrder'
+    ApiResponseManualFundAction:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/ManualFundAction'
     ApiResponseWithdrawOrderList:
       type: object
       properties:
@@ -509,6 +720,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TradeOrder'
+    ApiResponseTradeSessionStatus:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/TradeSessionStatus'
     ApiResponseAuTicker:
       type: object
       properties:

@@ -1,6 +1,7 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { AdminAuthService } from '../services/auth'
 
 const router = useRouter()
 const loading = ref(false)
@@ -20,12 +21,13 @@ const submit = async () => {
 
   loading.value = true
   try {
-    await new Promise((resolve) => setTimeout(resolve, 500))
-    localStorage.setItem('admin_token', `admin-${Date.now()}`)
-    localStorage.setItem('admin_user', form.username)
+    const result = await AdminAuthService.login(form.username, form.password)
+    localStorage.setItem('admin_token', result.token)
+    localStorage.setItem('admin_user', JSON.stringify(result.adminUser))
+    localStorage.setItem('admin_roles', JSON.stringify(result.adminUser.roleCodes || []))
     router.push('/dashboard')
   } catch (e) {
-    error.value = '登录失败，请重试'
+    error.value = e.message || '登录失败，请重试'
   } finally {
     loading.value = false
   }

@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { TradeService } from '../services/trade'
+import { MarketService } from '../services/market'
 import { Loader2, CheckCircle2 } from 'lucide-vue-next'
 import { useMarketPolling } from '../composables/useMarketPolling'
 
@@ -20,6 +21,15 @@ const submitting = ref(false)
 const showSuccess = ref(false)
 const assetName = ref(route.query.assetName || '')
 const assetId = ref(route.query.assetId || '')
+const tradingStatus = ref({
+  isOpen: true,
+  statusText: '开盘',
+  currentSession: '交易时段同步中',
+  nextOpenTime: '--',
+  disabledReason: '',
+  syncMode: '交易时段同步中',
+})
+let tradingStatusTimer = null
 
 // 濡傛灉鏄€氳繃瀵艰埅鏍忕洿鎺ョ偣杩涙潵鐨勶紙娌℃湁 query 鍙傛暟锛夛紝鍒欓粯璁ら€変腑鍒楄〃绗竴涓?
 watch(markets, (newMarkets) => {
@@ -47,6 +57,15 @@ const totalAmount = computed(() => {
   return (currentPrice.value * parseFloat(quantity.value)).toFixed(2)
 })
 
+const isTradeClosed = computed(() => !tradingStatus.value.isOpen)
+
+const submitDisabledReason = computed(() => {
+  if (!isTradeClosed.value) {
+    return ''
+  }
+  return tradingStatus.value.disabledReason || '当前为休市时段，暂不支持提交买卖订单'
+})
+
 const fetchOrders = async () => {
   loading.value = true
   try {
@@ -59,7 +78,24 @@ const fetchOrders = async () => {
   }
 }
 
+const refreshTradingStatus = async () => {
+  try {
+    tradingStatus.value = await MarketService.getTradingStatus()
+  } catch (err) {
+    console.error('Failed to refresh trading status:', err)
+    tradingStatus.value = {
+      isOpen: true,
+      statusText: '状态未知',
+      currentSession: '未获取到交易时段，按安全降级显示',
+      nextOpenTime: '--',
+      disabledReason: '',
+      syncMode: '安全降级显示',
+    }
+  }
+}
+
 const submitOrder = async () => {
+  if (isTradeClosed.value) return
   if (!quantity.value || submitting.value) return
   
   submitting.value = true
@@ -77,7 +113,15 @@ const submitOrder = async () => {
 }
 
 onMounted(() => {
+  refreshTradingStatus()
   fetchOrders()
+  tradingStatusTimer = window.setInterval(refreshTradingStatus, 30000)
+})
+
+onUnmounted(() => {
+  if (tradingStatusTimer) {
+    window.clearInterval(tradingStatusTimer)
+  }
 })
 </script>
 
@@ -123,6 +167,22 @@ onMounted(() => {
         </div>
 
         <div class="p-6 space-y-6">
+          <div class="rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/40 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-xs text-gray-500">交易状态</p>
+                <p class="mt-1 text-base font-bold" :class="tradingStatus.isOpen ? 'text-success' : 'text-danger'">
+                  {{ tradingStatus.statusText }}
+                </p>
+              </div>
+              <span class="text-[11px] text-gray-400">{{ tradingStatus.syncMode }}</span>
+            </div>
+            <div class="mt-3 space-y-1 text-xs text-gray-500">
+              <p>当前时段：<span class="font-medium text-gray-700 dark:text-gray-200">{{ tradingStatus.currentSession }}</span></p>
+              <p>下一开盘时间：<span class="font-medium text-gray-700 dark:text-gray-200">{{ tradingStatus.nextOpenTime }}</span></p>
+            </div>
+          </div>
+
           <div class="space-y-4">
             <div>
               <div class="flex justify-between mb-1">
@@ -144,13 +204,16 @@ onMounted(() => {
 
           <button 
             @click="submitOrder"
-            :disabled="!quantity || submitting"
+            :disabled="!quantity || submitting || isTradeClosed"
             class="w-full py-4 text-white font-bold rounded-xl shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2 btn-interact"
             :class="activeTab === 'buy' ? 'bg-danger shadow-danger/20' : 'bg-success shadow-success/20'"
           >
             <Loader2 v-if="submitting" class="animate-spin" :size="20" />
             {{ submitting ? t('trade.submitting') : (activeTab === 'buy' ? t('trade.confirmBuy') : t('trade.confirmSell')) }}
           </button>
+          <p v-if="submitDisabledReason" class="text-xs text-danger text-center -mt-2">
+            {{ submitDisabledReason }}
+          </p>
         </div>
       </div>
     </div>

@@ -64,6 +64,17 @@ enum NoticeStatus {
   ARCHIVED
 }
 
+enum LeaderboardRule {
+  GOLD_HOLDING_GRAMS
+  TOTAL_ASSET
+}
+
+enum LeaderboardJobStatus {
+  REBUILDING
+  SYNCED
+  FAILED
+}
+
 model User {
   id               String          @id @default(cuid())
   uid              String          @unique
@@ -81,6 +92,76 @@ model User {
   withdrawalOrders WithdrawalOrder[]
   tradeOrders      TradeOrder[]
   auditLogs        AuditLog[]
+}
+
+model AdminUser {
+  id             String                @id @default(cuid())
+  username       String                @unique
+  passwordHash   String
+  displayName    String?
+  status         UserStatus            @default(ACTIVE)
+  lastLoginAt    DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  roles          AdminUserRole[]
+  auditLogs      AdminOperationLog[]
+}
+
+model AdminRole {
+  id             String                @id @default(cuid())
+  code           String                @unique
+  name           String
+  description    String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  users          AdminUserRole[]
+  permissions    AdminRolePermission[]
+}
+
+model AdminPermission {
+  id             String                @id @default(cuid())
+  code           String                @unique
+  name           String
+  description    String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  roles          AdminRolePermission[]
+}
+
+model AdminUserRole {
+  id             String    @id @default(cuid())
+  adminUserId    String
+  roleId         String
+  createdAt      DateTime  @default(now())
+  adminUser      AdminUser @relation(fields: [adminUserId], references: [id])
+  role           AdminRole @relation(fields: [roleId], references: [id])
+
+  @@unique([adminUserId, roleId])
+}
+
+model AdminRolePermission {
+  id             String          @id @default(cuid())
+  roleId         String
+  permissionId   String
+  createdAt      DateTime        @default(now())
+  role           AdminRole       @relation(fields: [roleId], references: [id])
+  permission     AdminPermission @relation(fields: [permissionId], references: [id])
+
+  @@unique([roleId, permissionId])
+}
+
+model AdminOperationLog {
+  id             String     @id @default(cuid())
+  adminUserId    String?
+  module         String
+  action         String
+  traceId        String
+  payload        Json
+  createdAt      DateTime   @default(now())
+  adminUser      AdminUser? @relation(fields: [adminUserId], references: [id])
+
+  @@index([module, createdAt])
+  @@index([traceId])
 }
 
 model Asset {
@@ -231,6 +312,71 @@ model Notice {
   publishedAt DateTime?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+}
+
+model NewsCache {
+  id          String   @id @default(cuid())
+  title       String
+  summary     String
+  source      String
+  url         String?
+  publishedAt DateTime?
+  fetchedAt   DateTime @default(now())
+  rawPayload  Json
+
+  @@index([fetchedAt])
+  @@index([publishedAt])
+  @@index([source, fetchedAt])
+}
+
+model LeaderboardConfig {
+  id          String          @id @default(cuid())
+  scope       String          @unique @default("default")
+  currentRule LeaderboardRule @default(GOLD_HOLDING_GRAMS)
+  traceId     String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model LeaderboardJob {
+  id           String              @id @default(cuid())
+  version      String              @unique
+  rule         LeaderboardRule
+  status       LeaderboardJobStatus @default(REBUILDING)
+  traceId      String              @unique
+  totalRows    Int                 @default(0)
+  failedRows   Int                 @default(0)
+  errorMessage String?
+  startedAt    DateTime            @default(now())
+  finishedAt   DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  snapshots    LeaderboardSnapshot[]
+
+  @@index([status, updatedAt])
+  @@index([rule, createdAt])
+  @@index([updatedAt])
+}
+
+model LeaderboardSnapshot {
+  id               String         @id @default(cuid())
+  jobId            String
+  rank             Int
+  uid              String
+  nickname         String
+  goldHoldingGrams Decimal        @db.Decimal(18, 4)
+  totalAsset       Decimal        @db.Decimal(18, 2)
+  syncStatus       String
+  updatedAt        DateTime       @default(now())
+  createdAt        DateTime       @default(now())
+  job              LeaderboardJob @relation(fields: [jobId], references: [id])
+
+  @@unique([jobId, rank])
+  @@unique([jobId, uid])
+  @@index([rank])
+  @@index([uid])
+  @@index([updatedAt])
+  @@index([syncStatus])
 }
 
 model SystemConfig {

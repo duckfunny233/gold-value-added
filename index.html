@@ -1,14 +1,19 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + Vue 3 App</title>
+    <title>金影子 Workspace</title>
   </head>
-
   <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
+    <main style="font-family: 'Microsoft YaHei', sans-serif; padding: 24px; line-height: 1.7;">
+      <h1>根目录不再作为前端业务入口</h1>
+      <p>用户端请进入 <code>frontend/app</code>，后台端请进入 <code>frontend/admin</code>。</p>
+      <p>统一命令请在根目录执行：</p>
+      <pre>npm run dev:app
+npm run dev:admin
+npm run dev:backend
+npm run dev:mock</pre>
+    </main>
   </body>
 </html>

@@ -44,7 +44,7 @@
 11. `/admin/funds/manual-adjustments`
 12. `/admin/trades`
 13. `/admin/trades/sync-retry`
-14. `/admin/trades/session`
+14. `/admin/trades/session-status`
 15. `/admin/leaderboard/rebuild`
 16. `/admin/leaderboard/rules`
 17. `/admin/risk/users/{uid}/freeze`
@@ -58,7 +58,7 @@
 
 1. 新接口统一保留 `uid`、`sequenceNo`、`traceId`、`syncStatus` 关键字段。
 2. 充值单不再需要人工确认字段，改为自动入账和对账字段。
-3. 交易单需明确 `tradeType`、`matchPrice`、`matchTime`、`syncStatus`。
+3. 交易单需明确 `tradeType`、`matchPrice`、`matchTime`、`syncStatus`、`sessionSource`、`currentSessionStatus`。
 4. 提现单需明确 `frozenAmount`、`freezeAppliedAt`、`alertStatus`、`confirmCompletedAt`、`operator`。
 5. 仪表盘接口需包含核心指标、系统监控、事件流和公告数据。
 
@@ -72,6 +72,6 @@
 
 1. 充值接口完成自动入账，无人工确认步骤。
 2. 提现接口必须支持“提交即冻结扣减、确认完成不二次扣款、拒绝解冻回补、语音提醒状态流转”。
-3. 交易接口覆盖买单、卖单、撮合状态和同步状态。
+3. 交易接口覆盖买单、卖单、撮合状态、同步状态和上金所交易时段同步状态。
 4. 仪表盘接口可支撑公告、事件流、系统监控。
 5. 风控接口可真实控制停盘、解盘、冻结、解冻。

@@ -1,46 +1,22 @@
 {
-  "name": "goldvalueadded",
+  "name": "jinyingzi-workspace",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
+  "workspaces": [
+    "frontend/app",
+    "frontend/admin",
+    "backend"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "tauri": "tauri",
-    "mock": "node frontend/app/mock/mock-server.js",
-    "test": "vitest",
-    "test:run": "vitest run"
-  },
-  "dependencies": {
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
-    "klinecharts": "^9.1.0",
-    "lucide-vue-next": "^0.563.0",
-    "vue": "^3.5.13",
-    "vue-i18n": "^11.2.8",
-    "vue-router": "^5.0.2"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.18",
-    "@tauri-apps/cli": "^2",
-    "@vitejs/plugin-vue": "^5.2.1",
-    "@vue/devtools": "^8.0.6",
-    "@vue/test-utils": "^2.4.6",
-    "autoprefixer": "^10.4.24",
-    "jsdom": "^28.1.0",
-    "msw": "^2.12.10",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^4.1.18",
-    "tw-animate-css": "^1.4.0",
-    "vite": "^6.0.3",
-    "vitest": "^4.0.18"
-  },
-  "msw": {
-    "workerDirectory": [
-      "public"
-    ]
+    "dev:app": "npm --prefix frontend/app run dev",
+    "dev:admin": "npm --prefix frontend/admin run dev",
+    "dev:backend": "npm --prefix backend run start:dev",
+    "dev:mock": "npm --prefix frontend/app run mock",
+    "build:app": "npm --prefix frontend/app run build",
+    "build:admin": "npm --prefix frontend/admin run build",
+    "build:backend": "npm --prefix backend run build",
+    "test:app": "npm --prefix frontend/app run test:run",
+    "test:backend": "npm --prefix backend run test"
   }
 }

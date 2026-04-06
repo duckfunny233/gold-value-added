@@ -20,6 +20,7 @@ const trades = ref([])
 const controlItems = ref([])
 const monitorCards = ref([])
 const sessions = ref([])
+const syncOverview = ref({})
 const loading = ref(false)
 const error = ref('')
 
@@ -33,6 +34,7 @@ async function loadData() {
     controlItems.value = data.controlItems || []
     monitorCards.value = data.monitorCards || []
     sessions.value = data.sessions || []
+    syncOverview.value = data.syncOverview || {}
   } catch (err) {
     error.value = err.message || '交易数据加载失败'
   } finally {
@@ -44,7 +46,7 @@ onMounted(loadData)
 </script>
 
 <template>
-  <PageHeader title="交易管理" description="完成买卖交易全流程管控、撮合监控、停盘控制和交易时间配置。" />
+  <PageHeader title="交易管理" description="完成买卖交易全流程管控、撮合监控与上金所交易时段同步状态查看。" />
 
   <section class="panel">
     <div class="form-row">
@@ -70,6 +72,7 @@ onMounted(loadData)
     </div>
     <div class="actions">
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查询' }}</button>
+      <button @click="loadData" :disabled="loading">刷新状态</button>
       <button class="warn">全站停盘</button>
       <button>恢复交易</button>
       <button>重试同步</button>
@@ -142,8 +145,30 @@ onMounted(loadData)
 
   <section class="panel">
     <div class="panel-head">
-      <h2>交易时间配置</h2>
-      <span class="muted">非交易时间禁止买卖，同时禁止提现发起</span>
+      <h2>上金所时段同步状态</h2>
+      <span class="muted">只读展示自动同步结果，不提供手动配置入口</span>
+    </div>
+    <div class="grid-4">
+      <article class="stat-card">
+        <p class="stat-label">同步来源</p>
+        <p class="stat-value">{{ syncOverview.source || '上金所交易时段自动同步' }}</p>
+        <p class="note">{{ syncOverview.note || '当前仅展示只读状态' }}</p>
+      </article>
+      <article class="stat-card">
+        <p class="stat-label">同步状态</p>
+        <p class="stat-value">{{ syncOverview.syncStatus || '安全降级' }}</p>
+        <p class="note">刷新时间 {{ syncOverview.lastRefreshAt || '--' }}</p>
+      </article>
+      <article class="stat-card">
+        <p class="stat-label">当前时段</p>
+        <p class="stat-value">{{ syncOverview.currentSession || '暂无可用交易时段' }}</p>
+        <p class="note">仅展示同步后的时段信息</p>
+      </article>
+      <article class="stat-card">
+        <p class="stat-label">下一开盘时间</p>
+        <p class="stat-value">{{ syncOverview.nextOpenTime || '待同步' }}</p>
+        <p class="note">交易关闭时用户端将自动禁用买卖提交</p>
+      </article>
     </div>
     <table>
       <thead>
@@ -154,15 +179,12 @@ onMounted(loadData)
         </tr>
       </thead>
       <tbody>
-        <tr v-for="item in sessions" :key="item.day">
+        <tr v-for="item in sessions" :key="`${item.day}-${item.session}`">
           <td>{{ item.day }}</td>
           <td>{{ item.session }}</td>
           <td>{{ item.status }}</td>
         </tr>
       </tbody>
     </table>
-    <div class="actions">
-      <button class="primary">更新交易时段</button>
-    </div>
   </section>
 </template>
