@@ -19,6 +19,9 @@ import { IsOptional, IsString } from 'class-validator'
 import { randomUUID } from 'crypto'
 import { sha256 } from '../../common/utils/hash.util'
 import { PrismaService } from '../../prisma/prisma.service'
+import { AdminSecurityController } from './admin-security.controller'
+import { AdminPermissionGuard } from './admin-permission.guard'
+import { AdminSecurityService } from './admin-security.service'
 import { AdminJwtAuthGuard } from './admin-jwt-auth.guard'
 import { AdminJwtStrategy } from './admin-jwt.strategy'
 
@@ -209,8 +212,14 @@ class AdminAuthController {
       }),
     }),
   ],
-  controllers: [AdminAuthController],
-  providers: [AdminAuthService, AdminJwtStrategy, AdminJwtAuthGuard],
-  exports: [AdminJwtAuthGuard],
+  controllers: [AdminAuthController, AdminSecurityController],
+  providers: [
+    AdminAuthService,
+    AdminSecurityService,
+    AdminJwtStrategy,
+    AdminJwtAuthGuard,
+    AdminPermissionGuard,
+  ],
+  exports: [AdminJwtAuthGuard, AdminPermissionGuard],
 })
 export class AdminAuthModule {}

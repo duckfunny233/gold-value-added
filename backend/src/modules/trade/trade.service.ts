@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import {
   Asset,
   AssetChangeType,
@@ -11,6 +11,7 @@ import {
   UserStatus,
 } from '@prisma/client'
 import { randomUUID } from 'crypto'
+import { OperationIdempotencyService } from '../../common/services/operation-idempotency.service'
 import {
   formatCurrency,
   formatDateTime,
@@ -40,9 +41,65 @@ export class TradeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tradeRuntimeService: TradeRuntimeService,
+    private readonly operationIdempotencyService: OperationIdempotencyService,
   ) {}
 
-  async submit(side: 'BUY' | 'SELL', body: TradeDto) {
+  async submit(side: 'BUY' | 'SELL', body: TradeDto, idempotencyKey?: string) {
+    const resolvedIdempotencyKey = idempotencyKey || body.clientRequestId
+    const requestPayload = {
+      side,
+      username: body.username,
+      uid: body.uid,
+      price: body.price,
+      quantityGrams: body.quantityGrams,
+      assetCode: body.assetCode || 'AU9999',
+    }
+
+    if (resolvedIdempotencyKey) {
+      const reserved = await this.operationIdempotencyService.reserve(
+        `trade.submit.${side.toLowerCase()}`,
+        resolvedIdempotencyKey,
+        requestPayload,
+        randomUUID(),
+      )
+
+      if (reserved.mode === 'replay') {
+        const user = await this.resolveTradeUser(body)
+        await this.recordTradeIdempotencyEvent(user.id, reserved.traceId, 'trade.idempotency-hit', {
+          key: resolvedIdempotencyKey,
+          side,
+          result: '幂等命中',
+        })
+        return reserved.responsePayload
+      }
+
+      if (reserved.mode === 'conflict') {
+        const user = await this.resolveTradeUser(body)
+        await this.recordTradeIdempotencyEvent(user.id, reserved.traceId, 'trade.idempotency-conflict', {
+          key: resolvedIdempotencyKey,
+          side,
+          result: '并发冲突',
+        })
+        throw new ConflictException('订单处理中，请勿重复提交')
+      }
+
+      try {
+        const response = await this.executeSubmit(side, body, reserved.traceId)
+        await this.operationIdempotencyService.markSucceeded(reserved.id, reserved.traceId, response)
+        return response
+      } catch (error) {
+        await this.operationIdempotencyService.markFailed(reserved.id, reserved.traceId, {
+          side,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        throw error
+      }
+    }
+
+    return this.executeSubmit(side, body, randomUUID())
+  }
+
+  private async executeSubmit(side: 'BUY' | 'SELL', body: TradeDto, requestTraceId: string) {
     const runtime = await this.tradeRuntimeService.getRuntimeStatus()
     if (runtime.status === 'PAUSED') {
       throw new BadRequestException('当前处于停盘状态，暂不支持提交买卖订单')
@@ -66,7 +123,6 @@ export class TradeService {
       const reservations = await this.getUserReservations(tx, user.id)
       this.assertSufficientAsset(side, user.asset, price, quantityGrams, reservations)
 
-      const traceId = randomUUID()
       const order = await tx.tradeOrder.create({
         data: {
           userId: user.id,
@@ -75,15 +131,15 @@ export class TradeService {
           assetCode,
           price,
           quantityGrams,
-          traceId,
+          traceId: requestTraceId,
         },
       })
 
       await this.createHashRecord(tx, {
         referenceType: 'TRADE_ORDER',
         referenceId: order.id,
-        traceId,
-        raw: `trade:${order.id}:${traceId}:${side}:${body.price}:${body.quantityGrams}`,
+        traceId: requestTraceId,
+        raw: `trade:${order.id}:${requestTraceId}:${side}:${body.price}:${body.quantityGrams}`,
         tradeOrderId: order.id,
       })
 
@@ -93,7 +149,7 @@ export class TradeService {
         actorId: user.id,
         module: 'trade',
         action: `trade.submit.${side.toLowerCase()}`,
-        traceId,
+        traceId: requestTraceId,
         payload: {
           uid: user.uid,
           username: user.username,
@@ -124,6 +180,8 @@ export class TradeService {
         matches: matchSummary.matches,
         matchedAmount: matchSummary.matchedAmount,
       }
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
     })
 
     return {
@@ -813,6 +871,37 @@ export class TradeService {
         referenceType: payload.referenceType,
         referenceId: payload.referenceId,
       },
+    })
+  }
+
+  private async recordTradeIdempotencyEvent(
+    userId: string,
+    traceId: string,
+    action: string,
+    payload: Prisma.InputJsonValue,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.auditLog.create({
+        data: {
+          userId,
+          actorType: 'USER',
+          actorId: userId,
+          module: 'trade',
+          action,
+          traceId,
+          payload,
+        },
+      })
+
+      await tx.hashRecord.create({
+        data: {
+          referenceType: 'TRADE_IDEMPOTENCY',
+          referenceId: `${userId}:${traceId}`,
+          traceId,
+          sha256: sha256(`trade_idempotency:${userId}:${traceId}:${JSON.stringify(payload)}`),
+          syncStatus: 'PENDING',
+        },
+      })
     })
   }
 }

@@ -1,6 +1,8 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common'
+import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query, Req } from '@nestjs/common'
 import { ApiTags } from '@nestjs/swagger'
 import { Request } from 'express'
+import { AdminPermission } from '../admin-auth/admin-permission.decorator'
+import { ADMIN_PERMISSION_CODES } from '../admin-auth/admin-permission-codes'
 import { AdminProtected } from '../admin-auth/admin-protected.decorator'
 import {
   AdminFundQueryDto,
@@ -66,15 +68,25 @@ export class FundController {
   @Post('admin/funds/manual-transfer')
   @HttpCode(200)
   @AdminProtected()
-  manualTransfer(@Body() body: ManualFundActionDto, @Req() req: AdminRequest) {
-    return this.fundService.manualTransfer(body, this.requireAdmin(req))
+  @AdminPermission(ADMIN_PERMISSION_CODES.FUND_MANUAL_TRANSFER)
+  manualTransfer(
+    @Body() body: ManualFundActionDto,
+    @Req() req: AdminRequest,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.fundService.manualTransfer(body, this.requireAdmin(req), idempotencyKey)
   }
 
   @Post('admin/funds/manual-adjust')
   @HttpCode(200)
   @AdminProtected()
-  manualAdjust(@Body() body: ManualFundActionDto, @Req() req: AdminRequest) {
-    return this.fundService.manualAdjust(body, this.requireAdmin(req))
+  @AdminPermission(ADMIN_PERMISSION_CODES.FUND_MANUAL_ADJUST)
+  manualAdjust(
+    @Body() body: ManualFundActionDto,
+    @Req() req: AdminRequest,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.fundService.manualAdjust(body, this.requireAdmin(req), idempotencyKey)
   }
 
   @Post('admin/funds/withdrawals/:orderId/approve')

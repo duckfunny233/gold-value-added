@@ -29,6 +29,7 @@ tags:
   - name: AdminFunds
   - name: AdminTrades
   - name: AdminLeaderboard
+  - name: AdminSecurity
   - name: AdminRisk
   - name: AdminAudit
   - name: AdminReports
@@ -278,7 +279,7 @@ paths:
     post:
       tags: [AdminFunds]
       summary: 后台手工转账
-      description: 实时调整 tentativeAsset 和 totalAsset，并同步写入 ledger、audit、hash
+      description: 实时调整 tentativeAsset 和 totalAsset，并同步写入 ledger、audit、hash；需要手工转账权限
       responses:
         '200':
           description: OK
@@ -290,7 +291,7 @@ paths:
     post:
       tags: [AdminFunds]
       summary: 后台手工补款/冲正
-      description: 实时调整 tentativeAsset 和 totalAsset，并同步写入 ledger、audit、hash
+      description: 实时调整 tentativeAsset 和 totalAsset，并同步写入 ledger、audit、hash；需要手工补款权限
       responses:
         '200':
           description: OK
@@ -332,11 +333,63 @@ paths:
       responses:
         '200':
           description: OK
+  /admin/security/admin-users:
+    get:
+      tags: [AdminSecurity]
+      summary: 查询管理员与角色分配
+      description: 返回管理员、角色、权限聚合结果；以数据库实时角色权限为准
+      responses:
+        '200':
+          description: OK
+  /admin/security/roles:
+    get:
+      tags: [AdminSecurity]
+      summary: 查询角色列表
+      description: 返回角色、权限集合和已分配管理员数量
+      responses:
+        '200':
+          description: OK
+  /admin/security/permissions:
+    get:
+      tags: [AdminSecurity]
+      summary: 查询权限列表
+      description: 返回可配置权限码和关联角色数量
+      responses:
+        '200':
+          description: OK
+  /admin/security/admin-users/{adminUserId}/roles:
+    post:
+      tags: [AdminSecurity]
+      summary: 覆盖式分配管理员角色
+      description: 角色分配后权限即时生效，并写入 admin_operation_log、audit_log、hash_record
+      parameters:
+        - in: path
+          name: adminUserId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  /admin/security/roles/{roleId}/permissions:
+    post:
+      tags: [AdminSecurity]
+      summary: 覆盖式分配角色权限
+      description: 权限分配后接口级校验立即使用数据库最新权限结果
+      parameters:
+        - in: path
+          name: roleId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
   /admin/leaderboard/rule:
     post:
       tags: [AdminLeaderboard]
       summary: 切换排行榜规则
-      description: 切换当前排行榜规则配置，支持黄金克数排序和总资产排序，并写入治理审计日志
+      description: 切换当前排行榜规则配置，支持黄金克数排序和总资产排序，并写入治理审计日志；需要排行榜规则更新权限
       responses:
         '200':
           description: OK
@@ -344,7 +397,7 @@ paths:
     post:
       tags: [AdminLeaderboard]
       summary: 触发排行榜重排
-      description: 创建新的排行榜重排任务并持久化最新快照，任务状态按 rebuilding/synced/failed 流转
+      description: 创建新的排行榜重排任务并持久化最新快照，任务状态按 rebuilding/synced/failed 流转；需要排行榜重建权限
       responses:
         '200':
           description: OK
@@ -352,7 +405,7 @@ paths:
     post:
       tags: [AdminLeaderboard]
       summary: 异常重试与状态修复
-      description: 针对异常排行榜快照重新生成同步结果，并写入 adminOperationLog、auditLog、hashRecord
+      description: 针对异常排行榜快照重新生成同步结果，并写入 adminOperationLog、auditLog、hashRecord；需要排行榜异常修复权限
       responses:
         '200':
           description: OK
@@ -372,7 +425,7 @@ paths:
     post:
       tags: [AdminTrades]
       summary: 后台停盘
-      description: 仅管理员可调用，停盘操作会写入 admin_operation_log、audit_log、hash_record
+      description: 仅管理员可调用，停盘操作会写入 admin_operation_log、audit_log、hash_record，并校验停盘权限
       responses:
         '200':
           description: OK
@@ -380,7 +433,7 @@ paths:
     post:
       tags: [AdminTrades]
       summary: 后台恢复交易
-      description: 仅管理员可调用，恢复操作会写入 admin_operation_log、audit_log、hash_record
+      description: 仅管理员可调用，恢复操作会写入 admin_operation_log、audit_log、hash_record，并校验恢复交易权限
       responses:
         '200':
           description: OK
@@ -388,7 +441,7 @@ paths:
     post:
       tags: [AdminRisk]
       summary: 冻结用户
-      description: 仅管理员可调用，冻结后交易与提现流程应按既有规则进行拦截并保留审计留痕
+      description: 仅管理员可调用，冻结后交易与提现流程应按既有规则进行拦截并保留审计留痕；需要冻结用户权限
       parameters:
         - in: path
           name: uid
@@ -402,13 +455,28 @@ paths:
     post:
       tags: [AdminRisk]
       summary: 解冻用户
-      description: 仅管理员可调用，恢复用户正常交易资格并保留审计留痕
+      description: 仅管理员可调用，恢复用户正常交易资格并保留审计留痕；需要解冻用户权限
       parameters:
         - in: path
           name: uid
           required: true
           schema:
             type: string
+      responses:
+        '200':
+          description: OK
+  /admin/risk/rules:
+    get:
+      tags: [AdminRisk]
+      summary: 查询风控规则配置
+      description: 返回提现拦截开关、单笔提现上限、日提现上限、异常交易阈值和黑名单 UID 列表
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [AdminRisk]
+      summary: 更新风控规则配置
+      description: 覆盖式更新风控规则和黑名单 UID 列表，并写入 admin_operation_log、audit_log、hash_record
       responses:
         '200':
           description: OK

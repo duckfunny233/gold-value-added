@@ -1,8 +1,10 @@
-import { Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common'
 import { ApiTags } from '@nestjs/swagger'
 import { Request } from 'express'
+import { AdminPermission } from '../admin-auth/admin-permission.decorator'
+import { ADMIN_PERMISSION_CODES } from '../admin-auth/admin-permission-codes'
 import { AdminProtected } from '../admin-auth/admin-protected.decorator'
-import { AdminRiskQueryDto } from './risk.dto'
+import { AdminRiskQueryDto, RiskRulesDto } from './risk.dto'
 import { RiskService } from './risk.service'
 
 type AdminRequest = Request & {
@@ -29,9 +31,25 @@ export class RiskController {
     return this.riskService.getAlerts()
   }
 
+  @Get('admin/risk/rules')
+  @AdminProtected()
+  @AdminPermission(ADMIN_PERMISSION_CODES.RISK_RULE_READ)
+  getRules() {
+    return this.riskService.getRules()
+  }
+
+  @Post('admin/risk/rules')
+  @HttpCode(200)
+  @AdminProtected()
+  @AdminPermission(ADMIN_PERMISSION_CODES.RISK_RULE_UPDATE)
+  updateRules(@Req() req: AdminRequest, @Body() body: RiskRulesDto) {
+    return this.riskService.updateRules(body, this.requireAdmin(req))
+  }
+
   @Post('admin/users/:uid/freeze')
   @HttpCode(200)
   @AdminProtected()
+  @AdminPermission(ADMIN_PERMISSION_CODES.RISK_USER_FREEZE)
   freezeUser(@Param('uid') uid: string, @Req() req: AdminRequest) {
     return this.riskService.freezeUser(uid, this.requireAdmin(req))
   }
@@ -39,6 +57,7 @@ export class RiskController {
   @Post('admin/users/:uid/unfreeze')
   @HttpCode(200)
   @AdminProtected()
+  @AdminPermission(ADMIN_PERMISSION_CODES.RISK_USER_UNFREEZE)
   unfreezeUser(@Param('uid') uid: string, @Req() req: AdminRequest) {
     return this.riskService.unfreezeUser(uid, this.requireAdmin(req))
   }
@@ -46,6 +65,7 @@ export class RiskController {
   @Post('admin/trades/pause')
   @HttpCode(200)
   @AdminProtected()
+  @AdminPermission(ADMIN_PERMISSION_CODES.TRADE_PAUSE)
   pauseTrading(@Req() req: AdminRequest) {
     return this.riskService.pauseTrading(this.requireAdmin(req))
   }
@@ -53,6 +73,7 @@ export class RiskController {
   @Post('admin/trades/resume')
   @HttpCode(200)
   @AdminProtected()
+  @AdminPermission(ADMIN_PERMISSION_CODES.TRADE_RESUME)
   resumeTrading(@Req() req: AdminRequest) {
     return this.riskService.resumeTrading(this.requireAdmin(req))
   }

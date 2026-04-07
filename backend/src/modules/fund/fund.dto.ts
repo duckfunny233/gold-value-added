@@ -113,6 +113,11 @@ export class AdminFundQueryDto {
 }
 
 export class ManualFundActionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  clientRequestId?: string
+
   @ApiProperty()
   @IsString()
   uid!: string

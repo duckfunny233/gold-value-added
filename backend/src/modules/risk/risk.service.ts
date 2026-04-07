@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto'
 import { formatDateTime, getJsonRecord, resolveAdminTimeRange } from '../../common/utils/admin-view.util'
 import { sha256 } from '../../common/utils/hash.util'
 import { PrismaService } from '../../prisma/prisma.service'
-import { AdminRiskQueryDto } from './risk.dto'
+import { AdminRiskQueryDto, RiskRulesDto } from './risk.dto'
 
 type RiskRow = {
   uid: string
@@ -187,6 +187,134 @@ export class RiskService {
         message: '存在待处理提现订单，请及时审核。',
       },
     ]
+  }
+
+  async getRules() {
+    const config = await this.ensureRiskRuleConfig()
+
+    return {
+      withdrawInterceptEnabled: config.withdrawInterceptEnabled,
+      singleWithdrawalLimit: Number(config.singleWithdrawalLimit),
+      dailyWithdrawalLimit: Number(config.dailyWithdrawalLimit),
+      abnormalTradeThreshold: Number(config.abnormalTradeThreshold),
+      blacklistUids: config.blacklistItems
+        .map((item: { uid: string }) => item.uid)
+        .sort((left: string, right: string) => left.localeCompare(right)),
+      updatedAt: formatDateTime(config.updatedAt),
+    }
+  }
+
+  async updateRules(body: RiskRulesDto, actor: AdminActor) {
+    const traceId = randomUUID()
+    const blacklistUids = Array.from(
+      new Set(
+        body.blacklistUids
+          .map((item) => item.trim())
+          .filter(Boolean),
+      ),
+    ).sort((left, right) => left.localeCompare(right))
+
+    const updatedConfig = await this.prisma.$transaction(async (tx) => {
+      const config = await tx.riskRuleConfig.upsert({
+        where: {
+          scope: 'default',
+        },
+        create: {
+          scope: 'default',
+          withdrawInterceptEnabled: body.withdrawInterceptEnabled,
+          singleWithdrawalLimit: new Prisma.Decimal(body.singleWithdrawalLimit),
+          dailyWithdrawalLimit: new Prisma.Decimal(body.dailyWithdrawalLimit),
+          abnormalTradeThreshold: new Prisma.Decimal(body.abnormalTradeThreshold),
+        },
+        update: {
+          withdrawInterceptEnabled: body.withdrawInterceptEnabled,
+          singleWithdrawalLimit: new Prisma.Decimal(body.singleWithdrawalLimit),
+          dailyWithdrawalLimit: new Prisma.Decimal(body.dailyWithdrawalLimit),
+          abnormalTradeThreshold: new Prisma.Decimal(body.abnormalTradeThreshold),
+        },
+      })
+
+      await tx.riskBlacklistUid.deleteMany({
+        where: {
+          riskRuleConfigId: config.id,
+        },
+      })
+
+      if (blacklistUids.length > 0) {
+        await tx.riskBlacklistUid.createMany({
+          data: blacklistUids.map((uid) => ({
+            riskRuleConfigId: config.id,
+            uid,
+          })),
+        })
+      }
+
+      await this.writeAdminOperation(tx, {
+        module: 'risk',
+        action: 'risk.rule.update',
+        traceId,
+        actor,
+        payload: {
+          withdrawInterceptEnabled: body.withdrawInterceptEnabled,
+          singleWithdrawalLimit: body.singleWithdrawalLimit,
+          dailyWithdrawalLimit: body.dailyWithdrawalLimit,
+          abnormalTradeThreshold: body.abnormalTradeThreshold,
+          blacklistUids,
+          result: '成功',
+        },
+      })
+      await this.writeAuditLog(tx, {
+        userId: null,
+        action: 'risk.rule.update',
+        traceId,
+        actor,
+        payload: {
+          withdrawInterceptEnabled: body.withdrawInterceptEnabled,
+          singleWithdrawalLimit: body.singleWithdrawalLimit,
+          dailyWithdrawalLimit: body.dailyWithdrawalLimit,
+          abnormalTradeThreshold: body.abnormalTradeThreshold,
+          blacklistUids,
+          result: '成功',
+        },
+      })
+      await this.writeHashRecord(tx, {
+        referenceType: 'RISK_RULE_UPDATE',
+        referenceId: config.id,
+        traceId,
+        raw: `risk_rule:${config.id}:${traceId}:${JSON.stringify({
+          withdrawInterceptEnabled: body.withdrawInterceptEnabled,
+          singleWithdrawalLimit: body.singleWithdrawalLimit,
+          dailyWithdrawalLimit: body.dailyWithdrawalLimit,
+          abnormalTradeThreshold: body.abnormalTradeThreshold,
+          blacklistUids,
+        })}`,
+      })
+
+      return tx.riskRuleConfig.findUniqueOrThrow({
+        where: {
+          id: config.id,
+        },
+        include: {
+          blacklistItems: {
+            orderBy: {
+              uid: 'asc',
+            },
+          },
+        },
+      })
+    })
+
+    return {
+      message: '风控规则已更新',
+      data: {
+        traceId,
+        withdrawInterceptEnabled: updatedConfig.withdrawInterceptEnabled,
+        singleWithdrawalLimit: Number(updatedConfig.singleWithdrawalLimit),
+        dailyWithdrawalLimit: Number(updatedConfig.dailyWithdrawalLimit),
+        abnormalTradeThreshold: Number(updatedConfig.abnormalTradeThreshold),
+        blacklistUids: updatedConfig.blacklistItems.map((item: { uid: string }) => item.uid),
+      },
+    }
   }
 
   async freezeUser(uid: string, actor: AdminActor) {
@@ -464,6 +592,29 @@ export class RiskService {
       return `全站状态 ${record.status}`
     }
     return '全站状态 运行中 -> 已停盘 -> 运行中'
+  }
+
+  private async ensureRiskRuleConfig() {
+    return this.prisma.riskRuleConfig.upsert({
+      where: {
+        scope: 'default',
+      },
+      create: {
+        scope: 'default',
+        withdrawInterceptEnabled: true,
+        singleWithdrawalLimit: new Prisma.Decimal(50000),
+        dailyWithdrawalLimit: new Prisma.Decimal(100000),
+        abnormalTradeThreshold: new Prisma.Decimal(200000),
+      },
+      update: {},
+      include: {
+        blacklistItems: {
+          orderBy: {
+            uid: 'asc',
+          },
+        },
+      },
+    })
   }
 
   private async updateTradingPauseState(

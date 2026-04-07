@@ -44,6 +44,10 @@ describe('TradeService V1', () => {
       hashRecord: {
         findMany: fn(),
         count: fn(),
+        create: fn(),
+      },
+      auditLog: {
+        create: fn(),
       },
       user: {
         count: fn(),
@@ -62,11 +66,24 @@ describe('TradeService V1', () => {
       getTradingWindows: jest.fn(),
     } as unknown as TradeRuntimeService
 
+    const operationIdempotencyService = {
+      reserve: jest.fn(async (_scope: string, key: string, _request: unknown, traceId: string) => ({
+        mode: 'execute',
+        id: `idem-${key}`,
+        key,
+        requestHash: 'hash',
+        traceId,
+      })),
+      markSucceeded: jest.fn(async () => undefined),
+      markFailed: jest.fn(async () => undefined),
+    } as any
+
     return {
-      service: new TradeService(prisma, runtimeService),
+      service: new TradeService(prisma, runtimeService, operationIdempotencyService),
       prisma,
       tx,
       runtimeService,
+      operationIdempotencyService,
     }
   }
 
@@ -319,5 +336,113 @@ describe('TradeService V1', () => {
         goldHoldingGrams: { decrement: decimal(2) },
       }),
     )
+  })
+
+  it('does not create duplicate buy order for same idempotency key', async () => {
+    const { service, tx, prisma, runtimeService, operationIdempotencyService } = createService()
+    ;(runtimeService.getRuntimeStatus as any).mockResolvedValue({
+      status: 'OPEN',
+      isOpen: true,
+    })
+    tx.user.findFirst = resolved({
+      id: 'buyer-1',
+      uid: 'U1',
+      username: 'buyer',
+      status: UserStatus.ACTIVE,
+      asset: {
+        id: 'asset-buyer',
+        tentativeAsset: decimal(2000),
+        cashAsset: decimal(2000),
+        goldHoldingGrams: decimal(0),
+      },
+    })
+    prisma.user.findFirst = resolved({
+      id: 'buyer-1',
+      uid: 'U1',
+      username: 'buyer',
+      status: UserStatus.ACTIVE,
+      asset: {
+        id: 'asset-buyer',
+        tentativeAsset: decimal(2000),
+        cashAsset: decimal(2000),
+        goldHoldingGrams: decimal(0),
+      },
+    })
+    tx.tradeOrder.create = resolved({
+      id: 'incoming-buy',
+      userId: 'buyer-1',
+      side: TradeSide.BUY,
+      status: TradeStatus.OPEN,
+      assetCode: 'AU9999',
+      price: decimal(565),
+      quantityGrams: decimal(1),
+      filledGrams: decimal(0),
+      traceId: 'trace-buy',
+    })
+    ;(tx.tradeOrder.findMany as any)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+    tx.tradeOrder.findUnique = resolved({
+      id: 'incoming-buy',
+      traceId: 'trace-buy',
+      assetCode: 'AU9999',
+      status: TradeStatus.OPEN,
+      filledGrams: decimal(0),
+    })
+    ;(operationIdempotencyService.reserve as any)
+      .mockResolvedValueOnce({
+        mode: 'execute',
+        id: 'idem-buy',
+        key: 'buy-key',
+        requestHash: 'hash',
+        traceId: 'trace-buy',
+      })
+      .mockResolvedValueOnce({
+        mode: 'replay',
+        id: 'idem-buy',
+        key: 'buy-key',
+        requestHash: 'hash',
+        traceId: 'trace-buy',
+        responsePayload: {
+          message: '买单提交成功',
+          data: {
+            orderId: 'incoming-buy',
+            traceId: 'trace-buy',
+            side: 'BUY',
+            status: TradeStatus.OPEN,
+            assetCode: 'AU9999',
+            price: 565,
+            quantityGrams: 1,
+            filledGrams: 0,
+            matchedAmount: 0,
+            matchingRule: 'PRICE_TIME_PRIORITY',
+          },
+        },
+      })
+
+    const first = (await service.submit(
+      'BUY',
+      {
+        username: 'buyer',
+        price: 565,
+        quantityGrams: 1,
+        clientRequestId: 'buy-key',
+      },
+      'buy-key',
+    )) as any
+    const second = (await service.submit(
+      'BUY',
+      {
+        username: 'buyer',
+        price: 565,
+        quantityGrams: 1,
+        clientRequestId: 'buy-key',
+      },
+      'buy-key',
+    )) as any
+
+    expect(first.data.orderId).toBe('incoming-buy')
+    expect(second.data.orderId).toBe('incoming-buy')
+    expect(tx.tradeOrder.create).toHaveBeenCalledTimes(1)
   })
 })

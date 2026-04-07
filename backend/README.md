@@ -284,6 +284,64 @@ npm --prefix backend run build
 npm --prefix backend run test -- --runInBand
 ```
 
+## 权限与风控-RBAC 闭环 V1
+
+`admin-auth`、`risk`、`fund`、`leaderboard` 模块当前已落地的 RBAC 与风控配置口径如下：
+
+1. 后台角色与权限管理
+   - 接口：
+     - `GET /api/admin/security/admin-users`
+     - `GET /api/admin/security/roles`
+     - `GET /api/admin/security/permissions`
+     - `POST /api/admin/security/admin-users/:adminUserId/roles`
+     - `POST /api/admin/security/roles/:roleId/permissions`
+   - 行为：
+     - 管理员角色分配采用覆盖式更新
+     - 角色权限分配采用覆盖式更新
+     - 每次变更都写入 `admin_operation_log`、`audit_log`、`hash_record`
+
+2. 接口级权限拦截
+   - 新增：
+     - `@AdminPermission(...)`
+     - `AdminPermissionGuard`
+   - 规则：
+     - 敏感接口必须通过 JWT 鉴权和权限码校验
+     - 请求中的 token 权限声明不作为最终依据
+     - 每次权限判断都以数据库实时角色权限为准，避免脏权限
+   - 当前已接入权限校验的敏感操作：
+     - 冻结 / 解冻用户
+     - 停盘 / 恢复交易
+     - 手工转账 / 手工补款
+     - 排行榜规则更新 / 重建 / 重试
+     - 风控规则查询 / 更新
+
+3. 风控规则结构化落库
+   - 表：
+     - `RiskRuleConfig`
+     - `RiskBlacklistUid`
+   - 接口：
+     - `GET /api/admin/risk/rules`
+     - `POST /api/admin/risk/rules`
+   - 当前规则字段：
+     - `withdrawInterceptEnabled`
+     - `singleWithdrawalLimit`
+     - `dailyWithdrawalLimit`
+     - `abnormalTradeThreshold`
+     - `blacklistUids`
+
+4. 默认权限初始化
+   - 迁移会补齐后台默认权限码
+   - 新增 `SUPER_ADMIN` 角色并授予全部治理权限
+   - 对当前没有任何角色的管理员，自动补一个默认超级管理员角色，避免升级后权限全失效
+
+5. 验证命令
+
+```powershell
+npm --prefix backend run prisma:generate
+npm --prefix backend run build
+npm --prefix backend run test -- --runInBand
+```
+
 ## 开发软件
 
 推荐你本地准备这些工具：

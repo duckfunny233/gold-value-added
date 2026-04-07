@@ -75,6 +75,12 @@ enum LeaderboardJobStatus {
   FAILED
 }
 
+enum OperationIdempotencyStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
 model User {
   id               String          @id @default(cuid())
   uid              String          @unique
@@ -105,6 +111,8 @@ model AdminUser {
   updatedAt      DateTime              @updatedAt
   roles          AdminUserRole[]
   auditLogs      AdminOperationLog[]
+
+  @@index([status, updatedAt])
 }
 
 model AdminRole {
@@ -137,6 +145,8 @@ model AdminUserRole {
   role           AdminRole @relation(fields: [roleId], references: [id])
 
   @@unique([adminUserId, roleId])
+  @@index([adminUserId])
+  @@index([roleId])
 }
 
 model AdminRolePermission {
@@ -148,6 +158,8 @@ model AdminRolePermission {
   permission     AdminPermission @relation(fields: [permissionId], references: [id])
 
   @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
 }
 
 model AdminOperationLog {
@@ -176,6 +188,8 @@ model Asset {
   updatedAt            DateTime      @updatedAt
   user                 User          @relation(fields: [userId], references: [id])
   ledgerEntries        LedgerEntry[]
+
+  @@index([updatedAt])
 }
 
 model RechargeOrder {
@@ -199,7 +213,7 @@ model WithdrawalOrder {
   userId            String
   amount            Decimal          @db.Decimal(18, 2)
   status            WithdrawalStatus @default(PENDING)
-  queueNo           Int
+  queueNo           Int              @unique @default(autoincrement())
   traceId           String           @unique
   submittedAt       DateTime         @default(now())
   reviewedAt        DateTime?
@@ -216,6 +230,8 @@ model WithdrawalOrder {
   updatedAt         DateTime         @updatedAt
   user              User             @relation(fields: [userId], references: [id])
   hashRecords       HashRecord[]
+
+  @@index([status, submittedAt])
 }
 
 model TradeOrder {
@@ -236,6 +252,9 @@ model TradeOrder {
   buyMatches    TradeMatch[] @relation("buyOrder")
   sellMatches   TradeMatch[] @relation("sellOrder")
   hashRecords   HashRecord[]
+
+  @@index([userId, submittedAt])
+  @@index([status, submittedAt])
 }
 
 model TradeMatch {
@@ -265,6 +284,7 @@ model LedgerEntry {
 
   @@index([userId, createdAt])
   @@index([traceId])
+  @@index([referenceType, referenceId])
 }
 
 model AuditLog {
@@ -377,6 +397,48 @@ model LeaderboardSnapshot {
   @@index([uid])
   @@index([updatedAt])
   @@index([syncStatus])
+}
+
+model RiskRuleConfig {
+  id                         String             @id @default(cuid())
+  scope                      String             @unique @default("default")
+  withdrawInterceptEnabled   Boolean            @default(true)
+  singleWithdrawalLimit      Decimal            @db.Decimal(18, 2)
+  dailyWithdrawalLimit       Decimal            @db.Decimal(18, 2)
+  abnormalTradeThreshold     Decimal            @db.Decimal(18, 2)
+  createdAt                  DateTime           @default(now())
+  updatedAt                  DateTime           @updatedAt
+  blacklistItems             RiskBlacklistUid[]
+
+  @@index([updatedAt])
+}
+
+model RiskBlacklistUid {
+  id               String         @id @default(cuid())
+  riskRuleConfigId String
+  uid              String
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  riskRuleConfig   RiskRuleConfig @relation(fields: [riskRuleConfigId], references: [id])
+
+  @@unique([riskRuleConfigId, uid])
+  @@index([uid])
+  @@index([updatedAt])
+}
+
+model OperationIdempotency {
+  id              String                     @id @default(cuid())
+  key             String                     @unique
+  scope           String
+  requestHash     String                     @db.Char(64)
+  responsePayload Json?
+  status          OperationIdempotencyStatus @default(PENDING)
+  traceId         String
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  @@index([scope, status, updatedAt])
+  @@index([traceId])
 }
 
 model SystemConfig {

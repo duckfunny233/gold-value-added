@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import {
   AssetChangeType,
   AuditLog,
@@ -12,6 +12,7 @@ import {
   WithdrawalStatus,
 } from '@prisma/client'
 import { randomUUID } from 'crypto'
+import { OperationIdempotencyService } from '../../common/services/operation-idempotency.service'
 import { sha256 } from '../../common/utils/hash.util'
 import { PrismaService } from '../../prisma/prisma.service'
 import {
@@ -88,7 +89,10 @@ const WITHDRAW_FILTER_STATUSES = new Set<string>([
 
 @Injectable()
 export class FundService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly operationIdempotencyService: OperationIdempotencyService,
+  ) {}
 
   async createRecharge(body: RechargeDto) {
     const user = await this.requireUser(body.username)
@@ -203,24 +207,18 @@ export class FundService {
     }
 
     const amount = new Prisma.Decimal(body.amount)
-    if (user.asset.tentativeAsset.lt(amount)) {
-      throw new BadRequestException('暂定资产不足，无法提现')
-    }
-
     const traceId = randomUUID()
 
     const order = await this.prisma.$transaction(async (tx) => {
-      const latestQueueOrder = await tx.withdrawalOrder.findFirst({
-        orderBy: [{ queueNo: 'desc' }, { submittedAt: 'desc' }],
-        select: {
-          queueNo: true,
-        },
-      })
-      const queueNo = (latestQueueOrder?.queueNo || 0) + 1
-
-      const updatedAsset = await tx.asset.update({
+      const updatedAssetCount = await tx.asset.updateMany({
         where: {
           userId: user.id,
+          tentativeAsset: {
+            gte: amount,
+          },
+          totalAsset: {
+            gte: amount,
+          },
         },
         data: {
           tentativeAsset: {
@@ -235,12 +233,24 @@ export class FundService {
         },
       })
 
+      if (updatedAssetCount.count !== 1) {
+        throw new ConflictException('暂定资产不足或请求冲突，请刷新后重试')
+      }
+
+      const updatedAsset = await tx.asset.findUnique({
+        where: {
+          userId: user.id,
+        },
+      })
+      if (!updatedAsset) {
+        throw new NotFoundException('用户资产不存在')
+      }
+
       const withdrawalOrder = await tx.withdrawalOrder.create({
         data: {
           userId: user.id,
           amount,
           status: WithdrawalStatus.PENDING,
-          queueNo,
           traceId,
           payeeName: body.payeeName,
           wechatReceiptUrl: body.wechatReceiptUrl,
@@ -279,15 +289,16 @@ export class FundService {
         traceId,
         payload: {
           amount: body.amount,
-          queueNo,
+          queueNo: withdrawalOrder.queueNo,
           username: user.username,
         } as Prisma.InputJsonValue,
       })
 
       return {
         withdrawalOrder,
-        queueNo,
       }
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
     })
 
     return {
@@ -297,7 +308,7 @@ export class FundService {
         traceId,
         amount: body.amount,
         status: this.mapWithdrawStatus(order.withdrawalOrder.status),
-        queueNo: order.queueNo,
+        queueNo: order.withdrawalOrder.queueNo,
         assetEffect: {
           tentativeAssetDelta: -body.amount,
           totalAssetDelta: -body.amount,
@@ -307,20 +318,20 @@ export class FundService {
     }
   }
 
-  async manualTransfer(body: ManualFundActionDto, actor: AdminActor) {
+  async manualTransfer(body: ManualFundActionDto, actor: AdminActor, idempotencyKey?: string) {
     return this.applyManualBalanceAction(body, actor, {
       action: 'fund.manual-transfer',
       referenceType: 'MANUAL_TRANSFER',
       message: '手工转账已生效',
-    })
+    }, idempotencyKey)
   }
 
-  async manualAdjust(body: ManualFundActionDto, actor: AdminActor) {
+  async manualAdjust(body: ManualFundActionDto, actor: AdminActor, idempotencyKey?: string) {
     return this.applyManualBalanceAction(body, actor, {
       action: 'fund.manual-adjust',
       referenceType: 'MANUAL_ADJUST',
       message: '手工补款已生效',
-    })
+    }, idempotencyKey)
   }
 
   async getRechargeOrders(query: FundQueryDto) {
@@ -404,211 +415,406 @@ export class FundService {
   }
 
   async approveWithdrawal(orderId: string, actor: AdminActor) {
-    const result = await this.prisma.$transaction(async (tx) => {
-      const context = await this.requireWithdrawalContext(tx, orderId)
-      if (context.order.status !== WithdrawalStatus.PENDING) {
-        throw new BadRequestException('当前提现单不处于待审核状态')
+    const action = 'withdraw.approve'
+    const reserved = await this.operationIdempotencyService.reserve(
+      'fund.withdraw.approve',
+      orderId,
+      { orderId, actorId: actor.adminUserId, action },
+      randomUUID(),
+    )
+
+    if (reserved.mode === 'replay') {
+      await this.recordAdminOperationReplay(actor, action, reserved.traceId, orderId, reserved.responsePayload)
+      return reserved.responsePayload
+    }
+    if (reserved.mode === 'conflict') {
+      await this.recordAdminOperationConflict(actor, action, reserved.traceId, orderId)
+      throw new ConflictException('提现审核处理中，请勿重复提交')
+    }
+
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const context = await this.requireWithdrawalContext(tx, orderId)
+        const approved = await tx.withdrawalOrder.updateMany({
+          where: {
+            id: orderId,
+            status: WithdrawalStatus.PENDING,
+          },
+          data: {
+            status: WithdrawalStatus.REVIEWING,
+            reviewedAt: new Date(),
+          },
+        })
+
+        if (approved.count !== 1) {
+          throw new ConflictException('当前提现单已被其他操作处理')
+        }
+
+        const updatedOrder = await tx.withdrawalOrder.findUnique({
+          where: {
+            id: orderId,
+          },
+        })
+        if (!updatedOrder) {
+          throw new NotFoundException('提现订单不存在')
+        }
+
+        await this.createHashRecord(tx, {
+          referenceType: 'WITHDRAWAL_ORDER_APPROVE',
+          referenceId: updatedOrder.id,
+          traceId: reserved.traceId,
+          raw: `withdraw:${updatedOrder.id}:${reserved.traceId}:approve`,
+          withdrawalOrderId: updatedOrder.id,
+        })
+
+        await this.createAuditLog(tx, {
+          userId: context.order.userId,
+          actorType: 'ADMIN',
+          actorId: actor.adminUserId,
+          module: 'fund',
+          action,
+          traceId: reserved.traceId,
+          payload: {
+            orderId: updatedOrder.id,
+            username: actor.username,
+          } as Prisma.InputJsonValue,
+        })
+
+        await this.createAdminOperationLog(tx, {
+          adminUserId: actor.adminUserId,
+          action,
+          traceId: reserved.traceId,
+          payload: {
+            orderId: updatedOrder.id,
+            username: actor.username,
+            result: '成功',
+          } as Prisma.InputJsonValue,
+        })
+
+        return updatedOrder
+      }, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      })
+
+      const response = {
+        orderId: result.id,
+        traceId: reserved.traceId,
+        status: this.mapWithdrawStatus(result.status),
+        alertStatus: this.mapWithdrawAlertStatus(result.status, result.isVoiceMuted),
       }
-
-      const updatedOrder = await tx.withdrawalOrder.update({
-        where: {
-          id: orderId,
-        },
-        data: {
-          status: WithdrawalStatus.REVIEWING,
-          reviewedAt: new Date(),
-        },
+      await this.operationIdempotencyService.markSucceeded(reserved.id, reserved.traceId, response)
+      return response
+    } catch (error) {
+      await this.operationIdempotencyService.markFailed(reserved.id, reserved.traceId, {
+        orderId,
+        message: error instanceof Error ? error.message : String(error),
       })
-
-      await this.createHashRecord(tx, {
-        referenceType: 'WITHDRAWAL_ORDER_APPROVE',
-        referenceId: updatedOrder.id,
-        traceId: updatedOrder.traceId,
-        raw: `withdraw:${updatedOrder.id}:${updatedOrder.traceId}:approve`,
-        withdrawalOrderId: updatedOrder.id,
-      })
-
-      await this.createAuditLog(tx, {
-        userId: context.order.userId,
-        actorType: 'ADMIN',
-        actorId: actor.adminUserId,
-        module: 'fund',
-        action: 'withdraw.approve',
-        traceId: updatedOrder.traceId,
-        payload: {
-          orderId: updatedOrder.id,
-          username: actor.username,
-        } as Prisma.InputJsonValue,
-      })
-
-      return updatedOrder
-    })
-
-    return {
-      orderId: result.id,
-      status: this.mapWithdrawStatus(result.status),
-      alertStatus: this.mapWithdrawAlertStatus(result.status, result.isVoiceMuted),
+      throw error
     }
   }
 
   async rejectWithdrawal(orderId: string, actor: AdminActor) {
-    const result = await this.prisma.$transaction(async (tx) => {
-      const context = await this.requireWithdrawalContext(tx, orderId)
-      if (!WITHDRAW_REJECTABLE_DB_STATUSES.includes(context.order.status)) {
-        throw new BadRequestException('当前提现单不允许拒绝')
-      }
+    const action = 'withdraw.reject'
+    const reserved = await this.operationIdempotencyService.reserve(
+      'fund.withdraw.reject',
+      orderId,
+      { orderId, actorId: actor.adminUserId, action },
+      randomUUID(),
+    )
 
-      const updatedAsset = await tx.asset.update({
-        where: {
+    if (reserved.mode === 'replay') {
+      await this.recordAdminOperationReplay(actor, action, reserved.traceId, orderId, reserved.responsePayload)
+      return reserved.responsePayload
+    }
+    if (reserved.mode === 'conflict') {
+      await this.recordAdminOperationConflict(actor, action, reserved.traceId, orderId)
+      throw new ConflictException('提现驳回处理中，请勿重复提交')
+    }
+
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const context = await this.requireWithdrawalContext(tx, orderId)
+        if (!WITHDRAW_REJECTABLE_DB_STATUSES.includes(context.order.status)) {
+          throw new BadRequestException('当前提现单不允许拒绝')
+        }
+
+        const rejected = await tx.withdrawalOrder.updateMany({
+          where: {
+            id: orderId,
+            status: {
+              in: WITHDRAW_REJECTABLE_DB_STATUSES,
+            },
+          },
+          data: {
+            status: WithdrawalStatus.REJECTED,
+            isVoiceMuted: true,
+          },
+        })
+
+        if (rejected.count !== 1) {
+          throw new ConflictException('当前提现单已被其他操作处理')
+        }
+
+        const updatedAssetCount = await tx.asset.updateMany({
+          where: {
+            userId: context.order.userId,
+            withdrawFrozenAmount: {
+              gte: context.order.amount,
+            },
+          },
+          data: {
+            tentativeAsset: {
+              increment: context.order.amount,
+            },
+            totalAsset: {
+              increment: context.order.amount,
+            },
+            withdrawFrozenAmount: {
+              decrement: context.order.amount,
+            },
+          },
+        })
+
+        if (updatedAssetCount.count !== 1) {
+          throw new ConflictException('冻结金额不足，无法驳回提现')
+        }
+
+        const [updatedAsset, updatedOrder] = await Promise.all([
+          tx.asset.findUnique({
+            where: {
+              userId: context.order.userId,
+            },
+          }),
+          tx.withdrawalOrder.findUnique({
+            where: {
+              id: orderId,
+            },
+          }),
+        ])
+
+        if (!updatedAsset || !updatedOrder) {
+          throw new NotFoundException('提现订单或资产不存在')
+        }
+
+        await this.createLedgerEntry(tx, {
+          assetId: updatedAsset.id,
           userId: context.order.userId,
+          changeType: AssetChangeType.WITHDRAW_RELEASE,
+          amount: context.order.amount,
+          traceId: reserved.traceId,
+          balanceAfter: updatedAsset.totalAsset,
+          referenceType: 'WITHDRAWAL_ORDER_REJECT',
+          referenceId: updatedOrder.id,
+        })
+
+        await this.createHashRecord(tx, {
+          referenceType: 'WITHDRAWAL_ORDER_REJECT',
+          referenceId: updatedOrder.id,
+          traceId: reserved.traceId,
+          raw: `withdraw:${updatedOrder.id}:${reserved.traceId}:reject`,
+          withdrawalOrderId: updatedOrder.id,
+        })
+
+        await this.createAuditLog(tx, {
+          userId: context.order.userId,
+          actorType: 'ADMIN',
+          actorId: actor.adminUserId,
+          module: 'fund',
+          action,
+          traceId: reserved.traceId,
+          payload: {
+            orderId: updatedOrder.id,
+            username: actor.username,
+          } as Prisma.InputJsonValue,
+        })
+
+        await this.createAdminOperationLog(tx, {
+          adminUserId: actor.adminUserId,
+          action,
+          traceId: reserved.traceId,
+          payload: {
+            orderId: updatedOrder.id,
+            username: actor.username,
+            result: '成功',
+          } as Prisma.InputJsonValue,
+        })
+
+        return {
+          order: updatedOrder,
+        }
+      }, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      })
+
+      const response = {
+        orderId: result.order.id,
+        traceId: reserved.traceId,
+        status: this.mapWithdrawStatus(result.order.status),
+        alertStatus: this.mapWithdrawAlertStatus(result.order.status, result.order.isVoiceMuted),
+        assetEffect: {
+          tentativeAssetDelta: Number(result.order.amount),
+          totalAssetDelta: Number(result.order.amount),
+          withdrawFrozenAmountDelta: -Number(result.order.amount),
         },
-        data: {
-          tentativeAsset: {
-            increment: context.order.amount,
-          },
-          totalAsset: {
-            increment: context.order.amount,
-          },
-          withdrawFrozenAmount: {
-            decrement: context.order.amount,
-          },
-        },
-      })
-
-      const updatedOrder = await tx.withdrawalOrder.update({
-        where: {
-          id: orderId,
-        },
-        data: {
-          status: WithdrawalStatus.REJECTED,
-          isVoiceMuted: true,
-        },
-      })
-
-      await this.createLedgerEntry(tx, {
-        assetId: updatedAsset.id,
-        userId: context.order.userId,
-        changeType: AssetChangeType.WITHDRAW_RELEASE,
-        amount: context.order.amount,
-        traceId: updatedOrder.traceId,
-        balanceAfter: updatedAsset.totalAsset,
-        referenceType: 'WITHDRAWAL_ORDER_REJECT',
-        referenceId: updatedOrder.id,
-      })
-
-      await this.createHashRecord(tx, {
-        referenceType: 'WITHDRAWAL_ORDER_REJECT',
-        referenceId: updatedOrder.id,
-        traceId: updatedOrder.traceId,
-        raw: `withdraw:${updatedOrder.id}:${updatedOrder.traceId}:reject`,
-        withdrawalOrderId: updatedOrder.id,
-      })
-
-      await this.createAuditLog(tx, {
-        userId: context.order.userId,
-        actorType: 'ADMIN',
-        actorId: actor.adminUserId,
-        module: 'fund',
-        action: 'withdraw.reject',
-        traceId: updatedOrder.traceId,
-        payload: {
-          orderId: updatedOrder.id,
-          username: actor.username,
-        } as Prisma.InputJsonValue,
-      })
-
-      return {
-        order: updatedOrder,
       }
-    })
-
-    return {
-      orderId: result.order.id,
-      status: this.mapWithdrawStatus(result.order.status),
-      alertStatus: this.mapWithdrawAlertStatus(result.order.status, result.order.isVoiceMuted),
-      assetEffect: {
-        tentativeAssetDelta: Number(result.order.amount),
-        totalAssetDelta: Number(result.order.amount),
-        withdrawFrozenAmountDelta: -Number(result.order.amount),
-      },
+      await this.operationIdempotencyService.markSucceeded(reserved.id, reserved.traceId, response)
+      return response
+    } catch (error) {
+      await this.operationIdempotencyService.markFailed(reserved.id, reserved.traceId, {
+        orderId,
+        message: error instanceof Error ? error.message : String(error),
+      })
+      throw error
     }
   }
 
   async confirmWithdrawalCompleted(orderId: string, actor: AdminActor) {
-    const result = await this.prisma.$transaction(async (tx) => {
-      const context = await this.requireWithdrawalContext(tx, orderId)
-      if (!WITHDRAW_PROCESSING_DB_STATUSES.includes(context.order.status)) {
-        throw new BadRequestException('当前提现单不处于转账处理中')
-      }
+    const action = 'withdraw.confirm-completed'
+    const reserved = await this.operationIdempotencyService.reserve(
+      'fund.withdraw.confirm-completed',
+      orderId,
+      { orderId, actorId: actor.adminUserId, action },
+      randomUUID(),
+    )
 
-      const updatedAsset = await tx.asset.update({
-        where: {
-          userId: context.order.userId,
-        },
-        data: {
-          withdrawFrozenAmount: {
-            decrement: context.order.amount,
+    if (reserved.mode === 'replay') {
+      await this.recordAdminOperationReplay(actor, action, reserved.traceId, orderId, reserved.responsePayload)
+      return reserved.responsePayload
+    }
+    if (reserved.mode === 'conflict') {
+      await this.recordAdminOperationConflict(actor, action, reserved.traceId, orderId)
+      throw new ConflictException('提现完成确认处理中，请勿重复提交')
+    }
+
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const context = await this.requireWithdrawalContext(tx, orderId)
+        if (!WITHDRAW_PROCESSING_DB_STATUSES.includes(context.order.status)) {
+          throw new BadRequestException('当前提现单不处于转账处理中')
+        }
+
+        const completed = await tx.withdrawalOrder.updateMany({
+          where: {
+            id: orderId,
+            status: {
+              in: WITHDRAW_PROCESSING_DB_STATUSES,
+            },
           },
+          data: {
+            status: WithdrawalStatus.COMPLETED,
+            completedAt: new Date(),
+            isVoiceMuted: true,
+          },
+        })
+
+        if (completed.count !== 1) {
+          throw new ConflictException('当前提现单已被其他操作处理')
+        }
+
+        const updatedAssetCount = await tx.asset.updateMany({
+          where: {
+            userId: context.order.userId,
+            withdrawFrozenAmount: {
+              gte: context.order.amount,
+            },
+          },
+          data: {
+            withdrawFrozenAmount: {
+              decrement: context.order.amount,
+            },
+          },
+        })
+
+        if (updatedAssetCount.count !== 1) {
+          throw new ConflictException('冻结金额不足，无法确认完成')
+        }
+
+        const [updatedAsset, updatedOrder] = await Promise.all([
+          tx.asset.findUnique({
+            where: {
+              userId: context.order.userId,
+            },
+          }),
+          tx.withdrawalOrder.findUnique({
+            where: {
+              id: orderId,
+            },
+          }),
+        ])
+
+        if (!updatedAsset || !updatedOrder) {
+          throw new NotFoundException('提现订单或资产不存在')
+        }
+
+        await this.createLedgerEntry(tx, {
+          assetId: updatedAsset.id,
+          userId: context.order.userId,
+          changeType: AssetChangeType.WITHDRAW_COMPLETE,
+          amount: context.order.amount,
+          traceId: reserved.traceId,
+          balanceAfter: updatedAsset.totalAsset,
+          referenceType: 'WITHDRAWAL_ORDER_COMPLETE',
+          referenceId: updatedOrder.id,
+        })
+
+        await this.createHashRecord(tx, {
+          referenceType: 'WITHDRAWAL_ORDER_COMPLETE',
+          referenceId: updatedOrder.id,
+          traceId: reserved.traceId,
+          raw: `withdraw:${updatedOrder.id}:${reserved.traceId}:complete`,
+          withdrawalOrderId: updatedOrder.id,
+        })
+
+        await this.createAuditLog(tx, {
+          userId: context.order.userId,
+          actorType: 'ADMIN',
+          actorId: actor.adminUserId,
+          module: 'fund',
+          action,
+          traceId: reserved.traceId,
+          payload: {
+            orderId: updatedOrder.id,
+            username: actor.username,
+          } as Prisma.InputJsonValue,
+        })
+
+        await this.createAdminOperationLog(tx, {
+          adminUserId: actor.adminUserId,
+          action,
+          traceId: reserved.traceId,
+          payload: {
+            orderId: updatedOrder.id,
+            username: actor.username,
+            result: '成功',
+          } as Prisma.InputJsonValue,
+        })
+
+        return {
+          order: updatedOrder,
+        }
+      }, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      })
+
+      const response = {
+        orderId: result.order.id,
+        traceId: reserved.traceId,
+        status: this.mapWithdrawStatus(result.order.status),
+        alertStatus: this.mapWithdrawAlertStatus(result.order.status, result.order.isVoiceMuted),
+        assetEffect: {
+          tentativeAssetDelta: 0,
+          totalAssetDelta: 0,
+          withdrawFrozenAmountDelta: -Number(result.order.amount),
         },
-      })
-
-      const updatedOrder = await tx.withdrawalOrder.update({
-        where: {
-          id: orderId,
-        },
-        data: {
-          status: WithdrawalStatus.COMPLETED,
-          completedAt: new Date(),
-          isVoiceMuted: true,
-        },
-      })
-
-      await this.createLedgerEntry(tx, {
-        assetId: updatedAsset.id,
-        userId: context.order.userId,
-        changeType: AssetChangeType.WITHDRAW_COMPLETE,
-        amount: context.order.amount,
-        traceId: updatedOrder.traceId,
-        balanceAfter: updatedAsset.totalAsset,
-        referenceType: 'WITHDRAWAL_ORDER_COMPLETE',
-        referenceId: updatedOrder.id,
-      })
-
-      await this.createHashRecord(tx, {
-        referenceType: 'WITHDRAWAL_ORDER_COMPLETE',
-        referenceId: updatedOrder.id,
-        traceId: updatedOrder.traceId,
-        raw: `withdraw:${updatedOrder.id}:${updatedOrder.traceId}:complete`,
-        withdrawalOrderId: updatedOrder.id,
-      })
-
-      await this.createAuditLog(tx, {
-        userId: context.order.userId,
-        actorType: 'ADMIN',
-        actorId: actor.adminUserId,
-        module: 'fund',
-        action: 'withdraw.confirm-completed',
-        traceId: updatedOrder.traceId,
-        payload: {
-          orderId: updatedOrder.id,
-          username: actor.username,
-        } as Prisma.InputJsonValue,
-      })
-
-      return {
-        order: updatedOrder,
       }
-    })
-
-    return {
-      orderId: result.order.id,
-      status: this.mapWithdrawStatus(result.order.status),
-      alertStatus: this.mapWithdrawAlertStatus(result.order.status, result.order.isVoiceMuted),
-      assetEffect: {
-        tentativeAssetDelta: 0,
-        totalAssetDelta: 0,
-        withdrawFrozenAmountDelta: -Number(result.order.amount),
-      },
+      await this.operationIdempotencyService.markSucceeded(reserved.id, reserved.traceId, response)
+      return response
+    } catch (error) {
+      await this.operationIdempotencyService.markFailed(reserved.id, reserved.traceId, {
+        orderId,
+        message: error instanceof Error ? error.message : String(error),
+      })
+      throw error
     }
   }
 
@@ -667,6 +873,7 @@ export class FundService {
       referenceType: string
       message: string
     },
+    idempotencyKey?: string,
   ) {
     const user = await this.requireUserByUid(body.uid)
     if (!user.asset) {
@@ -674,88 +881,164 @@ export class FundService {
     }
 
     const amount = new Prisma.Decimal(body.amount)
-    if (body.direction === 'decrease') {
-      if (user.asset.tentativeAsset.lt(amount) || user.asset.totalAsset.lt(amount)) {
-        throw new BadRequestException('用户资产不足，无法减少')
-      }
-    }
-
-    const traceId = randomUUID()
     const signedAmount =
       body.direction === 'increase' ? amount : new Prisma.Decimal(0).minus(amount)
-
-    const updatedAsset = await this.prisma.$transaction(async (tx) => {
-      const asset = await tx.asset.update({
-        where: {
-          userId: user.id,
-        },
-        data:
-          body.direction === 'increase'
-            ? {
-                tentativeAsset: {
-                  increment: amount,
-                },
-                totalAsset: {
-                  increment: amount,
-                },
-              }
-            : {
-                tentativeAsset: {
-                  decrement: amount,
-                },
-                totalAsset: {
-                  decrement: amount,
-                },
-              },
-      })
-
-      await this.createLedgerEntry(tx, {
-        assetId: asset.id,
-        userId: user.id,
-        changeType: AssetChangeType.MANUAL_ADJUST,
-        amount: signedAmount,
-        traceId,
-        balanceAfter: asset.totalAsset,
-        referenceType: options.referenceType,
-        referenceId: user.id,
-      })
-
-      await this.createHashRecord(tx, {
-        referenceType: options.referenceType,
-        referenceId: user.id,
-        traceId,
-        raw: `${options.referenceType}:${user.id}:${body.uid}:${body.direction}:${body.amount}:${body.reason}`,
-      })
-
-      await this.createAuditLog(tx, {
-        userId: user.id,
-        actorType: 'ADMIN',
-        actorId: actor.adminUserId,
-        module: 'fund',
-        action: options.action,
-        traceId,
-        payload: {
-          uid: body.uid,
-          amount: body.amount,
-          direction: body.direction,
-          reason: body.reason,
-          username: actor.username,
-        } as Prisma.InputJsonValue,
-      })
-
-      return asset
-    })
-
-    return {
-      message: options.message,
-      data: {
+    const resolvedIdempotencyKey =
+      idempotencyKey ||
+      body.clientRequestId ||
+      this.operationIdempotencyService.createRequestHash({
         uid: body.uid,
-        traceId,
         amount: body.amount,
         direction: body.direction,
         reason: body.reason,
-        latestBalance: this.toAssetBalance(updatedAsset),
+        actorId: actor.adminUserId,
+        action: options.action,
+      })
+
+    const reserved = await this.operationIdempotencyService.reserve(
+      options.action,
+      resolvedIdempotencyKey,
+      {
+        uid: body.uid,
+        amount: body.amount,
+        direction: body.direction,
+        reason: body.reason,
+        actorId: actor.adminUserId,
       },
+      randomUUID(),
+    )
+
+    if (reserved.mode === 'replay') {
+      await this.recordAdminOperationReplay(actor, `${options.action}.idempotency-hit`, reserved.traceId, body.uid, reserved.responsePayload)
+      return reserved.responsePayload
+    }
+    if (reserved.mode === 'conflict') {
+      await this.recordAdminOperationConflict(actor, `${options.action}.conflict`, reserved.traceId, body.uid)
+      throw new ConflictException('资金调整处理中，请勿重复提交')
+    }
+
+    try {
+      const updatedAsset = await this.prisma.$transaction(async (tx) => {
+        const updatedAssetCount = await tx.asset.updateMany({
+          where:
+            body.direction === 'increase'
+              ? {
+                  userId: user.id,
+                }
+              : {
+                  userId: user.id,
+                  tentativeAsset: {
+                    gte: amount,
+                  },
+                  totalAsset: {
+                    gte: amount,
+                  },
+                },
+          data:
+            body.direction === 'increase'
+              ? {
+                  tentativeAsset: {
+                    increment: amount,
+                  },
+                  totalAsset: {
+                    increment: amount,
+                  },
+                }
+              : {
+                  tentativeAsset: {
+                    decrement: amount,
+                  },
+                  totalAsset: {
+                    decrement: amount,
+                  },
+                },
+        })
+
+        if (updatedAssetCount.count !== 1) {
+          throw new ConflictException('用户资产不足或请求冲突，请刷新后重试')
+        }
+
+        const asset = await tx.asset.findUnique({
+          where: {
+            userId: user.id,
+          },
+        })
+        if (!asset) {
+          throw new NotFoundException('用户资产不存在')
+        }
+
+        await this.createLedgerEntry(tx, {
+          assetId: asset.id,
+          userId: user.id,
+          changeType: AssetChangeType.MANUAL_ADJUST,
+          amount: signedAmount,
+          traceId: reserved.traceId,
+          balanceAfter: asset.totalAsset,
+          referenceType: options.referenceType,
+          referenceId: user.id,
+        })
+
+        await this.createHashRecord(tx, {
+          referenceType: options.referenceType,
+          referenceId: user.id,
+          traceId: reserved.traceId,
+          raw: `${options.referenceType}:${user.id}:${body.uid}:${body.direction}:${body.amount}:${body.reason}:${reserved.traceId}`,
+        })
+
+        await this.createAuditLog(tx, {
+          userId: user.id,
+          actorType: 'ADMIN',
+          actorId: actor.adminUserId,
+          module: 'fund',
+          action: options.action,
+          traceId: reserved.traceId,
+          payload: {
+            uid: body.uid,
+            amount: body.amount,
+            direction: body.direction,
+            reason: body.reason,
+            username: actor.username,
+          } as Prisma.InputJsonValue,
+        })
+
+        await this.createAdminOperationLog(tx, {
+          adminUserId: actor.adminUserId,
+          action: options.action,
+          traceId: reserved.traceId,
+          payload: {
+            uid: body.uid,
+            amount: body.amount,
+            direction: body.direction,
+            reason: body.reason,
+            username: actor.username,
+            result: '成功',
+          } as Prisma.InputJsonValue,
+        })
+
+        return asset
+      }, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      })
+
+      const response = {
+        message: options.message,
+        data: {
+          uid: body.uid,
+          traceId: reserved.traceId,
+          amount: body.amount,
+          direction: body.direction,
+          reason: body.reason,
+          latestBalance: this.toAssetBalance(updatedAsset),
+        },
+      }
+      await this.operationIdempotencyService.markSucceeded(reserved.id, reserved.traceId, response)
+      return response
+    } catch (error) {
+      await this.operationIdempotencyService.markFailed(reserved.id, reserved.traceId, {
+        uid: body.uid,
+        message: error instanceof Error ? error.message : String(error),
+      })
+      throw error
     }
   }
 
@@ -1181,7 +1464,7 @@ export class FundService {
   private async createAuditLog(
     tx: FundTx,
     payload: {
-      userId: string
+      userId: string | null
       actorType: string
       actorId: string
       module: string
@@ -1196,6 +1479,26 @@ export class FundService {
         actorType: payload.actorType,
         actorId: payload.actorId,
         module: payload.module,
+        action: payload.action,
+        traceId: payload.traceId,
+        payload: payload.payload,
+      },
+    })
+  }
+
+  private async createAdminOperationLog(
+    tx: FundTx,
+    payload: {
+      adminUserId: string
+      action: string
+      traceId: string
+      payload: Prisma.InputJsonValue
+    },
+  ) {
+    await tx.adminOperationLog.create({
+      data: {
+        adminUserId: payload.adminUserId,
+        module: 'fund',
         action: payload.action,
         traceId: payload.traceId,
         payload: payload.payload,
@@ -1227,6 +1530,98 @@ export class FundService {
         referenceType: payload.referenceType,
         referenceId: payload.referenceId,
       },
+    })
+  }
+
+  private async recordAdminOperationReplay(
+    actor: AdminActor,
+    action: string,
+    traceId: string,
+    referenceId: string,
+    responsePayload: Record<string, unknown>,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.adminOperationLog.create({
+        data: {
+          adminUserId: actor.adminUserId,
+          module: 'fund',
+          action,
+          traceId,
+          payload: {
+            referenceId,
+            result: '幂等命中',
+          },
+        },
+      })
+      await tx.auditLog.create({
+        data: {
+          userId: null,
+          actorType: 'ADMIN',
+          actorId: actor.adminUserId,
+          module: 'fund',
+          action,
+          traceId,
+          payload: {
+            referenceId,
+            responsePayload: responsePayload as Prisma.InputJsonValue,
+            result: '幂等命中',
+          } as Prisma.InputJsonValue,
+        },
+      })
+      await tx.hashRecord.create({
+        data: {
+          referenceType: 'FUND_IDEMPOTENCY_HIT',
+          referenceId,
+          traceId,
+          sha256: sha256(`fund_idempotency_hit:${referenceId}:${traceId}:${JSON.stringify(responsePayload)}`),
+          syncStatus: 'PENDING',
+        },
+      })
+    })
+  }
+
+  private async recordAdminOperationConflict(
+    actor: AdminActor,
+    action: string,
+    traceId: string,
+    referenceId: string,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.adminOperationLog.create({
+        data: {
+          adminUserId: actor.adminUserId,
+          module: 'fund',
+          action,
+          traceId,
+          payload: {
+            referenceId,
+            result: '并发冲突',
+          },
+        },
+      })
+      await tx.auditLog.create({
+        data: {
+          userId: null,
+          actorType: 'ADMIN',
+          actorId: actor.adminUserId,
+          module: 'fund',
+          action,
+          traceId,
+          payload: {
+            referenceId,
+            result: '并发冲突',
+          },
+        },
+      })
+      await tx.hashRecord.create({
+        data: {
+          referenceType: 'FUND_CONFLICT',
+          referenceId,
+          traceId,
+          sha256: sha256(`fund_conflict:${referenceId}:${traceId}`),
+          syncStatus: 'PENDING',
+        },
+      })
     })
   }
 

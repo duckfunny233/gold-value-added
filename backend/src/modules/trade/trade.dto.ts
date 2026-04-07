@@ -15,6 +15,11 @@ export class TradeDto {
   @IsString()
   uid?: string
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  clientRequestId?: string
+
   @ApiProperty()
   @Type(() => Number)
   @IsNumber()

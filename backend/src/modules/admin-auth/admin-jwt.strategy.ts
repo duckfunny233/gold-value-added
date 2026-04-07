@@ -17,7 +17,7 @@ export class AdminJwtStrategy extends PassportStrategy(Strategy, 'admin-jwt') {
     })
   }
 
-  async validate(payload: { sub: string; username: string; roleCodes: string[] }) {
+  async validate(payload: { sub: string; username: string; roleCodes: string[]; permissionCodes?: string[] }) {
     const adminUser = await this.prisma.adminUser.findUnique({
       where: {
         id: payload.sub,
@@ -25,7 +25,15 @@ export class AdminJwtStrategy extends PassportStrategy(Strategy, 'admin-jwt') {
       include: {
         roles: {
           include: {
-            role: true,
+            role: {
+              include: {
+                permissions: {
+                  include: {
+                    permission: true,
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -39,6 +47,13 @@ export class AdminJwtStrategy extends PassportStrategy(Strategy, 'admin-jwt') {
       adminUserId: adminUser.id,
       username: adminUser.username,
       roleCodes: adminUser.roles.map((item) => item.role.code),
+      permissionCodes: Array.from(
+        new Set(
+          adminUser.roles.flatMap((item) =>
+            item.role.permissions.map((permissionItem) => permissionItem.permission.code),
+          ),
+        ),
+      ),
     }
   }
 }

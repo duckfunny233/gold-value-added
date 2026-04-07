@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Query } from '@nestjs/common'
+import { Body, Controller, Get, Headers, HttpCode, Post, Query } from '@nestjs/common'
 import { ApiTags } from '@nestjs/swagger'
 import { AdminProtected } from '../admin-auth/admin-protected.decorator'
 import { AdminTradesQueryDto, TradeDto, TradeQueryDto } from './trade.dto'
@@ -11,14 +11,14 @@ export class TradeController {
 
   @Post('app/trades/buy')
   @HttpCode(200)
-  submitBuy(@Body() body: TradeDto) {
-    return this.tradeService.submit('BUY', body)
+  submitBuy(@Body() body: TradeDto, @Headers('idempotency-key') idempotencyKey?: string) {
+    return this.tradeService.submit('BUY', body, idempotencyKey)
   }
 
   @Post('app/trades/sell')
   @HttpCode(200)
-  submitSell(@Body() body: TradeDto) {
-    return this.tradeService.submit('SELL', body)
+  submitSell(@Body() body: TradeDto, @Headers('idempotency-key') idempotencyKey?: string) {
+    return this.tradeService.submit('SELL', body, idempotencyKey)
   }
 
   @Get('app/trades')
