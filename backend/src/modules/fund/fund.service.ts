@@ -1634,6 +1634,8 @@ export class FundService {
       [AssetChangeType.TRADE_BUY]: '交易买入',
       [AssetChangeType.TRADE_SELL]: '交易卖出',
       [AssetChangeType.MANUAL_ADJUST]: '资产调整',
+      [AssetChangeType.PAYMENT_OUT]: '增值收益支付',
+      [AssetChangeType.PAYMENT_IN]: '增值收益收款',
     }
     return labels[changeType]
   }
@@ -1663,8 +1665,15 @@ export class FundService {
     if (changeType === AssetChangeType.WITHDRAW_FREEZE) {
       return `-${abs}`
     }
-    if (changeType === AssetChangeType.WITHDRAW_RELEASE || changeType === AssetChangeType.RECHARGE) {
+    if (
+      changeType === AssetChangeType.WITHDRAW_RELEASE ||
+      changeType === AssetChangeType.RECHARGE ||
+      changeType === AssetChangeType.PAYMENT_IN
+    ) {
       return `+${abs}`
+    }
+    if (changeType === AssetChangeType.PAYMENT_OUT) {
+      return `-${abs}`
     }
     if (changeType === AssetChangeType.MANUAL_ADJUST) {
       const normalized = this.formatCurrency(Math.abs(amount)).slice(1)

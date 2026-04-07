@@ -12,6 +12,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module'
 import { FundModule } from './modules/fund/fund.module'
 import { LeaderboardModule } from './modules/leaderboard/leaderboard.module'
 import { MarketModule } from './modules/market/market.module'
+import { PaymentModule } from './modules/payment/payment.module'
 import { ReportModule } from './modules/report/report.module'
 import { RiskModule } from './modules/risk/risk.module'
 import { SystemModule } from './modules/system/system.module'
@@ -33,6 +34,7 @@ import { PrismaModule } from './prisma/prisma.module'
     UserModule,
     FundModule,
     TradeModule,
+    PaymentModule,
     MarketModule,
     DashboardModule,
     RiskModule,

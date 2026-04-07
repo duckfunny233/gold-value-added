@@ -66,12 +66,23 @@ describe('LeaderboardService V1', () => {
           return target
         }),
         findFirst: jest.fn(async ({ where }: any) => {
+          const compareJob = (left: any, right: any) => {
+            const createdAtGap = right.createdAt.getTime() - left.createdAt.getTime()
+            if (createdAtGap !== 0) {
+              return createdAtGap
+            }
+            const updatedAtGap = right.updatedAt.getTime() - left.updatedAt.getTime()
+            if (updatedAtGap !== 0) {
+              return updatedAtGap
+            }
+            return right.id.localeCompare(left.id)
+          }
           const filtered = state.jobs
             .filter((item) => (where.rule ? item.rule === where.rule : true))
             .filter((item) =>
               where.status?.in ? where.status.in.includes(item.status) : true,
             )
-            .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+            .sort(compareJob)
           return filtered[0] ?? null
         }),
       },

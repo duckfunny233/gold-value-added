@@ -22,11 +22,13 @@ tags:
   - name: AppRecharge
   - name: AppWithdraw
   - name: AppTrade
+  - name: AppPayment
   - name: AppMarket
   - name: AppNotice
   - name: AdminDashboard
   - name: AdminUsers
   - name: AdminFunds
+  - name: AdminPayments
   - name: AdminTrades
   - name: AdminLeaderboard
   - name: AdminSecurity
@@ -118,6 +120,14 @@ paths:
       description: |
         买单真实落库并在事务内执行撮合。
         撮合规则为价格优先、时间优先；用户被冻结或当前非交易时段/停盘时会直接拦截。
+        支持通过请求头 `Idempotency-Key` 或请求体 `clientRequestId` 实现幂等提交；相同键重复请求会返回同一业务结果，处理中重复请求返回 409。
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+          description: 幂等键。优先级高于 `clientRequestId`，同键同请求只允许成功落单一次。
       responses:
         '200':
           description: OK
@@ -125,6 +135,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseTradeOrder'
+        '409':
+          description: 幂等键冲突或订单仍在处理中，请勿重复提交
   /app/trades/sell:
     post:
       tags: [AppTrade]
@@ -132,6 +144,14 @@ paths:
       description: |
         卖单真实落库并在事务内执行撮合。
         撮合规则为价格优先、时间优先；用户被冻结或当前非交易时段/停盘时会直接拦截。
+        支持通过请求头 `Idempotency-Key` 或请求体 `clientRequestId` 实现幂等提交；相同键重复请求会返回同一业务结果，处理中重复请求返回 409。
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+          description: 幂等键。优先级高于 `clientRequestId`，同键同请求只允许成功落单一次。
       responses:
         '200':
           description: OK
@@ -139,6 +159,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseTradeOrder'
+        '409':
+          description: 幂等键冲突或订单仍在处理中，请勿重复提交
   /app/trades:
     get:
       tags: [AppTrade]
@@ -150,6 +172,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseTradeOrderList'
+  /app/payments/qr:
+    get:
+      tags: [AppPayment]
+      summary: 获取收款二维码数据
+      description: 返回收款二维码 payload 与固定文案“金链·GYC  法币锚定金银结算系统。”
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponsePaymentQr'
+  /app/payments/transfer:
+    post:
+      tags: [AppPayment]
+      summary: 发起增值收益支付
+      description: |
+        仅允许使用 appreciationIncome 支付，不允许动用 cashAsset 或 tentativeAsset。
+        支付成功后付款方 appreciationIncome/totalAsset 下降，收款方 appreciationIncome/totalAsset 上升。
+        支持通过请求头 `Idempotency-Key` 或请求体 `clientRequestId` 幂等提交。
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponsePaymentTransfer'
+        '409':
+          description: 支付处理中，请勿重复提交
+  /app/payments/records:
+    get:
+      tags: [AppPayment]
+      summary: 查询支付与收款记录
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponsePaymentRecords'
   /app/market/au9999/ticker:
     get:
       tags: [AppMarket]
@@ -233,6 +301,7 @@ paths:
     post:
       tags: [AdminFunds]
       summary: 提现审核通过并进入转账处理中
+      description: 同一订单只允许成功处理一次；重复点击会返回已处理结果或 409 冲突，并保留审计留痕。
       responses:
         '200':
           description: OK
@@ -240,6 +309,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseWithdrawOrder'
+        '409':
+          description: 提现审核处理中或订单状态已变化
   /admin/funds/withdrawals/{orderId}/mute-alert:
     post:
       tags: [AdminFunds]
@@ -256,6 +327,7 @@ paths:
     post:
       tags: [AdminFunds]
       summary: 驳回提现并解冻回补资产
+      description: 同一订单只允许成功驳回一次；重复点击会返回已处理结果或 409 冲突，并在事务内完成回补与留痕。
       responses:
         '200':
           description: OK
@@ -263,11 +335,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseWithdrawOrder'
+        '409':
+          description: 提现驳回处理中或订单状态已变化
   /admin/funds/withdrawals/{orderId}/confirm-completed:
     post:
       tags: [AdminFunds]
       summary: 线下转账后确认提现完成
-      description: 只允许更新订单为 completed，不允许二次扣减资产
+      description: 只允许更新订单为 completed，不允许二次扣减资产；重复点击会返回已处理结果或 409 冲突。
       responses:
         '200':
           description: OK
@@ -275,11 +349,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseWithdrawOrder'
+        '409':
+          description: 提现完成确认处理中或订单状态已变化
   /admin/funds/manual-transfer:
     post:
       tags: [AdminFunds]
       summary: 后台手工转账
-      description: 实时调整 tentativeAsset 和 totalAsset，并同步写入 ledger、audit、hash；需要手工转账权限
+      description: 实时调整 tentativeAsset 和 totalAsset，并同步写入 ledger、audit、hash；需要手工转账权限。支持 `Idempotency-Key` 防止后台双击重复记账。
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+          description: 幂等键。相同键的重复请求只允许一次成功入账，其余返回已处理结果或 409。
       responses:
         '200':
           description: OK
@@ -287,11 +370,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseManualFundAction'
+        '409':
+          description: 资金调整处理中或余额状态已变化
   /admin/funds/manual-adjust:
     post:
       tags: [AdminFunds]
       summary: 后台手工补款/冲正
-      description: 实时调整 tentativeAsset 和 totalAsset，并同步写入 ledger、audit、hash；需要手工补款权限
+      description: 实时调整 tentativeAsset 和 totalAsset，并同步写入 ledger、audit、hash；需要手工补款权限。支持 `Idempotency-Key` 防止后台双击重复记账。
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+          description: 幂等键。相同键的重复请求只允许一次成功入账，其余返回已处理结果或 409。
       responses:
         '200':
           description: OK
@@ -299,6 +391,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseManualFundAction'
+        '409':
+          description: 资金调整处理中或余额状态已变化
+  /admin/payments:
+    get:
+      tags: [AdminPayments]
+      summary: 查询支付订单列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAdminPaymentList'
+  /admin/payments/overview:
+    get:
+      tags: [AdminPayments]
+      summary: 查询支付总览
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAdminPaymentOverview'
   /admin/trades:
     get:
       tags: [AdminTrades]
@@ -480,6 +596,66 @@ paths:
       responses:
         '200':
           description: OK
+  /admin/audit/trace/{traceId}:
+    get:
+      tags: [AdminAudit]
+      summary: 查询 trace 全链路详情
+      description: 返回资金、交易、风控、后台操作、hash、syncStatus 等全链路节点
+      parameters:
+        - in: path
+          name: traceId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAuditTraceDetail'
+  /admin/audit/trace/{traceId}/verify-hash:
+    post:
+      tags: [AdminAudit]
+      summary: 校验 trace 哈希完整性
+      description: 校验 trace 下 hash_record 是否通过校验，并写入 admin_operation_log、audit_log、hash_record
+      parameters:
+        - in: path
+          name: traceId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAuditTraceVerify'
+  /admin/audit/trace/{traceId}/export:
+    get:
+      tags: [AdminAudit]
+      summary: 导出 trace 详情
+      description: 支持 csv/json 导出，返回文件元信息与导出内容，并写入 admin_operation_log、audit_log、hash_record
+      parameters:
+        - in: path
+          name: traceId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: format
+          required: false
+          schema:
+            type: string
+            enum: [csv, json]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAuditTraceExport'
   /admin/audit/traces/{traceId}:
     get:
       tags: [AdminAudit]
@@ -502,6 +678,86 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseHashRecordList'
+  /admin/reports/generate:
+    post:
+      tags: [AdminReports]
+      summary: 生成报表任务
+      description: 创建报表任务并持久化导出产物，生成过程写入 admin_operation_log、audit_log、hash_record
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseReportJob'
+  /admin/reports/jobs:
+    get:
+      tags: [AdminReports]
+      summary: 查询报表任务列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseReportJobList'
+  /admin/reports/jobs/{jobId}:
+    get:
+      tags: [AdminReports]
+      summary: 查询报表任务详情
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseReportJobDetail'
+  /admin/reports/jobs/{jobId}/export:
+    post:
+      tags: [AdminReports]
+      summary: 导出报表任务产物
+      description: 支持 csv 导出；excel 当前为占位产物，导出操作写入 admin_operation_log、audit_log、hash_record
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseReportArtifact'
+  /admin/reports/templates:
+    post:
+      tags: [AdminReports]
+      summary: 保存报表模板
+      description: 保存可复用报表模板，并写入 admin_operation_log、audit_log、hash_record
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseReportTemplate'
+    get:
+      tags: [AdminReports]
+      summary: 查询报表模板
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseReportTemplateList'
 components:
   schemas:
     UserSummary:
@@ -637,6 +893,9 @@ components:
           description: 交易同步延迟毫秒，目标不超过 1000ms
         traceId:
           type: string
+        clientRequestId:
+          type: string
+          description: 可选客户端幂等请求号；未传请求头 `Idempotency-Key` 时可作为幂等键使用
     TradeSessionStatus:
       type: object
       properties:
@@ -663,6 +922,99 @@ components:
           type: string
         syncStatus:
           type: string
+    PaymentQr:
+      type: object
+      properties:
+        uid:
+          type: string
+        displayName:
+          type: string
+        qrPayload:
+          type: string
+        slogan:
+          type: string
+    PaymentTransfer:
+      type: object
+      properties:
+        orderId:
+          type: string
+        traceId:
+          type: string
+        payerUid:
+          type: string
+        payeeUid:
+          type: string
+        amount:
+          type: number
+        scene:
+          type: string
+          enum: [user, merchant]
+        status:
+          type: string
+          enum: [completed, failed]
+        remark:
+          type: string
+        payerBalance:
+          type: object
+        payeeBalance:
+          type: object
+    PaymentRecord:
+      type: object
+      properties:
+        orderId:
+          type: string
+        traceId:
+          type: string
+        direction:
+          type: string
+        counterpartyUid:
+          type: string
+        counterpartyName:
+          type: string
+        amount:
+          type: number
+        scene:
+          type: string
+        status:
+          type: string
+        remark:
+          type: string
+        createdAt:
+          type: string
+    AdminPaymentRow:
+      type: object
+      properties:
+        orderId:
+          type: string
+        traceId:
+          type: string
+        payerUid:
+          type: string
+        payeeUid:
+          type: string
+        amount:
+          type: number
+        scene:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+    AdminPaymentOverview:
+      type: object
+      properties:
+        totalCount:
+          type: integer
+        totalAmount:
+          type: number
+        exceptionCount:
+          type: integer
+        summaryText:
+          type: string
+        trend24h:
+          type: array
+          items:
+            type: object
     DashboardOverview:
       type: object
       properties:
@@ -705,6 +1057,134 @@ components:
           type: integer
         chainSyncStatus:
           type: string
+    AuditTraceNode:
+      type: object
+      properties:
+        nodeType:
+          type: string
+        module:
+          type: string
+        action:
+          type: string
+        operator:
+          type: string
+        referenceType:
+          type: string
+        referenceId:
+          type: string
+        syncStatus:
+          type: string
+        createdAt:
+          type: string
+    AuditTraceDetail:
+      type: object
+      properties:
+        traceId:
+          type: string
+        summary:
+          type: object
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditTraceNode'
+        hashItems:
+          type: array
+          items:
+            type: object
+    AuditTraceVerify:
+      type: object
+      properties:
+        traceId:
+          type: string
+        passed:
+          type: boolean
+        failedCount:
+          type: integer
+        failedItems:
+          type: array
+          items:
+            type: object
+        totalCount:
+          type: integer
+        verifiedAt:
+          type: string
+        traceOperationId:
+          type: string
+    AuditTraceExport:
+      type: object
+      properties:
+        traceId:
+          type: string
+        format:
+          type: string
+        fileName:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: integer
+        exportedAt:
+          type: string
+        totalNodes:
+          type: integer
+        content:
+          type: string
+        traceOperationId:
+          type: string
+    ReportJob:
+      type: object
+      properties:
+        jobId:
+          type: string
+        traceId:
+          type: string
+        reportType:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, RUNNING, SUCCEEDED, FAILED]
+        rowCount:
+          type: integer
+        format:
+          type: string
+    ReportArtifact:
+      type: object
+      properties:
+        jobId:
+          type: string
+        artifactId:
+          type: string
+        traceId:
+          type: string
+        format:
+          type: string
+          enum: [csv, excel]
+        fileName:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: integer
+        rowCount:
+          type: integer
+        content:
+          type: string
+    ReportTemplate:
+      type: object
+      properties:
+        templateId:
+          type: string
+        traceId:
+          type: string
+        name:
+          type: string
+        reportType:
+          type: string
+        filters:
+          type: object
+        defaultFormat:
+          type: string
+          enum: [csv, excel]
     ApiResponseMessage:
       type: object
       properties:
@@ -788,6 +1268,41 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TradeOrder'
+    ApiResponsePaymentQr:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/PaymentQr'
+    ApiResponsePaymentTransfer:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/PaymentTransfer'
+    ApiResponsePaymentRecords:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: object
+    ApiResponseAdminPaymentList:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: object
+    ApiResponseAdminPaymentOverview:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/AdminPaymentOverview'
     ApiResponseTradeSessionStatus:
       type: object
       properties:
@@ -828,6 +1343,27 @@ components:
       properties:
         code:
           type: integer
+    ApiResponseAuditTraceDetail:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/AuditTraceDetail'
+    ApiResponseAuditTraceVerify:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/AuditTraceVerify'
+    ApiResponseAuditTraceExport:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/AuditTraceExport'
     ApiResponseHashRecordList:
       type: object
       properties:
@@ -837,3 +1373,45 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/HashRecord'
+    ApiResponseReportJob:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/ReportJob'
+    ApiResponseReportJobList:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: object
+    ApiResponseReportJobDetail:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: object
+    ApiResponseReportArtifact:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/ReportArtifact'
+    ApiResponseReportTemplate:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/ReportTemplate'
+    ApiResponseReportTemplateList:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: object

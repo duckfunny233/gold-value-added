@@ -56,6 +56,8 @@ enum AssetChangeType {
   TRADE_BUY
   TRADE_SELL
   MANUAL_ADJUST
+  PAYMENT_OUT
+  PAYMENT_IN
 }
 
 enum NoticeStatus {
@@ -81,6 +83,29 @@ enum OperationIdempotencyStatus {
   FAILED
 }
 
+enum ReportJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum ReportArtifactFormat {
+  CSV
+  EXCEL
+  JSON
+}
+
+enum PaymentScene {
+  USER
+  MERCHANT
+}
+
+enum PaymentStatus {
+  COMPLETED
+  FAILED
+}
+
 model User {
   id               String          @id @default(cuid())
   uid              String          @unique
@@ -97,6 +122,9 @@ model User {
   rechargeOrders   RechargeOrder[]
   withdrawalOrders WithdrawalOrder[]
   tradeOrders      TradeOrder[]
+  paymentProfile   PaymentProfile?
+  paymentOrdersSent PaymentOrder[] @relation("payment_payer")
+  paymentOrdersReceived PaymentOrder[] @relation("payment_payee")
   auditLogs        AuditLog[]
 }
 
@@ -174,6 +202,7 @@ model AdminOperationLog {
 
   @@index([module, createdAt])
   @@index([traceId])
+  @@index([traceId, createdAt])
 }
 
 model Asset {
@@ -190,6 +219,38 @@ model Asset {
   ledgerEntries        LedgerEntry[]
 
   @@index([updatedAt])
+}
+
+model PaymentProfile {
+  id          String   @id @default(cuid())
+  userId       String   @unique
+  qrPayload    String
+  displayName  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id])
+}
+
+model PaymentOrder {
+  id             String        @id @default(cuid())
+  traceId        String        @unique
+  payerId        String
+  payeeId        String
+  amount         Decimal       @db.Decimal(18, 2)
+  scene          PaymentScene
+  status         PaymentStatus @default(COMPLETED)
+  remark         String?
+  idempotencyKey String        @unique
+  completedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  payer          User          @relation("payment_payer", fields: [payerId], references: [id])
+  payee          User          @relation("payment_payee", fields: [payeeId], references: [id])
+  hashRecords    HashRecord[]
+
+  @@index([payerId, createdAt])
+  @@index([payeeId, createdAt])
+  @@index([status, createdAt])
 }
 
 model RechargeOrder {
@@ -284,6 +345,7 @@ model LedgerEntry {
 
   @@index([userId, createdAt])
   @@index([traceId])
+  @@index([traceId, createdAt])
   @@index([referenceType, referenceId])
 }
 
@@ -301,6 +363,7 @@ model AuditLog {
 
   @@index([module, createdAt])
   @@index([traceId])
+  @@index([traceId, createdAt])
 }
 
 model HashRecord {
@@ -318,9 +381,12 @@ model HashRecord {
   withdrawalOrderId String?
   tradeOrder        TradeOrder?      @relation(fields: [tradeOrderId], references: [id])
   tradeOrderId      String?
+  paymentOrder      PaymentOrder?    @relation(fields: [paymentOrderId], references: [id])
+  paymentOrderId    String?
 
   @@index([referenceType, referenceId])
   @@index([traceId])
+  @@index([traceId, createdAt])
 }
 
 model Notice {
@@ -438,6 +504,60 @@ model OperationIdempotency {
   updatedAt       DateTime                   @updatedAt
 
   @@index([scope, status, updatedAt])
+  @@index([traceId])
+}
+
+model ReportTemplate {
+  id                  String               @id @default(cuid())
+  name                String
+  reportType          String
+  filters             Json
+  defaultFormat       ReportArtifactFormat @default(CSV)
+  createdByAdminUserId String?
+  traceId             String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  jobs                ReportJob[]
+
+  @@index([reportType, createdAt])
+}
+
+model ReportJob {
+  id                  String               @id @default(cuid())
+  reportType          String
+  status              ReportJobStatus      @default(PENDING)
+  filters             Json
+  requestedFormat     ReportArtifactFormat @default(CSV)
+  traceId             String               @unique
+  templateId          String?
+  createdByAdminUserId String?
+  errorMessage        String?
+  rowCount            Int                  @default(0)
+  startedAt           DateTime?
+  finishedAt          DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  template            ReportTemplate?      @relation(fields: [templateId], references: [id])
+  artifacts           ReportArtifact[]
+
+  @@index([status, createdAt])
+  @@index([reportType, createdAt])
+}
+
+model ReportArtifact {
+  id          String               @id @default(cuid())
+  jobId       String
+  format      ReportArtifactFormat
+  fileName    String
+  mimeType    String
+  content     String
+  rowCount    Int                  @default(0)
+  traceId     String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  job         ReportJob            @relation(fields: [jobId], references: [id])
+
+  @@index([jobId])
   @@index([traceId])
 }
 

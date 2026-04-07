@@ -355,9 +355,7 @@ export class LeaderboardService {
       where: {
         rule,
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: [{ createdAt: 'desc' }, { updatedAt: 'desc' }, { id: 'desc' }],
     })
 
     if (latestJob && latestJob.status !== LeaderboardJobStatus.REBUILDING) {
@@ -374,9 +372,7 @@ export class LeaderboardService {
           in: [LeaderboardJobStatus.SYNCED, LeaderboardJobStatus.FAILED],
         },
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: [{ createdAt: 'desc' }, { updatedAt: 'desc' }, { id: 'desc' }],
     })
 
     return {
@@ -516,6 +512,6 @@ export class LeaderboardService {
   private generateVersion() {
     const now = new Date()
     const pad = (value: number) => String(value).padStart(2, '0')
-    return `lb-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+    return `lb-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}${String(now.getMilliseconds()).padStart(3, '0')}`
   }
 }

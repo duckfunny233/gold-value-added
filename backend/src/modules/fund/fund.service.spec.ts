@@ -160,8 +160,8 @@ describe('FundService concurrency safety V1', () => {
         traceId: 'trace-approve',
       })
 
-    tx.withdrawalOrder.findUnique = jest
-      .fn()
+    tx.withdrawalOrder.findUnique = (jest
+      .fn() as any)
       .mockResolvedValueOnce({
         id: 'wd-1',
         userId: 'user-1',
@@ -214,8 +214,8 @@ describe('FundService concurrency safety V1', () => {
         traceId: 'trace-reject',
       })
 
-    tx.withdrawalOrder.findUnique = jest
-      .fn()
+    tx.withdrawalOrder.findUnique = (jest
+      .fn() as any)
       .mockResolvedValueOnce({
         id: 'wd-3',
         userId: 'user-3',
@@ -232,8 +232,8 @@ describe('FundService concurrency safety V1', () => {
         traceId: 'trace-order',
         isVoiceMuted: true,
       })
-    tx.asset.findUnique = jest
-      .fn()
+    tx.asset.findUnique = (jest
+      .fn() as any)
       .mockResolvedValueOnce({
         id: 'asset-3',
         withdrawFrozenAmount: decimal(60),
@@ -266,8 +266,8 @@ describe('FundService concurrency safety V1', () => {
       requestHash: 'hash',
       traceId: 'trace-confirm',
     })
-    tx.withdrawalOrder.findUnique = jest
-      .fn()
+    tx.withdrawalOrder.findUnique = (jest
+      .fn() as any)
       .mockResolvedValueOnce({
         id: 'wd-2',
         userId: 'user-2',
@@ -283,8 +283,8 @@ describe('FundService concurrency safety V1', () => {
         traceId: 'trace-order',
         isVoiceMuted: true,
       })
-    tx.asset.findUnique = jest
-      .fn()
+    tx.asset.findUnique = (jest
+      .fn() as any)
       .mockResolvedValueOnce({
         id: 'asset-2',
         withdrawFrozenAmount: decimal(88),
@@ -322,8 +322,8 @@ describe('FundService concurrency safety V1', () => {
         requestHash: 'hash',
         traceId: 'trace-confirm-concurrent',
       })
-    tx.withdrawalOrder.findUnique = jest
-      .fn()
+    tx.withdrawalOrder.findUnique = (jest
+      .fn() as any)
       .mockResolvedValueOnce({
         id: 'wd-4',
         userId: 'user-4',
@@ -339,8 +339,8 @@ describe('FundService concurrency safety V1', () => {
         traceId: 'trace-order',
         isVoiceMuted: true,
       })
-    tx.asset.findUnique = jest
-      .fn()
+    tx.asset.findUnique = (jest
+      .fn() as any)
       .mockResolvedValueOnce({
         id: 'asset-4',
         withdrawFrozenAmount: decimal(40),

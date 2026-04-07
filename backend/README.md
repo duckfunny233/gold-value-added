@@ -55,6 +55,7 @@ backend
 - `user`：用户资料与资产概览
 - `fund`：充值、提现、后台资金审核
 - `trade`：买单、卖单、撮合规则入口（开休盘状态由上金所时段同步结果驱动）
+- `payment`：增值收益二维码支付
 - `market`：上金所 AU9999 行情与交易时段同步接口
 - `dashboard`：仪表盘与公告
 - `risk`：风控预警
@@ -335,6 +336,202 @@ npm --prefix backend run test -- --runInBand
    - 对当前没有任何角色的管理员，自动补一个默认超级管理员角色，避免升级后权限全失效
 
 5. 验证命令
+
+```powershell
+npm --prefix backend run prisma:generate
+npm --prefix backend run build
+npm --prefix backend run test -- --runInBand
+```
+
+## 资金与交易并发安全加固 V1
+
+`fund`、`trade` 与 `common` 当前已补齐的并发与幂等安全口径如下：
+
+1. 提现与后台资金操作防重复
+   - 覆盖接口：
+     - `POST /api/admin/funds/withdrawals/:orderId/approve`
+     - `POST /api/admin/funds/withdrawals/:orderId/reject`
+     - `POST /api/admin/funds/withdrawals/:orderId/confirm-completed`
+     - `POST /api/admin/funds/manual-transfer`
+     - `POST /api/admin/funds/manual-adjust`
+   - 机制：
+     - 所有资金关键路径都在 `Prisma.TransactionIsolationLevel.Serializable` 事务内完成
+     - 订单状态变更与资产变更使用条件更新，避免重复扣减或重复回补
+     - 同一订单重复点击只允许一次成功，其余返回已处理结果或 `409 Conflict`
+   - 留痕：
+     - `admin_operation_log`
+     - `audit_log`
+     - `hash_record(SHA-256 64 位)`
+
+2. 买卖提交幂等化
+   - 覆盖接口：
+     - `POST /api/app/trades/buy`
+     - `POST /api/app/trades/sell`
+   - 幂等键来源：
+     - 优先请求头 `Idempotency-Key`
+     - 其次请求体 `clientRequestId`
+   - 规则：
+     - 相同幂等键 + 相同请求体重复提交时，返回同一业务结果
+     - 相同幂等键但请求体不一致时，返回冲突错误
+     - 请求正在处理中时，重复提交返回 `409 Conflict`
+
+3. 队列号与持久化保障
+   - `WithdrawalOrder.queueNo` 已改为数据库原生自增并唯一
+   - 新增 `OperationIdempotency` 表，记录：
+     - `key`
+     - `scope`
+     - `requestHash`
+     - `responsePayload`
+     - `status`
+     - `traceId`
+   - 作用：
+     - 防止交易重复落单
+     - 防止后台手工转账 / 补款重复记账
+     - 为幂等命中、失败恢复和冲突排查提供依据
+
+4. 资产安全约束
+   - 应用层对以下字段做非负强校验：
+     - `tentativeAsset`
+     - `cashAsset`
+     - `withdrawFrozenAmount`
+     - `goldHoldingGrams`
+   - 数据库层同步增加非负 `CHECK` 约束，避免并发边界下写入脏数据
+   - 高频查询补充索引：
+     - `WithdrawalOrder(status, submittedAt)`
+     - `LedgerEntry(referenceType, referenceId)`
+     - `TradeOrder(userId, submittedAt)`
+     - `TradeOrder(status, submittedAt)`
+
+5. 验证命令
+
+```powershell
+npm --prefix backend run prisma:generate
+npm --prefix backend run build
+npm --prefix backend run test -- --runInBand
+```
+
+## 审计导出 + 报表任务化导出 V1
+
+`audit` 与 `report` 模块当前已落地的导出闭环口径如下：
+
+1. 审计 trace 追溯增强
+   - 接口：
+     - `GET /api/admin/audit/trace/:traceId`
+     - `POST /api/admin/audit/trace/:traceId/verify-hash`
+     - `GET /api/admin/audit/trace/:traceId/export?format=csv|json`
+   - 能力：
+     - 返回 trace 的全链路节点，包括资金、交易、风控、后台操作、账本节点、hash 节点和同步状态
+     - `verify-hash` 返回 `passed / failedCount / failedItems`
+     - `export` 返回文件元信息和可直接下载的内容，CSV 可用，JSON 同步可用
+   - 留痕：
+     - `admin_operation_log`
+     - `audit_log`
+     - `hash_record(SHA-256 64 位)`
+
+2. 报表中心任务化导出
+   - 接口：
+     - `POST /api/admin/reports/generate`
+     - `GET /api/admin/reports/jobs`
+     - `GET /api/admin/reports/jobs/:jobId`
+     - `POST /api/admin/reports/jobs/:jobId/export`
+     - `POST /api/admin/reports/templates`
+     - `GET /api/admin/reports/templates`
+   - 规则：
+     - `reportType` 支持 `operate / finance / risk`
+     - 支持 `timeRange / uid / channel` 过滤
+     - 任务状态为 `PENDING / RUNNING / SUCCEEDED / FAILED`
+     - CSV 为当前正式可用导出格式
+     - Excel 当前先保留接口字段和占位产物，便于前端联调
+   - 模板：
+     - 模板持久化到 `ReportTemplate`
+     - 生成任务可直接复用模板内的筛选条件和默认格式
+
+3. 报表持久化结构
+   - `ReportTemplate`
+     - 保存模板名称、报表类型、过滤条件、默认导出格式
+   - `ReportJob`
+     - 保存任务状态、筛选条件、请求格式、traceId、行数、错误信息
+   - `ReportArtifact`
+     - 保存任务导出产物，包括格式、文件名、MIME、内容、traceId
+
+4. 索引与查询优化
+   - 报表任务：
+     - `ReportJob(status, createdAt)`
+     - `ReportJob(reportType, createdAt)`
+   - 导出产物：
+     - `ReportArtifact(jobId)`
+   - 审计 trace 查询：
+     - `AuditLog(traceId, createdAt)`
+     - `AdminOperationLog(traceId, createdAt)`
+     - `HashRecord(traceId, createdAt)`
+     - `LedgerEntry(traceId, createdAt)`
+
+5. 验证命令
+
+```powershell
+npm --prefix backend run prisma:generate
+npm --prefix backend run build
+npm --prefix backend run test -- --runInBand
+```
+
+## 增值收益二维码支付闭环 V1
+
+`payment` 模块当前已落地的二维码支付口径如下：
+
+1. 支付资金来源限制
+   - 支付接口：`POST /api/app/payments/transfer`
+   - 只允许使用 `appreciationIncome`
+   - 严禁动用：
+     - `cashAsset`
+     - `tentativeAsset`
+   - 支付成功后：
+     - 付款方 `appreciationIncome`、`totalAsset` 同步减少
+     - 收款方 `appreciationIncome`、`totalAsset` 同步增加
+
+2. 收款二维码
+   - 接口：`GET /api/app/payments/qr?uid=...`
+   - 返回：
+     - `qrPayload`
+     - `displayName`
+     - 固定文案：`金链·GYC  法币锚定金银结算系统。`
+
+3. 支付记录与后台查询
+   - App：
+     - `GET /api/app/payments/records?uid=...&timeRange=...`
+     - 返回支付与收款两类记录
+   - Admin：
+     - `GET /api/admin/payments`
+     - `GET /api/admin/payments/overview`
+   - 后台总览包含：
+     - 总笔数
+     - 总金额
+     - 异常笔数
+     - 近 24 小时趋势
+
+4. 幂等、事务与留痕
+   - 支持：
+     - 请求头 `Idempotency-Key`
+     - 请求体 `clientRequestId`
+   - 相同幂等键重复请求不得重复扣款
+   - 事务隔离级别：`Serializable`
+   - 同事务写入：
+     - `ledger_entry`
+     - `audit_log`
+     - `hash_record(SHA-256 64 位)`
+
+5. 持久化结构
+   - `PaymentProfile`
+     - 保存用户收款二维码基础信息
+   - `PaymentOrder`
+     - 保存支付订单、traceId、付款方、收款方、金额、场景、状态、幂等键
+   - 索引：
+     - `PaymentOrder(traceId unique)`
+     - `PaymentOrder(idempotencyKey unique)`
+     - `PaymentOrder(payerId, createdAt)`
+     - `PaymentOrder(payeeId, createdAt)`
+     - `PaymentOrder(status, createdAt)`
+
+6. 验证命令
 
 ```powershell
 npm --prefix backend run prisma:generate
