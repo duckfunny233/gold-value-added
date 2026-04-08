@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
+import ActionDialog from '../components/ActionDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useQueryFilters } from '../composables/useQueryFilters'
 import { AdminService } from '../services/admin'
@@ -25,8 +26,18 @@ const ledgerRows = ref([])
 const reconcileItems = ref([])
 const selectedWithdrawalId = ref('')
 const loading = ref(false)
+const dialogLoading = ref(false)
 const error = ref('')
 const actionMessage = ref('')
+
+const fundDialog = reactive({
+  open: false,
+  mode: 'transfer',
+  uid: '',
+  amount: '100',
+  direction: 'increase',
+  reason: '',
+})
 
 useQueryFilters(filters, ['orderType', 'uid', 'channel', 'status', 'timeRange'])
 
@@ -55,12 +66,15 @@ function getSelectedWithdrawal() {
 async function runAction(handler, successMessage) {
   error.value = ''
   actionMessage.value = ''
+  dialogLoading.value = true
   try {
     await handler()
     actionMessage.value = successMessage
     await loadData()
   } catch (err) {
     error.value = err.message || '资金操作失败'
+  } finally {
+    dialogLoading.value = false
   }
 }
 
@@ -116,62 +130,59 @@ async function handleMuteAlert() {
   await runAction(() => AdminService.muteWithdrawalAlert(selected.orderId), '提现提醒已静音')
 }
 
-async function handleManualTransfer() {
-  const uid = window.prompt('请输入目标用户 UID')
-  if (!uid) return
-  const amount = Number(window.prompt('请输入转账金额（正数）', '100'))
-  if (!amount || amount <= 0) return
-  const direction = window.prompt('请输入方向 increase/decrease', 'increase')
-  if (!direction) return
-  const reason = window.prompt('请输入转账原因', '后台手工转账')
-  if (!reason) return
-  const key = `manual-transfer-${Date.now()}`
-  await runAction(
-    () =>
-      AdminService.manualTransfer(
-        { uid, amount, direction, reason, clientRequestId: key },
-        key,
-      ),
-    '手工转账已完成',
-  )
+function openFundDialog(mode) {
+  fundDialog.mode = mode
+  fundDialog.uid = filters.uid || ''
+  fundDialog.amount = '100'
+  fundDialog.direction = mode === 'adjust' ? 'decrease' : 'increase'
+  fundDialog.reason =
+    mode === 'transfer'
+      ? '后台手工转账'
+      : mode === 'topup'
+        ? '异常补款处理'
+        : '后台资产调整'
+  fundDialog.open = true
 }
 
-async function handleManualTopup() {
-  const uid = window.prompt('请输入目标用户 UID')
-  if (!uid) return
-  const amount = Number(window.prompt('请输入补款金额（正数）', '100'))
-  if (!amount || amount <= 0) return
-  const reason = window.prompt('请输入补款原因', '异常补款处理')
-  if (!reason) return
-  const key = `manual-adjust-topup-${Date.now()}`
-  await runAction(
-    () =>
-      AdminService.manualAdjust(
-        { uid, amount, direction: 'increase', reason, clientRequestId: key },
-        key,
-      ),
-    '补款处理已完成',
-  )
-}
+async function submitFundDialog() {
+  const uid = fundDialog.uid.trim()
+  const reason = fundDialog.reason.trim()
+  const amount = Number(fundDialog.amount)
 
-async function handleAssetAdjust() {
-  const uid = window.prompt('请输入目标用户 UID')
-  if (!uid) return
-  const amount = Number(window.prompt('请输入调整金额（正数）', '100'))
-  if (!amount || amount <= 0) return
-  const direction = window.prompt('请输入方向 increase/decrease', 'decrease')
-  if (!direction) return
-  const reason = window.prompt('请输入调整原因', '后台资产调整')
-  if (!reason) return
-  const key = `manual-adjust-${Date.now()}`
-  await runAction(
-    () =>
-      AdminService.manualAdjust(
-        { uid, amount, direction, reason, clientRequestId: key },
-        key,
-      ),
-    '资产调整已完成',
-  )
+  if (!uid || !reason || !amount || amount <= 0) {
+    error.value = '请完整填写用户 UID、金额和原因'
+    return
+  }
+
+  if (fundDialog.mode === 'transfer') {
+    const key = `manual-transfer-${Date.now()}`
+    await runAction(
+      () =>
+        AdminService.manualTransfer(
+          { uid, amount, direction: fundDialog.direction, reason, clientRequestId: key },
+          key,
+        ),
+      '手工转账已完成',
+    )
+  } else {
+    const key = `${fundDialog.mode === 'topup' ? 'manual-adjust-topup' : 'manual-adjust'}-${Date.now()}`
+    await runAction(
+      () =>
+        AdminService.manualAdjust(
+          {
+            uid,
+            amount,
+            direction: fundDialog.mode === 'topup' ? 'increase' : fundDialog.direction,
+            reason,
+            clientRequestId: key,
+          },
+          key,
+        ),
+      fundDialog.mode === 'topup' ? '补款处理已完成' : '资产调整已完成',
+    )
+  }
+
+  fundDialog.open = false
 }
 
 onMounted(loadData)
@@ -326,9 +337,9 @@ onMounted(loadData)
           <div class="kv-item"><strong>资产调整</strong><span>手工资产调整，需保留操作人和原因</span></div>
         </div>
         <div class="actions">
-          <button class="primary" @click="handleManualTransfer">手工转账</button>
-          <button @click="handleManualTopup">补款处理</button>
-          <button @click="handleAssetAdjust">资产调整</button>
+          <button class="primary" @click="openFundDialog('transfer')">手工转账</button>
+          <button @click="openFundDialog('topup')">补款处理</button>
+          <button @click="openFundDialog('adjust')">资产调整</button>
         </div>
       </article>
 
@@ -372,4 +383,37 @@ onMounted(loadData)
       </tbody>
     </table>
   </section>
+
+  <ActionDialog
+    :open="fundDialog.open"
+    :title="fundDialog.mode === 'transfer' ? '手工转账' : fundDialog.mode === 'topup' ? '补款处理' : '资产调整'"
+    description="变更会直接写入资金流水与审计日志。"
+    :confirm-text="fundDialog.mode === 'transfer' ? '确认转账' : fundDialog.mode === 'topup' ? '确认补款' : '确认调整'"
+    :loading="dialogLoading"
+    :confirm-disabled="!fundDialog.uid.trim() || !fundDialog.reason.trim()"
+    @close="fundDialog.open = false"
+    @confirm="submitFundDialog"
+  >
+    <div class="dialog-grid two-col">
+      <label>
+        目标用户 UID
+        <input v-model="fundDialog.uid" placeholder="请输入目标用户 UID" />
+      </label>
+      <label>
+        金额
+        <input v-model="fundDialog.amount" placeholder="请输入金额" />
+      </label>
+      <label v-if="fundDialog.mode !== 'topup'">
+        方向
+        <select v-model="fundDialog.direction">
+          <option value="increase">增加</option>
+          <option value="decrease">减少</option>
+        </select>
+      </label>
+      <label :style="{ gridColumn: fundDialog.mode === 'topup' ? 'span 2' : 'span 1' }">
+        原因
+        <textarea v-model="fundDialog.reason" placeholder="请输入处理原因" />
+      </label>
+    </div>
+  </ActionDialog>
 </template>

@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
+import ActionDialog from '../components/ActionDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useQueryFilters } from '../composables/useQueryFilters'
 import { AdminService } from '../services/admin'
@@ -19,8 +20,16 @@ const selectedUser = ref({})
 const relatedRecords = ref({ recharge: [], withdraw: [], trade: [], audit: [] })
 const selectedUid = ref('')
 const loading = ref(false)
+const dialogLoading = ref(false)
 const error = ref('')
 const actionMessage = ref('')
+
+const freezeDialog = reactive({
+  open: false,
+  uid: '',
+  nickname: '',
+  action: 'freeze',
+})
 
 useQueryFilters(filters, ['userId', 'uid', 'sequenceNo', 'realNameStatus', 'rechargeStatus', 'withdrawStatus'])
 
@@ -84,52 +93,16 @@ async function selectUser(uid) {
 async function runAction(handler, successMessage) {
   error.value = ''
   actionMessage.value = ''
+  dialogLoading.value = true
   try {
     await handler()
     actionMessage.value = successMessage
     await loadData()
   } catch (err) {
     error.value = err.message || '用户操作失败'
+  } finally {
+    dialogLoading.value = false
   }
-}
-
-async function handleViewDetail() {
-  const uid = selectedUid.value || selectedUser.value.uid
-  if (!uid) {
-    error.value = '请先选中一位用户'
-    return
-  }
-  await selectUser(uid)
-  actionMessage.value = `已刷新用户 ${uid} 的详情`
-}
-
-async function handleFreezeUser() {
-  const uid = selectedUid.value || selectedUser.value.uid
-  if (!uid) {
-    error.value = '请先选中一位用户'
-    return
-  }
-  await runAction(() => AdminService.freezeUser(uid), `用户 ${uid} 已冻结`)
-}
-
-async function handleUnfreezeUser() {
-  const uid = selectedUid.value || selectedUser.value.uid
-  if (!uid) {
-    error.value = '请先选中一位用户'
-    return
-  }
-  await runAction(() => AdminService.unfreezeUser(uid), `用户 ${uid} 已解冻`)
-}
-
-async function handleManualCheck() {
-  const uid = selectedUid.value || selectedUser.value.uid
-  if (!uid) {
-    error.value = '请先选中一位用户'
-    return
-  }
-  const note = window.prompt('请输入人工核查备注', '后台人工核查')
-  if (note === null) return
-  await runAction(() => AdminService.manualCheckUser(uid, { note }), `用户 ${uid} 的人工核查已登记`)
 }
 
 function handleExportUsers() {
@@ -152,15 +125,26 @@ function handleExportUsers() {
   actionMessage.value = '用户列表已基于真实查询结果导出'
 }
 
-async function handleVerifyPayouts() {
-  const uid = selectedUid.value || selectedUser.value.uid || filters.uid
-  if (uid) {
-    await selectUser(uid)
-    actionMessage.value = `已重新核对 ${uid} 的收款信息摘要`
-    return
-  }
-  await loadData()
-  actionMessage.value = '已按当前筛选条件重新校验收款信息'
+function openFreezeDialog(row) {
+  freezeDialog.uid = row.uid
+  freezeDialog.nickname = row.nickname
+  freezeDialog.action = row.userStatus === '冻结' ? 'unfreeze' : 'freeze'
+  freezeDialog.open = true
+}
+
+async function submitFreezeDialog() {
+  const handler =
+    freezeDialog.action === 'freeze'
+      ? () => AdminService.freezeUser(freezeDialog.uid)
+      : () => AdminService.unfreezeUser(freezeDialog.uid)
+
+  await runAction(
+    handler,
+    freezeDialog.action === 'freeze'
+      ? `用户 ${freezeDialog.uid} 已冻结`
+      : `用户 ${freezeDialog.uid} 已解冻`,
+  )
+  freezeDialog.open = false
 }
 
 onMounted(loadData)
@@ -186,7 +170,6 @@ onMounted(loadData)
     <div class="actions">
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查询' }}</button>
       <button @click="handleExportUsers">导出用户</button>
-      <button @click="handleVerifyPayouts">批量校验收款信息</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
     <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
@@ -211,6 +194,8 @@ onMounted(loadData)
             <th>现金资产</th>
             <th>持有黄金克数</th>
             <th>总资产</th>
+            <th>用户状态</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody>
@@ -230,6 +215,29 @@ onMounted(loadData)
             <td>{{ row.cashAsset }}</td>
             <td>{{ row.goldHoldingGrams }}</td>
             <td>{{ row.totalAsset }}</td>
+            <td>{{ row.userStatus }}</td>
+            <td>
+              <div class="cell-actions">
+                <button
+                  v-if="row.userStatus !== '冻结'"
+                  class="warn"
+                  type="button"
+                  @click.stop="openFreezeDialog(row)"
+                >
+                  冻结
+                </button>
+                <button
+                  v-else
+                  type="button"
+                  @click.stop="openFreezeDialog(row)"
+                >
+                  解冻
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr v-if="!rows.length">
+            <td colspan="12" class="table-empty">暂无符合条件的用户</td>
           </tr>
         </tbody>
       </table>
@@ -246,12 +254,6 @@ onMounted(loadData)
         <div class="kv-item"><strong>风险状态</strong><span>{{ selectedUser.riskStatus }}</span></div>
         <div class="kv-item"><strong>最近交易时间</strong><span>{{ selectedUser.lastTradeAt }}</span></div>
         <div class="kv-item"><strong>最近追踪号</strong><span>{{ selectedUser.latestTraceId }}</span></div>
-      </div>
-      <div class="actions">
-        <button class="primary" @click="handleViewDetail">查看详情</button>
-        <button class="warn" @click="handleFreezeUser">冻结用户</button>
-        <button @click="handleUnfreezeUser">解冻用户</button>
-        <button @click="handleManualCheck">人工核查</button>
       </div>
     </aside>
   </section>
@@ -271,4 +273,23 @@ onMounted(loadData)
       <li v-for="item in relatedRecords[activeRecordTab] || []" :key="item">{{ item }}</li>
     </ul>
   </section>
+
+  <ActionDialog
+    :open="freezeDialog.open"
+    :title="freezeDialog.action === 'freeze' ? '冻结用户' : '解冻用户'"
+    :description="freezeDialog.action === 'freeze' ? '冻结后该用户会被交易和提现流程同时拦截。' : '解冻后该用户会恢复正常交易与提现资格。'"
+    :confirm-text="freezeDialog.action === 'freeze' ? '确认冻结' : '确认解冻'"
+    :loading="dialogLoading"
+    :danger="freezeDialog.action === 'freeze'"
+    @close="freezeDialog.open = false"
+    @confirm="submitFreezeDialog"
+  >
+    <p class="dialog-tip">
+      {{
+        freezeDialog.action === 'freeze'
+          ? `确认冻结用户 ${freezeDialog.uid}（${freezeDialog.nickname || '未命名用户'}）吗？`
+          : `确认解冻用户 ${freezeDialog.uid}（${freezeDialog.nickname || '未命名用户'}）吗？`
+      }}
+    </p>
+  </ActionDialog>
 </template>

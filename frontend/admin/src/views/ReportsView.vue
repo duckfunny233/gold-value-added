@@ -81,23 +81,6 @@ async function handleExportReport(format) {
   )
 }
 
-async function handleSaveTemplate() {
-  const name = window.prompt('请输入模板名称', `${filters.reportType}-template`)
-  if (!name) return
-  await runAction(
-    () =>
-      AdminService.createReportTemplate({
-        name,
-        reportType: filters.reportType,
-        timeRange: filters.timeRange,
-        uid: filters.uid,
-        channel: filters.channel,
-        defaultFormat: 'csv',
-      }),
-    '报表模板已保存',
-  )
-}
-
 onMounted(loadData)
 </script>
 
@@ -136,7 +119,6 @@ onMounted(loadData)
       <button class="primary" @click="handleGenerateReport" :disabled="loading">{{ loading ? '加载中...' : '生成报表' }}</button>
       <button @click="handleExportReport('csv')">导出 CSV</button>
       <button @click="handleExportReport('excel')">导出 Excel</button>
-      <button @click="handleSaveTemplate">保存自定义模板</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
     <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>

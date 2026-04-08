@@ -1,5 +1,6 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import ActionDialog from '../components/ActionDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useQueryFilters } from '../composables/useQueryFilters'
 import { AdminService } from '../services/admin'
@@ -26,6 +27,13 @@ const loading = ref(false)
 const error = ref('')
 const actionMessage = ref('')
 
+const systemDialog = reactive({
+  open: false,
+  action: 'pause',
+})
+
+const systemDialogTitle = computed(() => (systemDialog.action === 'pause' ? '全站停盘' : '恢复交易'))
+
 async function loadData() {
   loading.value = true
   error.value = ''
@@ -49,32 +57,19 @@ function getSelectedTrade() {
   return trades.value.find((item) => item.tradeNo === selectedTradeNo.value) || null
 }
 
-async function runAction(handler, successMessage) {
-  error.value = ''
-  actionMessage.value = ''
-  try {
-    await handler()
-    actionMessage.value = successMessage
-    await loadData()
-  } catch (err) {
-    error.value = err.message || '交易操作失败'
-  }
+function openSystemDialog(action) {
+  systemDialog.action = action
+  systemDialog.open = true
 }
 
-async function handlePauseTrading() {
-  await runAction(() => AdminService.pauseTrading(), '全站停盘已执行')
-}
-
-async function handleResumeTrading() {
-  await runAction(() => AdminService.resumeTrading(), '交易已恢复')
-}
-
-async function handleRetrySync() {
+function submitSystemDialog() {
   const selected = getSelectedTrade()
-  await runAction(
-    () => AdminService.retryTradeSync(selected ? { tradeNo: selected.tradeNo } : {}),
-    selected ? `已重试交易 ${selected.tradeNo} 的同步` : '已重试全部待同步交易',
-  )
+  error.value = ''
+  actionMessage.value =
+    systemDialog.action === 'pause'
+      ? `已记录全站停盘操作${selected ? `，当前选中交易 ${selected.tradeNo}` : ''}，本期不直接调用停盘接口`
+      : `已记录恢复交易操作${selected ? `，当前选中交易 ${selected.tradeNo}` : ''}，本期不直接调用恢复接口`
+  systemDialog.open = false
 }
 
 onMounted(loadData)
@@ -108,9 +103,8 @@ onMounted(loadData)
     <div class="actions">
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查询' }}</button>
       <button @click="loadData" :disabled="loading">刷新状态</button>
-      <button class="warn" @click="handlePauseTrading">全站停盘</button>
-      <button @click="handleResumeTrading">恢复交易</button>
-      <button @click="handleRetrySync">重试同步</button>
+      <button class="warn" @click="openSystemDialog('pause')">全站停盘</button>
+      <button @click="openSystemDialog('resume')">恢复交易</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
     <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
@@ -228,4 +222,21 @@ onMounted(loadData)
       </tbody>
     </table>
   </section>
+
+  <ActionDialog
+    :open="systemDialog.open"
+    :title="systemDialogTitle"
+    description="根据问题文档，交易管理里的停盘与恢复交易当前仅保留页面确认弹框。"
+    confirm-text="确认"
+    @close="systemDialog.open = false"
+    @confirm="submitSystemDialog"
+  >
+    <p class="dialog-tip">
+      {{
+        systemDialog.action === 'pause'
+          ? '确认记录一次全站停盘操作？当前版本不会直接切换后台停盘状态。'
+          : '确认记录一次恢复交易操作？当前版本不会直接切换后台交易状态。'
+      }}
+    </p>
+  </ActionDialog>
 </template>

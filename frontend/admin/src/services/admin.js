@@ -160,6 +160,20 @@ export const AdminService = {
   getReports(params) {
     return get('/api/admin/reports', params)
   },
+  getAdminSecurityUsers() {
+    return get('/api/admin/security/admin-users')
+  },
+  getAdminSecurityRoles() {
+    return get('/api/admin/security/roles')
+  },
+  createAdminUser(payload) {
+    return send('/api/admin/security/admin-users', { body: payload })
+  },
+  assignAdminUserRoles(adminUserId, roleIds) {
+    return send(`/api/admin/security/admin-users/${adminUserId}/roles`, {
+      body: { roleIds },
+    })
+  },
 
   publishNotice(payload) {
     return send('/api/admin/dashboard/notices', { body: serializeNoticeBody(payload) })

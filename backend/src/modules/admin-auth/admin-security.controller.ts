@@ -4,7 +4,7 @@ import { Request } from 'express'
 import { AdminPermission } from './admin-permission.decorator'
 import { ADMIN_PERMISSION_CODES } from './admin-permission-codes'
 import { AdminProtected } from './admin-protected.decorator'
-import { AssignAdminRolesDto, AssignRolePermissionsDto } from './admin-security.dto'
+import { AssignAdminRolesDto, AssignRolePermissionsDto, CreateAdminUserDto } from './admin-security.dto'
 import { AdminSecurityService } from './admin-security.service'
 
 type AdminRequest = Request & {
@@ -38,6 +38,14 @@ export class AdminSecurityController {
   @AdminPermission(ADMIN_PERMISSION_CODES.SECURITY_READ)
   getPermissions() {
     return this.adminSecurityService.getPermissions()
+  }
+
+  @Post('admin-users')
+  @HttpCode(200)
+  @AdminProtected()
+  @AdminPermission(ADMIN_PERMISSION_CODES.SECURITY_ASSIGN_ROLES)
+  createAdminUser(@Body() body: CreateAdminUserDto, @Req() req: AdminRequest) {
+    return this.adminSecurityService.createAdminUser(body, this.requireAdmin(req))
   }
 
   @Post('admin-users/:adminUserId/roles')

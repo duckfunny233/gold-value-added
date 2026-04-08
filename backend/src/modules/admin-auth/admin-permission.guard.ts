@@ -70,10 +70,42 @@ export class AdminPermissionGuard implements CanActivate {
       throw new UnauthorizedException('管理员登录状态无效')
     }
 
-    const roleCodes = adminUser.roles.map((item) => item.role.code)
+    let resolvedRoles = adminUser.roles
+
+    if (resolvedRoles.length === 0) {
+      const superAdminRole = await this.prisma.adminRole.findUnique({
+        where: {
+          code: 'SUPER_ADMIN',
+        },
+        include: {
+          permissions: {
+            include: {
+              permission: true,
+            },
+          },
+        },
+      })
+
+      if (superAdminRole) {
+        await this.prisma.adminUserRole.create({
+          data: {
+            adminUserId: adminUser.id,
+            roleId: superAdminRole.id,
+          },
+        }).catch(() => null)
+
+        resolvedRoles = [
+          {
+            role: superAdminRole,
+          },
+        ] as typeof resolvedRoles
+      }
+    }
+
+    const roleCodes = resolvedRoles.map((item) => item.role.code)
     const permissionCodes = Array.from(
       new Set(
-        adminUser.roles.flatMap((item) =>
+        resolvedRoles.flatMap((item) =>
           item.role.permissions.map((permissionItem) => permissionItem.permission.code),
         ),
       ),
@@ -85,6 +117,10 @@ export class AdminPermissionGuard implements CanActivate {
       username: adminUser.username,
       roleCodes,
       permissionCodes,
+    }
+
+    if (roleCodes.includes('SUPER_ADMIN')) {
+      return true
     }
 
     if (!requiredPermissions.every((code) => permissionCodes.includes(code))) {

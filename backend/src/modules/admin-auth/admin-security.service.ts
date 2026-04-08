@@ -1,11 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
+import { Prisma, UserStatus } from '@prisma/client'
 import { randomUUID } from 'crypto'
 import { formatDateTime } from '../../common/utils/admin-view.util'
 import { sha256 } from '../../common/utils/hash.util'
 import { PrismaService } from '../../prisma/prisma.service'
 import { ADMIN_PERMISSION_DEFINITIONS } from './admin-permission-codes'
-import { AssignAdminRolesDto, AssignRolePermissionsDto } from './admin-security.dto'
+import { AssignAdminRolesDto, AssignRolePermissionsDto, CreateAdminUserDto } from './admin-security.dto'
 
 type AdminActor = {
   adminUserId: string
@@ -17,7 +17,7 @@ export class AdminSecurityService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getAdminUsers() {
-    await this.ensurePermissionCatalog()
+    await this.ensureSecurityBootstrap()
     const adminUsers = await this.prisma.adminUser.findMany({
       include: {
         roles: {
@@ -61,7 +61,7 @@ export class AdminSecurityService {
   }
 
   async getRoles() {
-    await this.ensurePermissionCatalog()
+    await this.ensureSecurityBootstrap()
     const roles = await this.prisma.adminRole.findMany({
       include: {
         permissions: {
@@ -91,7 +91,7 @@ export class AdminSecurityService {
   }
 
   async getPermissions() {
-    await this.ensurePermissionCatalog()
+    await this.ensureSecurityBootstrap()
     const permissions = await this.prisma.adminPermission.findMany({
       include: {
         roles: true,
@@ -113,6 +113,7 @@ export class AdminSecurityService {
   }
 
   async assignAdminUserRoles(adminUserId: string, body: AssignAdminRolesDto, actor: AdminActor) {
+    await this.ensureSecurityBootstrap()
     const [adminUser, roles] = await Promise.all([
       this.prisma.adminUser.findUnique({
         where: {
@@ -181,6 +182,7 @@ export class AdminSecurityService {
   }
 
   async assignRolePermissions(roleId: string, body: AssignRolePermissionsDto, actor: AdminActor) {
+    await this.ensureSecurityBootstrap()
     const [role, permissions] = await Promise.all([
       this.prisma.adminRole.findUnique({
         where: {
@@ -248,12 +250,96 @@ export class AdminSecurityService {
     }
   }
 
-  private async ensurePermissionCatalog() {
-    const count = await this.prisma.adminPermission.count()
-    if (count > 0) {
-      return
+  async createAdminUser(body: CreateAdminUserDto, actor: AdminActor) {
+    await this.ensureSecurityBootstrap()
+
+    const username = body.username.trim()
+    const password = body.password.trim()
+    const displayName = body.displayName.trim()
+
+    if (!username) {
+      throw new BadRequestException('管理员登录账号不能为空')
+    }
+    if (!password || password.length < 6) {
+      throw new BadRequestException('管理员密码至少 6 位')
     }
 
+    const [existingUser, role] = await Promise.all([
+      this.prisma.adminUser.findUnique({
+        where: {
+          username,
+        },
+      }),
+      this.prisma.adminRole.findUnique({
+        where: {
+          id: body.roleId,
+        },
+      }),
+    ])
+
+    if (existingUser) {
+      throw new BadRequestException('管理员登录账号已存在')
+    }
+    if (!role) {
+      throw new NotFoundException('管理员角色不存在')
+    }
+
+    const traceId = randomUUID()
+    const created = await this.prisma.$transaction(async (tx) => {
+      const adminUser = await tx.adminUser.create({
+        data: {
+          username,
+          passwordHash: sha256(password),
+          displayName: displayName || username,
+          status: UserStatus.ACTIVE,
+        },
+      })
+
+      await tx.adminUserRole.create({
+        data: {
+          adminUserId: adminUser.id,
+          roleId: role.id,
+        },
+      })
+
+      await this.writeSecurityLogs(tx, {
+        actor,
+        action: 'security.admin-user.create',
+        traceId,
+        referenceType: 'ADMIN_USER_CREATE',
+        referenceId: adminUser.id,
+        payload: {
+          adminUserId: adminUser.id,
+          username: adminUser.username,
+          displayName: adminUser.displayName,
+          roleId: role.id,
+          roleCode: role.code,
+          result: '成功',
+        } as Prisma.InputJsonValue,
+      })
+
+      return {
+        adminUser,
+        role,
+      }
+    })
+
+    return {
+      message: '管理员新增成功',
+      data: {
+        traceId,
+        adminUserId: created.adminUser.id,
+        username: created.adminUser.username,
+        displayName: created.adminUser.displayName,
+        status: created.adminUser.status,
+        roleId: created.role.id,
+        roleCode: created.role.code,
+        roleName: created.role.name,
+      },
+    }
+  }
+
+  private async ensureSecurityBootstrap() {
     await this.prisma.adminPermission.createMany({
       data: ADMIN_PERMISSION_DEFINITIONS.map((item, index) => ({
         id: `perm_seed_${index + 1}`,
@@ -263,6 +349,59 @@ export class AdminSecurityService {
       })),
       skipDuplicates: true,
     })
+
+    const superAdminRole = await this.prisma.adminRole.upsert({
+      where: {
+        code: 'SUPER_ADMIN',
+      },
+      create: {
+        id: 'role_super_admin',
+        code: 'SUPER_ADMIN',
+        name: '超级管理员',
+        description: '默认拥有全部后台安全与治理权限',
+      },
+      update: {
+        name: '超级管理员',
+        description: '默认拥有全部后台安全与治理权限',
+      },
+    })
+
+    const permissions = await this.prisma.adminPermission.findMany({
+      select: {
+        id: true,
+      },
+    })
+
+    if (permissions.length > 0) {
+      await this.prisma.adminRolePermission.createMany({
+        data: permissions.map((item) => ({
+          roleId: superAdminRole.id,
+          permissionId: item.id,
+        })),
+        skipDuplicates: true,
+      })
+    }
+
+    const adminsWithoutRoles = await this.prisma.adminUser.findMany({
+      where: {
+        roles: {
+          none: {},
+        },
+      },
+      select: {
+        id: true,
+      },
+    })
+
+    if (adminsWithoutRoles.length > 0) {
+      await this.prisma.adminUserRole.createMany({
+        data: adminsWithoutRoles.map((item) => ({
+          adminUserId: item.id,
+          roleId: superAdminRole.id,
+        })),
+        skipDuplicates: true,
+      })
+    }
   }
 
   private async writeSecurityLogs(

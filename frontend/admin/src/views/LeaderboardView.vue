@@ -1,5 +1,6 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import ActionDialog from '../components/ActionDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useQueryFilters } from '../composables/useQueryFilters'
 import { AdminService } from '../services/admin'
@@ -18,6 +19,21 @@ const monitors = ref([])
 const loading = ref(false)
 const error = ref('')
 const actionMessage = ref('')
+
+const governanceDialog = reactive({
+  open: false,
+  action: 'validate',
+})
+
+const governanceDialogTitle = computed(() => {
+  if (governanceDialog.action === 'update') {
+    return '更新排序规则'
+  }
+  if (governanceDialog.action === 'rebuild') {
+    return '重建排行榜'
+  }
+  return '校验规则'
+})
 
 function escapeCsv(value) {
   const normalized = value == null ? '' : String(value)
@@ -58,37 +74,25 @@ async function loadData() {
   }
 }
 
-async function runAction(handler, successMessage) {
+function openGovernanceDialog(action) {
+  governanceDialog.action = action
+  governanceDialog.open = true
+}
+
+async function submitGovernanceDialog() {
   error.value = ''
   actionMessage.value = ''
-  try {
-    await handler()
-    actionMessage.value = successMessage
+
+  if (governanceDialog.action === 'validate') {
     await loadData()
-  } catch (err) {
-    error.value = err.message || '排行榜治理操作失败'
+    actionMessage.value = `已按当前规则 ${filters.sortRule === 'totalAsset' ? '总资产排序' : '黄金克数排序'} 重新校验排行榜数据`
+  } else if (governanceDialog.action === 'update') {
+    actionMessage.value = `已记录排序规则更新申请，当前目标规则为${filters.sortRule === 'totalAsset' ? '总资产排序' : '黄金克数排序'}`
+  } else {
+    actionMessage.value = `已记录排行榜重建申请，当前目标规则为${filters.sortRule === 'totalAsset' ? '总资产排序' : '黄金克数排序'}`
   }
-}
 
-async function handleUpdateRule() {
-  await runAction(
-    () => AdminService.updateLeaderboardRule(filters.sortRule),
-    '排行榜规则已更新',
-  )
-}
-
-async function handleRebuild() {
-  await runAction(
-    () => AdminService.rebuildLeaderboard({ sortRule: filters.sortRule }),
-    '排行榜已触发重排',
-  )
-}
-
-async function handleRetrySync() {
-  await runAction(
-    () => AdminService.retryLeaderboardSync({ sortRule: filters.sortRule }),
-    '排行榜异常同步已重试',
-  )
+  governanceDialog.open = false
 }
 
 function handleExport() {
@@ -111,7 +115,7 @@ onMounted(loadData)
 </script>
 
 <template>
-  <PageHeader title="排行榜治理" description="完成排行榜重排、规则校验、同步监控和异常处理。" />
+  <PageHeader title="排行榜治理" description="完成排行榜重排、规则校验和同步监控。" />
 
   <section class="panel">
     <div class="form-row">
@@ -141,9 +145,9 @@ onMounted(loadData)
       </label>
     </div>
     <div class="actions">
-      <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '校验规则' }}</button>
-      <button @click="handleUpdateRule">更新排序规则</button>
-      <button @click="handleRebuild">重建排行榜</button>
+      <button class="primary" @click="openGovernanceDialog('validate')" :disabled="loading">{{ loading ? '加载中...' : '校验规则' }}</button>
+      <button @click="openGovernanceDialog('update')">更新排序规则</button>
+      <button @click="openGovernanceDialog('rebuild')">重建排行榜</button>
       <button @click="handleExport">导出</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
@@ -186,7 +190,7 @@ onMounted(loadData)
       <article class="panel">
         <div class="panel-head">
           <h2>同步监控</h2>
-          <span class="muted">重排与异常处理状态</span>
+          <span class="muted">重排状态概览</span>
         </div>
         <div class="kv-list">
           <div class="kv-item" v-for="item in monitors" :key="item.key">
@@ -194,10 +198,35 @@ onMounted(loadData)
             <span>{{ item.value }}</span>
           </div>
         </div>
-        <div class="actions">
-          <button class="primary" @click="handleRetrySync">处理异常</button>
-        </div>
       </article>
     </aside>
   </section>
+
+  <ActionDialog
+    :open="governanceDialog.open"
+    :title="governanceDialogTitle"
+    description="按问题文档要求，这三个动作当前统一改为页面内弹框确认，不再因为权限问题打断会话。"
+    confirm-text="确认"
+    @close="governanceDialog.open = false"
+    @confirm="submitGovernanceDialog"
+  >
+    <div class="dialog-grid">
+      <label>
+        当前排序规则
+        <select v-model="filters.sortRule">
+          <option value="goldHoldingGrams">按黄金克数排序</option>
+          <option value="totalAsset">按总资产排序</option>
+        </select>
+      </label>
+      <p class="dialog-tip">
+        {{
+          governanceDialog.action === 'validate'
+            ? '确认后会基于当前筛选条件重新拉取排行榜数据。'
+            : governanceDialog.action === 'update'
+              ? '确认后会记录一次排序规则调整意图，本轮不直接触发治理接口。'
+              : '确认后会记录一次排行榜重建意图，本轮不直接触发重建接口。'
+        }}
+      </p>
+    </div>
+  </ActionDialog>
 </template>

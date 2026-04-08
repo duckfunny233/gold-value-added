@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import ActionDialog from '../components/ActionDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useQueryFilters } from '../composables/useQueryFilters'
 import { AdminService } from '../services/admin'
@@ -8,6 +9,28 @@ const filters = reactive({
   date: 'today',
   module: '',
   severity: '',
+})
+
+const noticeForm = reactive({
+  title: '',
+  content: '',
+})
+
+const noticeDialog = reactive({
+  open: false,
+  mode: 'create',
+  noticeId: '',
+})
+
+const deleteDialog = reactive({
+  open: false,
+  noticeId: '',
+  title: '',
+})
+
+const systemDialog = reactive({
+  open: false,
+  action: 'pause',
 })
 
 useQueryFilters(filters, ['date', 'module', 'severity'])
@@ -20,10 +43,13 @@ const monitors = ref([])
 const ruleReminders = ref([])
 const selectedNoticeId = ref('')
 const loading = ref(false)
+const dialogLoading = ref(false)
 const error = ref('')
 const actionMessage = ref('')
 
-const selectedNotice = computed(() => notices.value.find((item) => item.id === selectedNoticeId.value) || null)
+const noticeDialogTitle = computed(() => (noticeDialog.mode === 'edit' ? '编辑公告' : '新增公告'))
+const noticeDialogConfirmText = computed(() => (noticeDialog.mode === 'edit' ? '确认编辑' : '确认发布'))
+const systemDialogTitle = computed(() => (systemDialog.action === 'pause' ? '全站停盘' : '恢复交易'))
 
 async function loadData() {
   loading.value = true
@@ -47,55 +73,93 @@ async function loadData() {
 async function runAction(handler, successMessage) {
   error.value = ''
   actionMessage.value = ''
+  dialogLoading.value = true
   try {
     await handler()
     actionMessage.value = successMessage
     await loadData()
   } catch (err) {
     error.value = err.message || '操作失败'
+  } finally {
+    dialogLoading.value = false
   }
 }
 
-async function handlePublishNotice() {
-  const title = window.prompt('请输入公告标题')
-  if (!title) return
-  const content = window.prompt('请输入公告内容')
-  if (!content) return
-  await runAction(() => AdminService.publishNotice({ title, content }), '公告已发布')
+function resetNoticeForm() {
+  noticeForm.title = ''
+  noticeForm.content = ''
+  noticeDialog.noticeId = ''
 }
 
-async function handleEditNotice() {
-  if (!selectedNotice.value || selectedNotice.value.source !== 'local') {
-    error.value = '请先选中一条本地公告后再编辑'
+function openCreateNoticeDialog() {
+  resetNoticeForm()
+  noticeDialog.mode = 'create'
+  noticeDialog.open = true
+}
+
+function openEditNoticeDialog(item) {
+  if (item.source !== 'local') {
+    error.value = '外部新闻流公告暂不支持后台编辑'
     return
   }
-  const title = window.prompt('请输入新的公告标题', selectedNotice.value.title || '')
-  if (!title) return
-  const content = window.prompt('请输入新的公告内容', selectedNotice.value.content || selectedNotice.value.text || '')
-  if (!content) return
-  await runAction(
-    () => AdminService.updateNotice(selectedNotice.value.id, { title, content }),
-    '公告已更新',
-  )
+  noticeDialog.mode = 'edit'
+  noticeDialog.noticeId = item.id
+  noticeForm.title = item.title || ''
+  noticeForm.content = item.content || item.text || ''
+  noticeDialog.open = true
 }
 
-async function handleDeleteNotice() {
-  if (!selectedNotice.value || selectedNotice.value.source !== 'local') {
-    error.value = '请先选中一条本地公告后再删除'
+function openDeleteNoticeDialog(item) {
+  if (item.source !== 'local') {
+    error.value = '外部新闻流公告暂不支持后台删除'
     return
   }
-  if (!window.confirm(`确认删除公告「${selectedNotice.value.title}」吗？`)) {
+  deleteDialog.noticeId = item.id
+  deleteDialog.title = item.title || ''
+  deleteDialog.open = true
+}
+
+async function submitNoticeDialog() {
+  const payload = {
+    title: noticeForm.title.trim(),
+    content: noticeForm.content.trim(),
+  }
+
+  if (!payload.title || !payload.content) {
+    error.value = '请完整填写公告标题和内容'
     return
   }
-  await runAction(() => AdminService.deleteNotice(selectedNotice.value.id), '公告已删除')
+
+  if (noticeDialog.mode === 'edit') {
+    await runAction(
+      () => AdminService.updateNotice(noticeDialog.noticeId, payload),
+      '公告已更新',
+    )
+  } else {
+    await runAction(() => AdminService.publishNotice(payload), '公告已发布')
+  }
+
+  noticeDialog.open = false
+  resetNoticeForm()
 }
 
-async function handlePauseTrading() {
-  await runAction(() => AdminService.pauseTrading(), '全站停盘已执行')
+async function submitDeleteNoticeDialog() {
+  await runAction(() => AdminService.deleteNotice(deleteDialog.noticeId), '公告已删除')
+  deleteDialog.open = false
 }
 
-async function handleResumeTrading() {
-  await runAction(() => AdminService.resumeTrading(), '交易已恢复')
+function openSystemDialog(action) {
+  systemDialog.action = action
+  systemDialog.open = true
+}
+
+function submitSystemDialog() {
+  actionMessage.value =
+    systemDialog.action === 'pause'
+      ? '已记录全站停盘操作，本期按文档要求仅保留确认弹框，不直接触发停盘接口'
+      : '已记录恢复交易操作，本期按文档要求仅保留确认弹框，不直接触发恢复接口'
+  error.value = ''
+  systemDialog.open = false
 }
 
 onMounted(loadData)
@@ -136,8 +200,8 @@ onMounted(loadData)
     </div>
     <div class="actions">
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '刷新仪表盘' }}</button>
-      <button class="warn" @click="handlePauseTrading">全站停盘</button>
-      <button @click="handleResumeTrading">恢复交易</button>
+      <button class="warn" @click="openSystemDialog('pause')">全站停盘</button>
+      <button @click="openSystemDialog('resume')">恢复交易</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
     <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
@@ -207,6 +271,7 @@ onMounted(loadData)
               <th>状态</th>
               <th>发布时间</th>
               <th>轮巡展示</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -220,13 +285,33 @@ onMounted(loadData)
               <td>{{ item.status }}</td>
               <td>{{ item.publishAt }}</td>
               <td>{{ item.pollingEnabled }}</td>
+              <td>
+                <div class="cell-actions">
+                  <button
+                    v-if="item.source === 'local'"
+                    type="button"
+                    @click.stop="openEditNoticeDialog(item)"
+                  >
+                    编辑
+                  </button>
+                  <button
+                    v-if="item.source === 'local'"
+                    type="button"
+                    @click.stop="openDeleteNoticeDialog(item)"
+                  >
+                    删除
+                  </button>
+                  <span v-if="item.source !== 'local'" class="muted">外部公告只读</span>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!notices.length">
+              <td colspan="5" class="table-empty">暂无公告数据</td>
             </tr>
           </tbody>
         </table>
         <div class="actions">
-          <button class="primary" @click="handlePublishNotice">发布公告</button>
-          <button @click="handleEditNotice">编辑公告</button>
-          <button @click="handleDeleteNotice">删除公告</button>
+          <button class="primary" @click="openCreateNoticeDialog">发布公告</button>
         </div>
       </article>
     </aside>
@@ -268,4 +353,56 @@ onMounted(loadData)
       </ul>
     </article>
   </section>
+
+  <ActionDialog
+    :open="noticeDialog.open"
+    :title="noticeDialogTitle"
+    description="公告发布后会进入首页轮巡展示，内容尽量精简。"
+    :confirm-text="noticeDialogConfirmText"
+    :loading="dialogLoading"
+    :confirm-disabled="!noticeForm.title.trim() || !noticeForm.content.trim()"
+    @close="noticeDialog.open = false"
+    @confirm="submitNoticeDialog"
+  >
+    <div class="dialog-grid">
+      <label>
+        公告标题
+        <input v-model="noticeForm.title" maxlength="40" placeholder="请输入公告标题" />
+      </label>
+      <label>
+        公告内容
+        <textarea v-model="noticeForm.content" maxlength="200" placeholder="请输入公告内容" />
+      </label>
+    </div>
+  </ActionDialog>
+
+  <ActionDialog
+    :open="deleteDialog.open"
+    title="删除公告"
+    description="删除后该条本地公告会从首页轮巡列表中移除。"
+    confirm-text="确认删除"
+    :loading="dialogLoading"
+    danger
+    @close="deleteDialog.open = false"
+    @confirm="submitDeleteNoticeDialog"
+  >
+    <p class="dialog-tip">确认删除公告「{{ deleteDialog.title || '未命名公告' }}」吗？</p>
+  </ActionDialog>
+
+  <ActionDialog
+    :open="systemDialog.open"
+    :title="systemDialogTitle"
+    description="根据问题文档，这里先保留页面确认弹框，不直接触发后台停盘状态切换。"
+    confirm-text="确认"
+    @close="systemDialog.open = false"
+    @confirm="submitSystemDialog"
+  >
+    <p class="dialog-tip">
+      {{
+        systemDialog.action === 'pause'
+          ? '确认记录一次全站停盘操作说明？本次不会直接更改后台交易状态。'
+          : '确认记录一次恢复交易操作说明？本次不会直接更改后台交易状态。'
+      }}
+    </p>
+  </ActionDialog>
 </template>

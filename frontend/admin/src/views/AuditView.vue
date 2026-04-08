@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useQueryFilters } from '../composables/useQueryFilters'
 import { AdminService } from '../services/admin'
@@ -20,6 +20,25 @@ const selectedTraceId = ref('')
 const loading = ref(false)
 const error = ref('')
 const actionMessage = ref('')
+const pageSize = 10
+const currentPage = ref(1)
+
+const totalPages = computed(() => Math.max(1, Math.ceil(rows.value.length / pageSize)))
+const pagedRows = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return rows.value.slice(start, start + pageSize)
+})
+
+function syncCurrentPage(traceId) {
+  const index = rows.value.findIndex((item) => item.traceId === traceId)
+  if (index >= 0) {
+    currentPage.value = Math.floor(index / pageSize) + 1
+    return
+  }
+  if (currentPage.value > totalPages.value) {
+    currentPage.value = totalPages.value
+  }
+}
 
 async function loadData() {
   loading.value = true
@@ -28,7 +47,13 @@ async function loadData() {
     const data = await AdminService.getAudit(filters)
     rows.value = data.rows || []
     detailItems.value = data.detailItems || []
-    selectedTraceId.value = rows.value[0]?.traceId || ''
+    const nextTraceId =
+      rows.value.find((item) => item.traceId === selectedTraceId.value)?.traceId ||
+      rows.value.find((item) => item.traceId === filters.traceId)?.traceId ||
+      rows.value[0]?.traceId ||
+      ''
+    selectedTraceId.value = nextTraceId
+    syncCurrentPage(nextTraceId)
   } catch (err) {
     error.value = err.message || '审计数据加载失败'
   } finally {
@@ -45,13 +70,19 @@ async function loadTraceDetail(traceId) {
     error.value = '请先选择或输入 traceId'
     return
   }
+  error.value = ''
   selectedTraceId.value = traceId
+  syncCurrentPage(traceId)
   try {
     const detail = await AdminService.getAuditTrace(traceId)
     detailItems.value = AdminService.mapAuditTraceToDetailItems(detail)
   } catch (err) {
     error.value = err.message || 'trace 详情加载失败'
   }
+}
+
+function goToPage(page) {
+  currentPage.value = Math.min(Math.max(page, 1), totalPages.value)
 }
 
 async function runAction(handler, successMessage) {
@@ -155,8 +186,11 @@ onMounted(loadData)
           </tr>
         </thead>
         <tbody>
+          <tr v-if="!pagedRows.length">
+            <td class="table-empty" colspan="7">暂无符合条件的审计记录</td>
+          </tr>
           <tr
-            v-for="row in rows"
+            v-for="row in pagedRows"
             :key="row.traceId"
             @click="loadTraceDetail(row.traceId)"
             :class="{ 'is-selected': selectedTraceId === row.traceId }"
@@ -171,6 +205,13 @@ onMounted(loadData)
           </tr>
         </tbody>
       </table>
+      <div class="pagination-bar">
+        <span class="muted">共 {{ rows.length }} 条，当前第 {{ currentPage }} / {{ totalPages }} 页，每页 10 条</span>
+        <div class="actions compact">
+          <button @click="goToPage(currentPage - 1)" :disabled="currentPage <= 1">上一页</button>
+          <button @click="goToPage(currentPage + 1)" :disabled="currentPage >= totalPages">下一页</button>
+        </div>
+      </div>
     </article>
 
     <aside class="panel">
