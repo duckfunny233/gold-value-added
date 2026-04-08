@@ -81,3 +81,10 @@ export class AdminTradesQueryDto {
   @IsIn(TIME_RANGES)
   timeRange?: (typeof TIME_RANGES)[number]
 }
+
+export class TradeRetrySyncDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  tradeNo?: string
+}

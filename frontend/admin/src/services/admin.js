@@ -1,17 +1,6 @@
 import { apiFetch } from '../utils/request'
 import { toQueryString } from '../../../shared/utils/query'
-import {
-  auditData,
-  dashboardData,
-  fundsData,
-  leaderboardData,
-  reportsData,
-  riskData,
-  tradesData,
-  usersData,
-} from '../../../shared/mocks/admin.js'
 
-const deepClone = (value) => JSON.parse(JSON.stringify(value))
 const DEFAULT_SYNC_SESSIONS = [
   { day: '周一至周五', session: '09:00 - 11:30 / 13:30 - 21:00', status: '自动同步中' },
 ]
@@ -58,39 +47,226 @@ const normalizeTradesData = (value) => {
   }
 }
 
-const withFallback = async (path, params, fallbackData) => {
-  try {
-    return await apiFetch(`${path}${toQueryString(params)}`)
-  } catch (error) {
-    console.warn(`[AdminService] 使用本地模拟数据兜底: ${path}`, error)
-    return deepClone(fallbackData)
+const get = (path, params) => apiFetch(`${path}${toQueryString(params)}`)
+
+const send = (path, { method = 'POST', body, headers } = {}) =>
+  apiFetch(path, {
+    method,
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(headers || {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  })
+
+const buildIdempotencyHeaders = (key) => (key ? { 'Idempotency-Key': key } : undefined)
+
+const serializeNoticeBody = (payload) => ({
+  title: payload.title,
+  content: payload.content,
+  ...(typeof payload.sortOrder === 'number' ? { sortOrder: payload.sortOrder } : {}),
+})
+
+const serializeReportFilters = (payload) => ({
+  ...(payload.reportType ? { reportType: payload.reportType } : {}),
+  ...(payload.timeRange ? { timeRange: payload.timeRange } : {}),
+  ...(payload.uid ? { uid: payload.uid } : {}),
+  ...(payload.channel ? { channel: payload.channel } : {}),
+  ...(payload.format ? { format: payload.format } : {}),
+  ...(payload.templateId ? { templateId: payload.templateId } : {}),
+  ...(payload.name ? { name: payload.name } : {}),
+  ...(payload.defaultFormat ? { defaultFormat: payload.defaultFormat } : {}),
+})
+
+const serializeRiskRules = (payload) => ({
+  withdrawInterceptEnabled: Boolean(payload.withdrawInterceptEnabled),
+  singleWithdrawalLimit: Number(payload.singleWithdrawalLimit || 0),
+  dailyWithdrawalLimit: Number(payload.dailyWithdrawalLimit || 0),
+  abnormalTradeThreshold: Number(payload.abnormalTradeThreshold || 0),
+  blacklistUids: Array.isArray(payload.blacklistUids) ? payload.blacklistUids : [],
+})
+
+const normalizeReportJobRows = (rows = []) =>
+  rows.map((item) => ({
+    jobId: item.jobId,
+    name: item.templateName || `${item.reportType} 报表任务`,
+    generatedAt: item.finishedAt || item.createdAt,
+    generatedBy: item.generatedBy || '系统',
+    aggregationRule: item.aggregationRule || '按筛选条件汇总',
+    dataSourceModules: item.dataSourceModules || item.reportType,
+    status:
+      item.status === 'SUCCEEDED'
+        ? '已完成'
+        : item.status === 'RUNNING'
+          ? '生成中'
+          : item.status === 'FAILED'
+            ? '失败'
+            : '待生成',
+    traceId: item.traceId,
+    requestedFormat: item.requestedFormat,
+    rowCount: item.rowCount,
+  }))
+
+const normalizeTemplates = (rows = []) =>
+  rows.map((item) => ({
+    templateId: item.templateId,
+    name: item.name,
+    reportType: item.reportType,
+    filters: item.filters,
+    defaultFormat: item.defaultFormat,
+    traceId: item.traceId,
+    createdAt: item.createdAt,
+  }))
+
+const normalizeAuditTraceDetail = (detail) => {
+  if (!detail) {
+    return []
   }
+
+  return [
+    { key: 'summary', label: '链路摘要', value: `节点 ${detail.summary?.totalNodes || 0} 个 / 哈希 ${detail.summary?.hashCount || 0} 个` },
+    { key: 'syncStatus', label: '同步状态', value: detail.summary?.syncStatus || '-' },
+    ...(detail.nodes || []).slice(0, 8).map((item, index) => ({
+      key: `node_${index}`,
+      label: `${item.nodeType} / ${item.module}`,
+      value: `${item.action} / ${item.referenceType}:${item.referenceId} / ${item.createdAt}`,
+    })),
+  ]
 }
 
 export const AdminService = {
   getDashboard(params) {
-    return withFallback('/api/admin/dashboard', params, dashboardData)
+    return get('/api/admin/dashboard', params)
   },
   getUsers(params) {
-    return withFallback('/api/admin/users', params, usersData)
+    return get('/api/admin/users', params)
   },
   getFunds(params) {
-    return withFallback('/api/admin/funds', params, fundsData)
+    return get('/api/admin/funds', params)
   },
   async getTrades(params) {
-    const data = await withFallback('/api/admin/trades', params, tradesData)
+    const data = await get('/api/admin/trades', params)
     return normalizeTradesData(data)
   },
   getLeaderboard(params) {
-    return withFallback('/api/admin/leaderboard', params, leaderboardData)
+    return get('/api/admin/leaderboard', params)
   },
   getRisk(params) {
-    return withFallback('/api/admin/risk', params, riskData)
+    return get('/api/admin/risk', params)
   },
   getAudit(params) {
-    return withFallback('/api/admin/audit', params, auditData)
+    return get('/api/admin/audit', params)
   },
   getReports(params) {
-    return withFallback('/api/admin/reports', params, reportsData)
+    return get('/api/admin/reports', params)
   },
+
+  publishNotice(payload) {
+    return send('/api/admin/dashboard/notices', { body: serializeNoticeBody(payload) })
+  },
+  updateNotice(noticeId, payload) {
+    return send(`/api/admin/dashboard/notices/${noticeId}`, {
+      method: 'PATCH',
+      body: serializeNoticeBody(payload),
+    })
+  },
+  deleteNotice(noticeId) {
+    return send(`/api/admin/dashboard/notices/${noticeId}`, { method: 'DELETE' })
+  },
+
+  pauseTrading() {
+    return send('/api/admin/trades/pause')
+  },
+  resumeTrading() {
+    return send('/api/admin/trades/resume')
+  },
+  retryTradeSync(payload = {}) {
+    return send('/api/admin/trades/retry-sync', { body: payload })
+  },
+
+  approveWithdrawal(orderId) {
+    return send(`/api/admin/funds/withdrawals/${orderId}/approve`)
+  },
+  rejectWithdrawal(orderId) {
+    return send(`/api/admin/funds/withdrawals/${orderId}/reject`)
+  },
+  confirmWithdrawalCompleted(orderId) {
+    return send(`/api/admin/funds/withdrawals/${orderId}/confirm-completed`)
+  },
+  muteWithdrawalAlert(orderId) {
+    return send(`/api/admin/funds/withdrawals/${orderId}/mute-alert`)
+  },
+  manualTransfer(payload, idempotencyKey) {
+    return send('/api/admin/funds/manual-transfer', {
+      body: payload,
+      headers: buildIdempotencyHeaders(idempotencyKey),
+    })
+  },
+  manualAdjust(payload, idempotencyKey) {
+    return send('/api/admin/funds/manual-adjust', {
+      body: payload,
+      headers: buildIdempotencyHeaders(idempotencyKey),
+    })
+  },
+
+  freezeUser(uid) {
+    return send(`/api/admin/users/${uid}/freeze`)
+  },
+  unfreezeUser(uid) {
+    return send(`/api/admin/users/${uid}/unfreeze`)
+  },
+  manualCheckUser(uid, payload = {}) {
+    return send(`/api/admin/users/${uid}/manual-check`, { body: payload })
+  },
+
+  getRiskRules() {
+    return get('/api/admin/risk/rules')
+  },
+  updateRiskRules(payload) {
+    return send('/api/admin/risk/rules', { body: serializeRiskRules(payload) })
+  },
+
+  updateLeaderboardRule(sortRule) {
+    return send('/api/admin/leaderboard/rule', { body: { sortRule } })
+  },
+  rebuildLeaderboard(payload) {
+    return send('/api/admin/leaderboard/rebuild', { body: payload })
+  },
+  retryLeaderboardSync(payload) {
+    return send('/api/admin/leaderboard/retry-sync', { body: payload })
+  },
+
+  getAuditTrace(traceId) {
+    return get(`/api/admin/audit/trace/${encodeURIComponent(traceId)}`)
+  },
+  verifyAuditTraceHash(traceId) {
+    return send(`/api/admin/audit/trace/${encodeURIComponent(traceId)}/verify-hash`)
+  },
+  exportAuditTrace(traceId, format = 'csv') {
+    return get(`/api/admin/audit/trace/${encodeURIComponent(traceId)}/export`, { format })
+  },
+  mapAuditTraceToDetailItems(detail) {
+    return normalizeAuditTraceDetail(detail)
+  },
+
+  generateReport(payload) {
+    return send('/api/admin/reports/generate', { body: serializeReportFilters(payload) })
+  },
+  getReportJobs(params) {
+    return get('/api/admin/reports/jobs', params)
+  },
+  getReportJob(jobId) {
+    return get(`/api/admin/reports/jobs/${jobId}`)
+  },
+  exportReportJob(jobId, payload = { format: 'csv' }) {
+    return send(`/api/admin/reports/jobs/${jobId}/export`, { body: payload })
+  },
+  createReportTemplate(payload) {
+    return send('/api/admin/reports/templates', { body: serializeReportFilters(payload) })
+  },
+  getReportTemplates(params) {
+    return get('/api/admin/reports/templates', params)
+  },
+  normalizeReportJobRows,
+  normalizeTemplates,
 }

@@ -15,21 +15,87 @@ useQueryFilters(filters, ['reportType', 'timeRange', 'uid', 'channel'])
 
 const cards = ref([])
 const exportsList = ref([])
+const selectedJobId = ref('')
 const loading = ref(false)
 const error = ref('')
+const actionMessage = ref('')
 
 async function loadData() {
   loading.value = true
   error.value = ''
   try {
-    const data = await AdminService.getReports(filters)
-    cards.value = data.cards || []
-    exportsList.value = data.exportsList || []
+    const [reportData, jobsData] = await Promise.all([
+      AdminService.getReports(filters),
+      AdminService.getReportJobs({ reportType: filters.reportType }),
+    ])
+    cards.value = reportData.cards || []
+    const jobRows = AdminService.normalizeReportJobRows(jobsData.rows || [])
+    exportsList.value = jobRows.length ? jobRows : reportData.exportsList || []
+    selectedJobId.value = jobRows[0]?.jobId || ''
   } catch (err) {
     error.value = err.message || '报表数据加载失败'
   } finally {
     loading.value = false
   }
+}
+
+function getSelectedJobId() {
+  return selectedJobId.value || exportsList.value.find((item) => item.jobId)?.jobId || ''
+}
+
+async function runAction(handler, successMessage) {
+  error.value = ''
+  actionMessage.value = ''
+  try {
+    await handler()
+    actionMessage.value = successMessage
+    await loadData()
+  } catch (err) {
+    error.value = err.message || '报表操作失败'
+  }
+}
+
+async function handleGenerateReport() {
+  await runAction(
+    () =>
+      AdminService.generateReport({
+        reportType: filters.reportType,
+        timeRange: filters.timeRange,
+        uid: filters.uid,
+        channel: filters.channel,
+        format: 'csv',
+      }),
+    '报表任务已生成',
+  )
+}
+
+async function handleExportReport(format) {
+  const jobId = getSelectedJobId()
+  if (!jobId) {
+    error.value = '请先选中一条报表任务'
+    return
+  }
+  await runAction(
+    () => AdminService.exportReportJob(jobId, { format }),
+    `报表已按 ${format.toUpperCase()} 导出`,
+  )
+}
+
+async function handleSaveTemplate() {
+  const name = window.prompt('请输入模板名称', `${filters.reportType}-template`)
+  if (!name) return
+  await runAction(
+    () =>
+      AdminService.createReportTemplate({
+        name,
+        reportType: filters.reportType,
+        timeRange: filters.timeRange,
+        uid: filters.uid,
+        channel: filters.channel,
+        defaultFormat: 'csv',
+      }),
+    '报表模板已保存',
+  )
 }
 
 onMounted(loadData)
@@ -67,12 +133,13 @@ onMounted(loadData)
       </label>
     </div>
     <div class="actions">
-      <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '生成报表' }}</button>
-      <button>导出 CSV</button>
-      <button>导出 Excel</button>
-      <button>保存自定义模板</button>
+      <button class="primary" @click="handleGenerateReport" :disabled="loading">{{ loading ? '加载中...' : '生成报表' }}</button>
+      <button @click="handleExportReport('csv')">导出 CSV</button>
+      <button @click="handleExportReport('excel')">导出 Excel</button>
+      <button @click="handleSaveTemplate">保存自定义模板</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
+    <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
   </section>
 
   <section class="grid-3">
@@ -101,7 +168,12 @@ onMounted(loadData)
         </tr>
       </thead>
       <tbody>
-        <tr v-for="row in exportsList" :key="row.name">
+        <tr
+          v-for="row in exportsList"
+          :key="row.jobId || row.name"
+          @click="selectedJobId = row.jobId || ''"
+          :class="{ 'is-selected': selectedJobId === row.jobId }"
+        >
           <td>{{ row.name }}</td>
           <td>{{ row.generatedAt }}</td>
           <td>{{ row.generatedBy }}</td>

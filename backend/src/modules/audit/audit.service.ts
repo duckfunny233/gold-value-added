@@ -454,6 +454,9 @@ export class AuditService {
         return sha256(`trade_idempotency:${auditLog.userId}:${hashRecord.traceId}:${JSON.stringify(auditPayload)}`)
       case 'ADMIN_USER_ROLE_ASSIGN':
       case 'ROLE_PERMISSION_ASSIGN':
+      case 'NOTICE_PUBLISH':
+      case 'NOTICE_UPDATE':
+      case 'NOTICE_DELETE':
       case 'LEADERBOARD_RULE_CHANGE':
       case 'LEADERBOARD_REBUILD':
       case 'LEADERBOARD_RETRY_SYNC':
@@ -463,6 +466,10 @@ export class AuditService {
       case 'REPORT_JOB_EXPORT':
       case 'REPORT_TEMPLATE_CREATE':
         return sha256(`${hashRecord.referenceType}:${hashRecord.referenceId}:${hashRecord.traceId}:${JSON.stringify(adminPayload)}`)
+      case 'USER_MANUAL_CHECK':
+        return sha256(`USER_MANUAL_CHECK:${hashRecord.referenceId}:${hashRecord.traceId}:${JSON.stringify(adminPayload)}`)
+      case 'TRADE_RETRY_SYNC':
+        return sha256(`TRADE_RETRY_SYNC:${hashRecord.referenceId}:${hashRecord.traceId}:${JSON.stringify(adminPayload)}`)
       case 'RISK_RULE_UPDATE':
         return sha256(`risk_rule:${hashRecord.referenceId}:${hashRecord.traceId}:${JSON.stringify({
           withdrawInterceptEnabled: auditPayload.withdrawInterceptEnabled,
@@ -599,6 +606,8 @@ export class AuditService {
       trade: '交易管理',
       risk: '权限与风控',
       audit: '审计追溯',
+      dashboard: '仪表盘',
+      user: '用户管理',
       report: '报表中心',
       system: '系统配置',
       'admin-auth': '权限与风控',

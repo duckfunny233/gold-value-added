@@ -1,8 +1,16 @@
-import { Body, Controller, Get, Headers, HttpCode, Post, Query } from '@nestjs/common'
+import { Body, Controller, Get, Headers, HttpCode, Post, Query, Req } from '@nestjs/common'
 import { ApiTags } from '@nestjs/swagger'
+import { Request } from 'express'
 import { AdminProtected } from '../admin-auth/admin-protected.decorator'
-import { AdminTradesQueryDto, TradeDto, TradeQueryDto } from './trade.dto'
+import { AdminTradesQueryDto, TradeDto, TradeQueryDto, TradeRetrySyncDto } from './trade.dto'
 import { TradeService } from './trade.service'
+
+type AdminRequest = Request & {
+  user?: {
+    adminUserId: string
+    username: string
+  }
+}
 
 @ApiTags('Trade')
 @Controller()
@@ -42,5 +50,15 @@ export class TradeController {
   @AdminProtected()
   getAdminTrades(@Query() query: AdminTradesQueryDto) {
     return this.tradeService.getAdminTrades(query)
+  }
+
+  @Post('admin/trades/retry-sync')
+  @HttpCode(200)
+  @AdminProtected()
+  retrySync(@Body() body: TradeRetrySyncDto, @Req() req: AdminRequest) {
+    return this.tradeService.retrySync(body, {
+      adminUserId: req.user?.adminUserId || 'admin-local',
+      username: req.user?.username || 'admin',
+    })
   }
 }

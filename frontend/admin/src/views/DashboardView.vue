@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useQueryFilters } from '../composables/useQueryFilters'
 import { AdminService } from '../services/admin'
@@ -18,8 +18,12 @@ const notices = ref([])
 const events = ref([])
 const monitors = ref([])
 const ruleReminders = ref([])
+const selectedNoticeId = ref('')
 const loading = ref(false)
 const error = ref('')
+const actionMessage = ref('')
+
+const selectedNotice = computed(() => notices.value.find((item) => item.id === selectedNoticeId.value) || null)
 
 async function loadData() {
   loading.value = true
@@ -32,11 +36,66 @@ async function loadData() {
     events.value = data.events || []
     monitors.value = data.monitors || []
     ruleReminders.value = data.ruleReminders || []
+    selectedNoticeId.value = notices.value[0]?.id || ''
   } catch (err) {
     error.value = err.message || '仪表盘数据加载失败'
   } finally {
     loading.value = false
   }
+}
+
+async function runAction(handler, successMessage) {
+  error.value = ''
+  actionMessage.value = ''
+  try {
+    await handler()
+    actionMessage.value = successMessage
+    await loadData()
+  } catch (err) {
+    error.value = err.message || '操作失败'
+  }
+}
+
+async function handlePublishNotice() {
+  const title = window.prompt('请输入公告标题')
+  if (!title) return
+  const content = window.prompt('请输入公告内容')
+  if (!content) return
+  await runAction(() => AdminService.publishNotice({ title, content }), '公告已发布')
+}
+
+async function handleEditNotice() {
+  if (!selectedNotice.value || selectedNotice.value.source !== 'local') {
+    error.value = '请先选中一条本地公告后再编辑'
+    return
+  }
+  const title = window.prompt('请输入新的公告标题', selectedNotice.value.title || '')
+  if (!title) return
+  const content = window.prompt('请输入新的公告内容', selectedNotice.value.content || selectedNotice.value.text || '')
+  if (!content) return
+  await runAction(
+    () => AdminService.updateNotice(selectedNotice.value.id, { title, content }),
+    '公告已更新',
+  )
+}
+
+async function handleDeleteNotice() {
+  if (!selectedNotice.value || selectedNotice.value.source !== 'local') {
+    error.value = '请先选中一条本地公告后再删除'
+    return
+  }
+  if (!window.confirm(`确认删除公告「${selectedNotice.value.title}」吗？`)) {
+    return
+  }
+  await runAction(() => AdminService.deleteNotice(selectedNotice.value.id), '公告已删除')
+}
+
+async function handlePauseTrading() {
+  await runAction(() => AdminService.pauseTrading(), '全站停盘已执行')
+}
+
+async function handleResumeTrading() {
+  await runAction(() => AdminService.resumeTrading(), '交易已恢复')
 }
 
 onMounted(loadData)
@@ -77,10 +136,11 @@ onMounted(loadData)
     </div>
     <div class="actions">
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '刷新仪表盘' }}</button>
-      <button class="warn">全站停盘</button>
-      <button>恢复交易</button>
+      <button class="warn" @click="handlePauseTrading">全站停盘</button>
+      <button @click="handleResumeTrading">恢复交易</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
+    <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
   </section>
 
   <section class="grid-4">
@@ -150,7 +210,12 @@ onMounted(loadData)
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in notices" :key="item.id">
+            <tr
+              v-for="item in notices"
+              :key="item.id"
+              @click="selectedNoticeId = item.id"
+              :class="{ 'is-selected': selectedNoticeId === item.id }"
+            >
               <td>{{ item.title }}</td>
               <td>{{ item.status }}</td>
               <td>{{ item.publishAt }}</td>
@@ -159,9 +224,9 @@ onMounted(loadData)
           </tbody>
         </table>
         <div class="actions">
-          <button class="primary">发布公告</button>
-          <button>编辑公告</button>
-          <button>删除公告</button>
+          <button class="primary" @click="handlePublishNotice">发布公告</button>
+          <button @click="handleEditNotice">编辑公告</button>
+          <button @click="handleDeleteNotice">删除公告</button>
         </div>
       </article>
     </aside>

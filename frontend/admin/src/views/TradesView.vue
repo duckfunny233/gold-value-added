@@ -21,8 +21,10 @@ const controlItems = ref([])
 const monitorCards = ref([])
 const sessions = ref([])
 const syncOverview = ref({})
+const selectedTradeNo = ref('')
 const loading = ref(false)
 const error = ref('')
+const actionMessage = ref('')
 
 async function loadData() {
   loading.value = true
@@ -35,11 +37,44 @@ async function loadData() {
     monitorCards.value = data.monitorCards || []
     sessions.value = data.sessions || []
     syncOverview.value = data.syncOverview || {}
+    selectedTradeNo.value = trades.value[0]?.tradeNo || ''
   } catch (err) {
     error.value = err.message || '交易数据加载失败'
   } finally {
     loading.value = false
   }
+}
+
+function getSelectedTrade() {
+  return trades.value.find((item) => item.tradeNo === selectedTradeNo.value) || null
+}
+
+async function runAction(handler, successMessage) {
+  error.value = ''
+  actionMessage.value = ''
+  try {
+    await handler()
+    actionMessage.value = successMessage
+    await loadData()
+  } catch (err) {
+    error.value = err.message || '交易操作失败'
+  }
+}
+
+async function handlePauseTrading() {
+  await runAction(() => AdminService.pauseTrading(), '全站停盘已执行')
+}
+
+async function handleResumeTrading() {
+  await runAction(() => AdminService.resumeTrading(), '交易已恢复')
+}
+
+async function handleRetrySync() {
+  const selected = getSelectedTrade()
+  await runAction(
+    () => AdminService.retryTradeSync(selected ? { tradeNo: selected.tradeNo } : {}),
+    selected ? `已重试交易 ${selected.tradeNo} 的同步` : '已重试全部待同步交易',
+  )
 }
 
 onMounted(loadData)
@@ -73,11 +108,12 @@ onMounted(loadData)
     <div class="actions">
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查询' }}</button>
       <button @click="loadData" :disabled="loading">刷新状态</button>
-      <button class="warn">全站停盘</button>
-      <button>恢复交易</button>
-      <button>重试同步</button>
+      <button class="warn" @click="handlePauseTrading">全站停盘</button>
+      <button @click="handleResumeTrading">恢复交易</button>
+      <button @click="handleRetrySync">重试同步</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
+    <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
   </section>
 
   <section class="grid-4">
@@ -109,7 +145,12 @@ onMounted(loadData)
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in trades" :key="row.tradeNo">
+          <tr
+            v-for="row in trades"
+            :key="row.tradeNo"
+            @click="selectedTradeNo = row.tradeNo"
+            :class="{ 'is-selected': selectedTradeNo === row.tradeNo }"
+          >
             <td>{{ row.tradeNo }}</td>
             <td>{{ row.tradeType }}</td>
             <td>{{ row.uid }}</td>

@@ -17,8 +17,10 @@ const activeRecordTab = ref('recharge')
 const rows = ref([])
 const selectedUser = ref({})
 const relatedRecords = ref({ recharge: [], withdraw: [], trade: [], audit: [] })
+const selectedUid = ref('')
 const loading = ref(false)
 const error = ref('')
+const actionMessage = ref('')
 
 useQueryFilters(filters, ['userId', 'uid', 'sequenceNo', 'realNameStatus', 'rechargeStatus', 'withdrawStatus'])
 
@@ -30,11 +32,135 @@ async function loadData() {
     rows.value = data.rows || []
     selectedUser.value = data.selectedUser || {}
     relatedRecords.value = data.relatedRecords || { recharge: [], withdraw: [], trade: [], audit: [] }
+    selectedUid.value = data.selectedUser?.uid || rows.value[0]?.uid || ''
   } catch (err) {
     error.value = err.message || '用户数据加载失败'
   } finally {
     loading.value = false
   }
+}
+
+function escapeCsv(value) {
+  const normalized = value == null ? '' : String(value)
+  const escaped = normalized.replace(/"/g, '""')
+  return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped
+}
+
+function downloadCsv(fileName, rowsToExport) {
+  if (!rowsToExport.length) {
+    error.value = '暂无可导出的用户数据'
+    return
+  }
+  const headers = Object.keys(rowsToExport[0])
+  const content = [
+    headers.join(','),
+    ...rowsToExport.map((row) => headers.map((header) => escapeCsv(row[header])).join(',')),
+  ].join('\n')
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+async function selectUser(uid) {
+  selectedUid.value = uid
+  loading.value = true
+  error.value = ''
+  try {
+    const data = await AdminService.getUsers({ ...filters, uid })
+    rows.value = data.rows || []
+    selectedUser.value = data.selectedUser || {}
+    relatedRecords.value = data.relatedRecords || { recharge: [], withdraw: [], trade: [], audit: [] }
+  } catch (err) {
+    error.value = err.message || '用户详情加载失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function runAction(handler, successMessage) {
+  error.value = ''
+  actionMessage.value = ''
+  try {
+    await handler()
+    actionMessage.value = successMessage
+    await loadData()
+  } catch (err) {
+    error.value = err.message || '用户操作失败'
+  }
+}
+
+async function handleViewDetail() {
+  const uid = selectedUid.value || selectedUser.value.uid
+  if (!uid) {
+    error.value = '请先选中一位用户'
+    return
+  }
+  await selectUser(uid)
+  actionMessage.value = `已刷新用户 ${uid} 的详情`
+}
+
+async function handleFreezeUser() {
+  const uid = selectedUid.value || selectedUser.value.uid
+  if (!uid) {
+    error.value = '请先选中一位用户'
+    return
+  }
+  await runAction(() => AdminService.freezeUser(uid), `用户 ${uid} 已冻结`)
+}
+
+async function handleUnfreezeUser() {
+  const uid = selectedUid.value || selectedUser.value.uid
+  if (!uid) {
+    error.value = '请先选中一位用户'
+    return
+  }
+  await runAction(() => AdminService.unfreezeUser(uid), `用户 ${uid} 已解冻`)
+}
+
+async function handleManualCheck() {
+  const uid = selectedUid.value || selectedUser.value.uid
+  if (!uid) {
+    error.value = '请先选中一位用户'
+    return
+  }
+  const note = window.prompt('请输入人工核查备注', '后台人工核查')
+  if (note === null) return
+  await runAction(() => AdminService.manualCheckUser(uid, { note }), `用户 ${uid} 的人工核查已登记`)
+}
+
+function handleExportUsers() {
+  downloadCsv(
+    `admin-users-${Date.now()}.csv`,
+    rows.value.map((item) => ({
+      userId: item.userId,
+      uid: item.uid,
+      sequenceNo: item.sequenceNo,
+      nickname: item.nickname,
+      realNameStatus: item.realNameStatus,
+      rechargeStatus: item.rechargeStatus,
+      withdrawStatus: item.withdrawStatus,
+      cashAsset: item.cashAsset,
+      goldHoldingGrams: item.goldHoldingGrams,
+      totalAsset: item.totalAsset,
+      userStatus: item.userStatus,
+    })),
+  )
+  actionMessage.value = '用户列表已基于真实查询结果导出'
+}
+
+async function handleVerifyPayouts() {
+  const uid = selectedUid.value || selectedUser.value.uid || filters.uid
+  if (uid) {
+    await selectUser(uid)
+    actionMessage.value = `已重新核对 ${uid} 的收款信息摘要`
+    return
+  }
+  await loadData()
+  actionMessage.value = '已按当前筛选条件重新校验收款信息'
 }
 
 onMounted(loadData)
@@ -59,10 +185,11 @@ onMounted(loadData)
     </div>
     <div class="actions">
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查询' }}</button>
-      <button>导出用户</button>
-      <button>批量校验收款信息</button>
+      <button @click="handleExportUsers">导出用户</button>
+      <button @click="handleVerifyPayouts">批量校验收款信息</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
+    <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
   </section>
 
   <section class="split-main-aside">
@@ -87,7 +214,12 @@ onMounted(loadData)
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in rows" :key="row.userId">
+          <tr
+            v-for="row in rows"
+            :key="row.userId"
+            @click="selectUser(row.uid)"
+            :class="{ 'is-selected': selectedUid === row.uid }"
+          >
             <td>{{ row.userId }}</td>
             <td>{{ row.uid }}</td>
             <td>{{ row.sequenceNo }}</td>
@@ -116,10 +248,10 @@ onMounted(loadData)
         <div class="kv-item"><strong>最近追踪号</strong><span>{{ selectedUser.latestTraceId }}</span></div>
       </div>
       <div class="actions">
-        <button class="primary">查看详情</button>
-        <button class="warn">冻结用户</button>
-        <button>解冻用户</button>
-        <button>人工核查</button>
+        <button class="primary" @click="handleViewDetail">查看详情</button>
+        <button class="warn" @click="handleFreezeUser">冻结用户</button>
+        <button @click="handleUnfreezeUser">解冻用户</button>
+        <button @click="handleManualCheck">人工核查</button>
       </div>
     </aside>
   </section>

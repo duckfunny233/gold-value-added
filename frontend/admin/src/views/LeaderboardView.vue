@@ -17,6 +17,32 @@ const rows = ref([])
 const monitors = ref([])
 const loading = ref(false)
 const error = ref('')
+const actionMessage = ref('')
+
+function escapeCsv(value) {
+  const normalized = value == null ? '' : String(value)
+  const escaped = normalized.replace(/"/g, '""')
+  return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped
+}
+
+function downloadCsv(fileName, items) {
+  if (!items.length) {
+    error.value = '暂无可导出的排行榜数据'
+    return
+  }
+  const headers = Object.keys(items[0])
+  const content = [
+    headers.join(','),
+    ...items.map((row) => headers.map((header) => escapeCsv(row[header])).join(',')),
+  ].join('\n')
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  link.click()
+  URL.revokeObjectURL(url)
+}
 
 async function loadData() {
   loading.value = true
@@ -30,6 +56,55 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+}
+
+async function runAction(handler, successMessage) {
+  error.value = ''
+  actionMessage.value = ''
+  try {
+    await handler()
+    actionMessage.value = successMessage
+    await loadData()
+  } catch (err) {
+    error.value = err.message || '排行榜治理操作失败'
+  }
+}
+
+async function handleUpdateRule() {
+  await runAction(
+    () => AdminService.updateLeaderboardRule(filters.sortRule),
+    '排行榜规则已更新',
+  )
+}
+
+async function handleRebuild() {
+  await runAction(
+    () => AdminService.rebuildLeaderboard({ sortRule: filters.sortRule }),
+    '排行榜已触发重排',
+  )
+}
+
+async function handleRetrySync() {
+  await runAction(
+    () => AdminService.retryLeaderboardSync({ sortRule: filters.sortRule }),
+    '排行榜异常同步已重试',
+  )
+}
+
+function handleExport() {
+  downloadCsv(
+    `leaderboard-${filters.sortRule}-${Date.now()}.csv`,
+    rows.value.map((item) => ({
+      rank: item.rank,
+      uid: item.uid,
+      nickname: item.nickname,
+      goldHoldingGrams: item.goldHoldingGrams,
+      totalAsset: item.totalAsset,
+      syncStatus: item.syncStatus,
+      updatedAt: item.updatedAt,
+    })),
+  )
+  actionMessage.value = '排行榜已基于真实查询结果导出'
 }
 
 onMounted(loadData)
@@ -67,11 +142,12 @@ onMounted(loadData)
     </div>
     <div class="actions">
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '校验规则' }}</button>
-      <button>更新排序规则</button>
-      <button>重建排行榜</button>
-      <button>导出</button>
+      <button @click="handleUpdateRule">更新排序规则</button>
+      <button @click="handleRebuild">重建排行榜</button>
+      <button @click="handleExport">导出</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
+    <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
   </section>
 
   <section class="split-main-aside">
@@ -119,7 +195,7 @@ onMounted(loadData)
           </div>
         </div>
         <div class="actions">
-          <button class="primary">处理异常</button>
+          <button class="primary" @click="handleRetrySync">处理异常</button>
         </div>
       </article>
     </aside>

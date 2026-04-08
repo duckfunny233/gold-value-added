@@ -23,8 +23,10 @@ const rechargeRows = ref([])
 const withdrawRows = ref([])
 const ledgerRows = ref([])
 const reconcileItems = ref([])
+const selectedWithdrawalId = ref('')
 const loading = ref(false)
 const error = ref('')
+const actionMessage = ref('')
 
 useQueryFilters(filters, ['orderType', 'uid', 'channel', 'status', 'timeRange'])
 
@@ -38,11 +40,138 @@ async function loadData() {
     withdrawRows.value = data.withdrawRows || []
     ledgerRows.value = data.ledgerRows || []
     reconcileItems.value = data.reconcileItems || []
+    selectedWithdrawalId.value = withdrawRows.value[0]?.orderId || ''
   } catch (err) {
     error.value = err.message || '资金数据加载失败'
   } finally {
     loading.value = false
   }
+}
+
+function getSelectedWithdrawal() {
+  return withdrawRows.value.find((item) => item.orderId === selectedWithdrawalId.value) || null
+}
+
+async function runAction(handler, successMessage) {
+  error.value = ''
+  actionMessage.value = ''
+  try {
+    await handler()
+    actionMessage.value = successMessage
+    await loadData()
+  } catch (err) {
+    error.value = err.message || '资金操作失败'
+  }
+}
+
+async function handleExport() {
+  await runAction(async () => {
+    const job = await AdminService.generateReport({
+      reportType: 'finance',
+      timeRange: filters.timeRange,
+      uid: filters.uid,
+      channel: filters.channel,
+      format: 'csv',
+    })
+    await AdminService.exportReportJob(job.jobId, { format: 'csv' })
+  }, '已通过报表任务导出资金数据')
+}
+
+async function handleApproveWithdrawal() {
+  const selected = getSelectedWithdrawal()
+  if (!selected) {
+    error.value = '请先选中一条提现单'
+    return
+  }
+  await runAction(() => AdminService.approveWithdrawal(selected.orderId), '提现单已进入转账处理中')
+}
+
+async function handleRejectWithdrawal() {
+  const selected = getSelectedWithdrawal()
+  if (!selected) {
+    error.value = '请先选中一条提现单'
+    return
+  }
+  if (!window.confirm(`确认拒绝提现单 ${selected.orderId} 吗？`)) {
+    return
+  }
+  await runAction(() => AdminService.rejectWithdrawal(selected.orderId), '提现单已拒绝并回补资产')
+}
+
+async function handleConfirmWithdrawal() {
+  const selected = getSelectedWithdrawal()
+  if (!selected) {
+    error.value = '请先选中一条提现单'
+    return
+  }
+  await runAction(() => AdminService.confirmWithdrawalCompleted(selected.orderId), '提现单已确认完成')
+}
+
+async function handleMuteAlert() {
+  const selected = getSelectedWithdrawal()
+  if (!selected) {
+    error.value = '请先选中一条提现单'
+    return
+  }
+  await runAction(() => AdminService.muteWithdrawalAlert(selected.orderId), '提现提醒已静音')
+}
+
+async function handleManualTransfer() {
+  const uid = window.prompt('请输入目标用户 UID')
+  if (!uid) return
+  const amount = Number(window.prompt('请输入转账金额（正数）', '100'))
+  if (!amount || amount <= 0) return
+  const direction = window.prompt('请输入方向 increase/decrease', 'increase')
+  if (!direction) return
+  const reason = window.prompt('请输入转账原因', '后台手工转账')
+  if (!reason) return
+  const key = `manual-transfer-${Date.now()}`
+  await runAction(
+    () =>
+      AdminService.manualTransfer(
+        { uid, amount, direction, reason, clientRequestId: key },
+        key,
+      ),
+    '手工转账已完成',
+  )
+}
+
+async function handleManualTopup() {
+  const uid = window.prompt('请输入目标用户 UID')
+  if (!uid) return
+  const amount = Number(window.prompt('请输入补款金额（正数）', '100'))
+  if (!amount || amount <= 0) return
+  const reason = window.prompt('请输入补款原因', '异常补款处理')
+  if (!reason) return
+  const key = `manual-adjust-topup-${Date.now()}`
+  await runAction(
+    () =>
+      AdminService.manualAdjust(
+        { uid, amount, direction: 'increase', reason, clientRequestId: key },
+        key,
+      ),
+    '补款处理已完成',
+  )
+}
+
+async function handleAssetAdjust() {
+  const uid = window.prompt('请输入目标用户 UID')
+  if (!uid) return
+  const amount = Number(window.prompt('请输入调整金额（正数）', '100'))
+  if (!amount || amount <= 0) return
+  const direction = window.prompt('请输入方向 increase/decrease', 'decrease')
+  if (!direction) return
+  const reason = window.prompt('请输入调整原因', '后台资产调整')
+  if (!reason) return
+  const key = `manual-adjust-${Date.now()}`
+  await runAction(
+    () =>
+      AdminService.manualAdjust(
+        { uid, amount, direction, reason, clientRequestId: key },
+        key,
+      ),
+    '资产调整已完成',
+  )
 }
 
 onMounted(loadData)
@@ -86,9 +215,10 @@ onMounted(loadData)
     </div>
     <div class="actions">
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查询' }}</button>
-      <button>导出</button>
+      <button @click="handleExport">导出</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
+    <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
   </section>
 
   <section class="grid-4">
@@ -158,7 +288,12 @@ onMounted(loadData)
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in withdrawRows" :key="row.orderId">
+            <tr
+              v-for="row in withdrawRows"
+              :key="row.orderId"
+              @click="selectedWithdrawalId = row.orderId"
+              :class="{ 'is-selected': selectedWithdrawalId === row.orderId }"
+            >
               <td>{{ row.orderId }}</td>
               <td>{{ row.uid }}</td>
               <td>{{ row.nickname }}</td>
@@ -171,9 +306,10 @@ onMounted(loadData)
           </tbody>
         </table>
         <div class="actions">
-          <button class="primary">通过提现</button>
-          <button class="warn">拒绝提现</button>
-          <button>确认到账</button>
+          <button class="primary" @click="handleApproveWithdrawal">通过提现</button>
+          <button class="warn" @click="handleRejectWithdrawal">拒绝提现</button>
+          <button @click="handleConfirmWithdrawal">确认到账</button>
+          <button @click="handleMuteAlert">静音提醒</button>
         </div>
       </div>
     </article>
@@ -190,9 +326,9 @@ onMounted(loadData)
           <div class="kv-item"><strong>资产调整</strong><span>手工资产调整，需保留操作人和原因</span></div>
         </div>
         <div class="actions">
-          <button class="primary">手工转账</button>
-          <button>补款处理</button>
-          <button>资产调整</button>
+          <button class="primary" @click="handleManualTransfer">手工转账</button>
+          <button @click="handleManualTopup">补款处理</button>
+          <button @click="handleAssetAdjust">资产调整</button>
         </div>
       </article>
 

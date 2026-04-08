@@ -1,12 +1,16 @@
-import { Body, Controller, Get, HttpCode, Post, Query, Req } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Req } from '@nestjs/common'
 import { ApiTags } from '@nestjs/swagger'
 import { Request } from 'express'
 import { AdminProtected } from '../admin-auth/admin-protected.decorator'
-import { DashboardQueryDto, PublishNoticeDto } from './dashboard.dto'
+import { DashboardQueryDto, PublishNoticeDto, UpdateNoticeDto } from './dashboard.dto'
 import { DashboardService } from './dashboard.service'
 
 type TraceableRequest = Request & {
   traceId?: string
+  user?: {
+    adminUserId: string
+    username: string
+  }
 }
 
 @ApiTags('Dashboard')
@@ -37,13 +41,45 @@ export class DashboardController {
   @HttpCode(200)
   @AdminProtected()
   async publishNotice(@Body() body: PublishNoticeDto, @Req() req: TraceableRequest) {
-    const notice = await this.dashboardService.publishNotice(body)
+    const notice = await this.dashboardService.publishNotice(body, this.requireAdmin(req))
 
     return {
       code: 200,
       message: '公告发布成功',
       traceId: req.traceId,
       data: notice,
+    }
+  }
+
+  @Patch('admin/dashboard/notices/:noticeId')
+  @HttpCode(200)
+  @AdminProtected()
+  async updateNotice(
+    @Param('noticeId') noticeId: string,
+    @Body() body: UpdateNoticeDto,
+    @Req() req: TraceableRequest,
+  ) {
+    const notice = await this.dashboardService.updateNotice(noticeId, body, this.requireAdmin(req))
+
+    return {
+      code: 200,
+      message: '公告编辑成功',
+      traceId: req.traceId,
+      data: notice,
+    }
+  }
+
+  @Delete('admin/dashboard/notices/:noticeId')
+  @HttpCode(200)
+  @AdminProtected()
+  async deleteNotice(@Param('noticeId') noticeId: string, @Req() req: TraceableRequest) {
+    const result = await this.dashboardService.deleteNotice(noticeId, this.requireAdmin(req))
+
+    return {
+      code: 200,
+      message: '公告删除成功',
+      traceId: req.traceId,
+      data: result,
     }
   }
 
@@ -74,6 +110,13 @@ export class DashboardController {
         notices,
       },
       text: firstText,
+    }
+  }
+
+  private requireAdmin(req: TraceableRequest) {
+    return {
+      adminUserId: req.user?.adminUserId || 'admin-local',
+      username: req.user?.username || 'admin',
     }
   }
 }

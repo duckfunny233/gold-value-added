@@ -51,3 +51,10 @@ export class AdminUsersQueryDto {
   @IsIn(TIME_RANGES)
   timeRange?: (typeof TIME_RANGES)[number]
 }
+
+export class AdminUserManualCheckDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  note?: string
+}

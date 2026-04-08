@@ -8,6 +8,7 @@ import {
   WithdrawalOrder,
   WithdrawalStatus,
 } from '@prisma/client'
+import { randomUUID } from 'crypto'
 import {
   formatCurrency,
   formatDateTime,
@@ -17,8 +18,14 @@ import {
   toNumber,
   unique,
 } from '../../common/utils/admin-view.util'
+import { sha256 } from '../../common/utils/hash.util'
 import { PrismaService } from '../../prisma/prisma.service'
-import { AdminUsersQueryDto, UserQueryDto } from './user.dto'
+import { AdminUserManualCheckDto, AdminUsersQueryDto, UserQueryDto } from './user.dto'
+
+type AdminActor = {
+  adminUserId: string
+  username: string
+}
 
 @Injectable()
 export class UserService {
@@ -224,6 +231,68 @@ export class UserService {
         audit: selectedAudits.slice(0, 3).map((item) => {
           return `审计日志 ${item.traceId} / ${this.mapModuleLabel(item.module)} / ${this.mapAuditAction(item.action)}`
         }),
+      },
+    }
+  }
+
+  async manualCheckUser(uid: string, body: AdminUserManualCheckDto, actor: AdminActor) {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        uid,
+      },
+    })
+
+    if (!user) {
+      throw new NotFoundException('用户不存在')
+    }
+
+    const traceId = randomUUID()
+    await this.prisma.$transaction(async (tx) => {
+      const payload = {
+        uid,
+        note: body.note?.trim() || '已通过后台人工核查入口发起复核',
+        result: '成功',
+      } as Prisma.InputJsonValue
+
+      await tx.adminOperationLog.create({
+        data: {
+          adminUserId: actor.adminUserId,
+          module: 'user',
+          action: 'user.manual-check',
+          traceId,
+          payload,
+        },
+      })
+
+      await tx.auditLog.create({
+        data: {
+          userId: user.id,
+          actorType: 'ADMIN',
+          actorId: actor.adminUserId,
+          module: 'user',
+          action: 'user.manual-check',
+          traceId,
+          payload,
+        },
+      })
+
+      await tx.hashRecord.create({
+        data: {
+          referenceType: 'USER_MANUAL_CHECK',
+          referenceId: user.id,
+          traceId,
+          sha256: sha256(`USER_MANUAL_CHECK:${user.id}:${traceId}:${JSON.stringify(payload)}`),
+          syncStatus: 'PENDING',
+        },
+      })
+    })
+
+    return {
+      message: '人工核查已登记',
+      data: {
+        uid,
+        traceId,
+        note: body.note?.trim() || '已通过后台人工核查入口发起复核',
       },
     }
   }

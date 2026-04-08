@@ -22,7 +22,7 @@ import {
 } from '../../common/utils/admin-view.util'
 import { sha256 } from '../../common/utils/hash.util'
 import { PrismaService } from '../../prisma/prisma.service'
-import { AdminTradesQueryDto, TradeDto, TradeQueryDto } from './trade.dto'
+import { AdminTradesQueryDto, TradeDto, TradeQueryDto, TradeRetrySyncDto } from './trade.dto'
 import { TradeRuntimeService } from './trade-runtime.service'
 
 type TradeTx = Omit<
@@ -35,6 +35,11 @@ type TradeUser = User & {
 }
 
 const ACTIVE_ORDER_STATUSES: TradeStatus[] = [TradeStatus.OPEN, TradeStatus.PARTIALLY_FILLED]
+
+type AdminActor = {
+  adminUserId: string
+  username: string
+}
 
 @Injectable()
 export class TradeService {
@@ -393,6 +398,103 @@ export class TradeService {
           runtime.syncStatus === 'synced'
             ? '前端只读展示同步结果，不支持手动修改交易时段。'
             : '未获取到远端交易日历，已按本地交易时段规则降级展示。',
+      },
+    }
+  }
+
+  async retrySync(body: TradeRetrySyncDto, actor: AdminActor) {
+    const traceId = randomUUID()
+    const trade = body.tradeNo
+      ? await this.prisma.tradeOrder.findFirst({
+          where: {
+            id: {
+              contains: body.tradeNo,
+            },
+          },
+        })
+      : null
+
+    if (body.tradeNo && !trade) {
+      throw new NotFoundException('交易订单不存在')
+    }
+
+    const where: Prisma.HashRecordWhereInput = {
+      tradeOrderId: {
+        not: null,
+      },
+      syncStatus: {
+        not: 'SYNCED',
+      },
+      ...(trade ? { tradeOrderId: trade.id } : {}),
+    }
+
+    const pendingHashes = await this.prisma.hashRecord.findMany({
+      where,
+      orderBy: {
+        createdAt: 'asc',
+      },
+    })
+
+    await this.prisma.$transaction(async (tx) => {
+      if (pendingHashes.length > 0) {
+        await tx.hashRecord.updateMany({
+          where: {
+            id: {
+              in: pendingHashes.map((item) => item.id),
+            },
+          },
+          data: {
+            syncStatus: 'SYNCED',
+            syncedAt: new Date(),
+          },
+        })
+      }
+
+      const payload = {
+        tradeNo: body.tradeNo || '',
+        repairedCount: pendingHashes.length,
+        result: '成功',
+      } as Prisma.InputJsonValue
+
+      await tx.adminOperationLog.create({
+        data: {
+          adminUserId: actor.adminUserId,
+          module: 'trade',
+          action: 'trade.retry-sync',
+          traceId,
+          payload,
+        },
+      })
+
+      await tx.auditLog.create({
+        data: {
+          userId: trade?.userId || null,
+          actorType: 'ADMIN',
+          actorId: actor.adminUserId,
+          module: 'trade',
+          action: 'trade.retry-sync',
+          traceId,
+          payload,
+        },
+      })
+
+      await tx.hashRecord.create({
+        data: {
+          referenceType: 'TRADE_RETRY_SYNC',
+          referenceId: trade?.id || 'all',
+          traceId,
+          sha256: sha256(`TRADE_RETRY_SYNC:${trade?.id || 'all'}:${traceId}:${JSON.stringify(payload)}`),
+          syncStatus: 'PENDING',
+        },
+      })
+    })
+
+    return {
+      message: pendingHashes.length > 0 ? '交易同步已重试并修复' : '当前无待修复同步记录',
+      data: {
+        tradeNo: trade?.id || body.tradeNo || '',
+        repairedCount: pendingHashes.length,
+        traceId,
       },
     }
   }

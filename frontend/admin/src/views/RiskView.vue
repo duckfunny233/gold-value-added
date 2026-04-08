@@ -19,8 +19,10 @@ const riskRows = ref([])
 const warnings = ref([])
 const logs = ref([])
 const tradingFlowLabel = ref('')
+const selectedUid = ref('')
 const loading = ref(false)
 const error = ref('')
+const actionMessage = ref('')
 
 async function loadData() {
   loading.value = true
@@ -32,10 +34,107 @@ async function loadData() {
     warnings.value = data.warnings || []
     logs.value = data.logs || []
     tradingFlowLabel.value = data.tradingFlowLabel || ''
+    selectedUid.value = riskRows.value[0]?.uid || filters.uid || ''
   } catch (err) {
     error.value = err.message || '风控数据加载失败'
   } finally {
     loading.value = false
+  }
+}
+
+function currentUid() {
+  return selectedUid.value || filters.uid
+}
+
+async function runAction(handler, successMessage) {
+  error.value = ''
+  actionMessage.value = ''
+  try {
+    await handler()
+    actionMessage.value = successMessage
+    await loadData()
+  } catch (err) {
+    error.value = err.message || '风控操作失败'
+  }
+}
+
+async function handleFreezeUser() {
+  const uid = currentUid()
+  if (!uid) {
+    error.value = '请先输入或选中用户 UID'
+    return
+  }
+  await runAction(() => AdminService.freezeUser(uid), `用户 ${uid} 已冻结`)
+}
+
+async function handleUnfreezeUser() {
+  const uid = currentUid()
+  if (!uid) {
+    error.value = '请先输入或选中用户 UID'
+    return
+  }
+  await runAction(() => AdminService.unfreezeUser(uid), `用户 ${uid} 已解冻`)
+}
+
+async function handlePauseTrading() {
+  await runAction(() => AdminService.pauseTrading(), '全站停盘已执行')
+}
+
+async function handleResumeTrading() {
+  await runAction(() => AdminService.resumeTrading(), '交易已恢复')
+}
+
+async function handleUpdateRules() {
+  try {
+    const currentRules = await AdminService.getRiskRules()
+    const withdrawInterceptEnabled =
+      window.prompt(
+        '提现拦截开关 true/false',
+        currentRules.withdrawInterceptEnabled ? 'true' : 'false',
+      ) || ''
+    const singleWithdrawalLimit = window.prompt(
+      '单笔提现上限',
+      String(currentRules.singleWithdrawalLimit ?? 0),
+    )
+    const dailyWithdrawalLimit = window.prompt(
+      '日提现上限',
+      String(currentRules.dailyWithdrawalLimit ?? 0),
+    )
+    const abnormalTradeThreshold = window.prompt(
+      '异常交易阈值',
+      String(currentRules.abnormalTradeThreshold ?? 0),
+    )
+    const blacklistUids = window.prompt(
+      '黑名单 UID，多个用英文逗号分隔',
+      (currentRules.blacklistUids || []).join(','),
+    )
+
+    if (
+      withdrawInterceptEnabled === '' ||
+      singleWithdrawalLimit === null ||
+      dailyWithdrawalLimit === null ||
+      abnormalTradeThreshold === null ||
+      blacklistUids === null
+    ) {
+      return
+    }
+
+    await runAction(
+      () =>
+        AdminService.updateRiskRules({
+          withdrawInterceptEnabled: withdrawInterceptEnabled === 'true',
+          singleWithdrawalLimit: Number(singleWithdrawalLimit),
+          dailyWithdrawalLimit: Number(dailyWithdrawalLimit),
+          abnormalTradeThreshold: Number(abnormalTradeThreshold),
+          blacklistUids: blacklistUids
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+        }),
+      '风控规则与黑名单已更新',
+    )
+  } catch (err) {
+    error.value = err.message || '风控规则加载失败'
   }
 }
 
@@ -78,11 +177,12 @@ onMounted(loadData)
     </div>
     <div class="actions">
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '分配角色' }}</button>
-      <button class="warn">冻结用户</button>
-      <button>解冻用户</button>
-      <button>更新风控规则</button>
+      <button class="warn" @click="handleFreezeUser">冻结用户</button>
+      <button @click="handleUnfreezeUser">解冻用户</button>
+      <button @click="handleUpdateRules">更新风控规则</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
+    <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
   </section>
 
   <section class="split-main-aside">
@@ -116,8 +216,8 @@ onMounted(loadData)
           <span class="muted">{{ tradingFlowLabel }}</span>
         </div>
         <div class="actions compact">
-          <button class="warn">全站停盘</button>
-          <button>恢复交易</button>
+          <button class="warn" @click="handlePauseTrading">全站停盘</button>
+          <button @click="handleResumeTrading">恢复交易</button>
         </div>
         <ul class="list-plain">
           <li v-for="item in warnings" :key="item">{{ item }}</li>
@@ -143,7 +243,12 @@ onMounted(loadData)
         </tr>
       </thead>
       <tbody>
-        <tr v-for="row in riskRows" :key="`${row.uid}-${row.updatedAt}`">
+        <tr
+          v-for="row in riskRows"
+          :key="`${row.uid}-${row.updatedAt}`"
+          @click="selectedUid = row.uid"
+          :class="{ 'is-selected': selectedUid === row.uid }"
+        >
           <td>{{ row.uid }}</td>
           <td>{{ row.nickname }}</td>
           <td>{{ row.userStatus }}</td>

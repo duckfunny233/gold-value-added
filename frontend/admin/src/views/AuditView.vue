@@ -16,8 +16,10 @@ useQueryFilters(filters, ['traceId', 'uid', 'module', 'eventType', 'timeRange'])
 
 const rows = ref([])
 const detailItems = ref([])
+const selectedTraceId = ref('')
 const loading = ref(false)
 const error = ref('')
+const actionMessage = ref('')
 
 async function loadData() {
   loading.value = true
@@ -26,11 +28,72 @@ async function loadData() {
     const data = await AdminService.getAudit(filters)
     rows.value = data.rows || []
     detailItems.value = data.detailItems || []
+    selectedTraceId.value = rows.value[0]?.traceId || ''
   } catch (err) {
     error.value = err.message || '审计数据加载失败'
   } finally {
     loading.value = false
   }
+}
+
+function getCurrentTraceId() {
+  return selectedTraceId.value || filters.traceId || rows.value[0]?.traceId || ''
+}
+
+async function loadTraceDetail(traceId) {
+  if (!traceId) {
+    error.value = '请先选择或输入 traceId'
+    return
+  }
+  selectedTraceId.value = traceId
+  try {
+    const detail = await AdminService.getAuditTrace(traceId)
+    detailItems.value = AdminService.mapAuditTraceToDetailItems(detail)
+  } catch (err) {
+    error.value = err.message || 'trace 详情加载失败'
+  }
+}
+
+async function runAction(handler, successMessage) {
+  error.value = ''
+  actionMessage.value = ''
+  try {
+    await handler()
+    actionMessage.value = successMessage
+    if (getCurrentTraceId()) {
+      await loadTraceDetail(getCurrentTraceId())
+    }
+  } catch (err) {
+    error.value = err.message || '审计操作失败'
+  }
+}
+
+async function handleVerifyHash() {
+  const traceId = getCurrentTraceId()
+  if (!traceId) {
+    error.value = '请先选择一条链路'
+    return
+  }
+  await runAction(() => AdminService.verifyAuditTraceHash(traceId), `trace ${traceId} 哈希校验已完成`)
+}
+
+async function handleExportTrace() {
+  const traceId = getCurrentTraceId()
+  if (!traceId) {
+    error.value = '请先选择一条链路'
+    return
+  }
+  await runAction(() => AdminService.exportAuditTrace(traceId, 'csv'), `trace ${traceId} 已导出`)
+}
+
+async function handleCompareData() {
+  const traceId = getCurrentTraceId()
+  if (!traceId) {
+    error.value = '请先选择一条链路'
+    return
+  }
+  await loadTraceDetail(traceId)
+  actionMessage.value = `trace ${traceId} 链路详情已刷新`
 }
 
 onMounted(loadData)
@@ -65,11 +128,12 @@ onMounted(loadData)
     </div>
     <div class="actions">
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查看链路' }}</button>
-      <button>导出链路</button>
-      <button>校验哈希</button>
-      <button>对比数据</button>
+      <button @click="handleExportTrace">导出链路</button>
+      <button @click="handleVerifyHash">校验哈希</button>
+      <button @click="handleCompareData">对比数据</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
+    <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
   </section>
 
   <section class="split-main-aside">
@@ -91,7 +155,12 @@ onMounted(loadData)
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in rows" :key="row.traceId">
+          <tr
+            v-for="row in rows"
+            :key="row.traceId"
+            @click="loadTraceDetail(row.traceId)"
+            :class="{ 'is-selected': selectedTraceId === row.traceId }"
+          >
             <td>{{ row.traceId }}</td>
             <td>{{ row.module }}</td>
             <td>{{ row.eventType }}</td>

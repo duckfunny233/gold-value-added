@@ -539,6 +539,104 @@ npm --prefix backend run build
 npm --prefix backend run test -- --runInBand
 ```
 
+## 接口-数据库收口联调 V2
+
+本轮联调以 `frontend/admin` 现有页面为准，当前已经统一收口到真实 PostgreSQL / Prisma 数据，不再允许前端落回本地 mock。
+
+1. 前端 admin 服务层
+   - `frontend/admin/src/services/admin.js` 已移除本地 mock fallback。
+   - 所有后台读接口改为真实请求失败即报错提示，不再使用 `frontend/shared/mocks/admin.js` 兜底。
+
+2. 已补齐的后台动作接口
+   - 仪表盘
+     - `POST /api/admin/dashboard/notices`
+     - `PATCH /api/admin/dashboard/notices/:noticeId`
+     - `DELETE /api/admin/dashboard/notices/:noticeId`
+     - `POST /api/admin/trades/pause`
+     - `POST /api/admin/trades/resume`
+   - 资金管理
+     - `POST /api/admin/funds/withdrawals/:orderId/approve`
+     - `POST /api/admin/funds/withdrawals/:orderId/reject`
+     - `POST /api/admin/funds/withdrawals/:orderId/confirm-completed`
+     - `POST /api/admin/funds/withdrawals/:orderId/mute-alert`
+     - `POST /api/admin/funds/manual-transfer`
+     - `POST /api/admin/funds/manual-adjust`
+   - 交易管理
+     - `POST /api/admin/trades/retry-sync`
+   - 用户管理
+     - `POST /api/admin/users/:uid/freeze`
+     - `POST /api/admin/users/:uid/unfreeze`
+     - `POST /api/admin/users/:uid/manual-check`
+   - 排行榜治理
+     - `POST /api/admin/leaderboard/rule`
+     - `POST /api/admin/leaderboard/rebuild`
+     - `POST /api/admin/leaderboard/retry-sync`
+   - 风控
+     - `GET /api/admin/risk/rules`
+     - `POST /api/admin/risk/rules`
+   - 报表
+     - `POST /api/admin/reports/generate`
+     - `GET /api/admin/reports/jobs`
+     - `GET /api/admin/reports/jobs/:jobId`
+     - `POST /api/admin/reports/jobs/:jobId/export`
+     - `POST /api/admin/reports/templates`
+     - `GET /api/admin/reports/templates`
+   - 审计
+     - `GET /api/admin/audit/trace/:traceId`
+     - `POST /api/admin/audit/trace/:traceId/verify-hash`
+     - `GET /api/admin/audit/trace/:traceId/export`
+
+3. 本轮动作落库位置
+   - 公告发布 / 编辑 / 删除
+     - `Notice`
+     - `AdminOperationLog`
+     - `AuditLog`
+     - `HashRecord`
+   - 提现审核、静音、手工转账、补款、资产调整
+     - `WithdrawalOrder`
+     - `Asset`
+     - `LedgerEntry`
+     - `AdminOperationLog`
+     - `AuditLog`
+     - `HashRecord`
+   - 交易重试同步
+     - `HashRecord`
+     - `AdminOperationLog`
+     - `AuditLog`
+   - 用户人工核查 / 冻结 / 解冻
+     - `User`
+     - `AdminOperationLog`
+     - `AuditLog`
+     - `HashRecord`
+   - 报表任务与导出
+     - `ReportJob`
+     - `ReportArtifact`
+     - `ReportTemplate`
+     - `AdminOperationLog`
+     - `AuditLog`
+     - `HashRecord`
+   - 审计 trace 校验与导出
+     - `AdminOperationLog`
+     - `AuditLog`
+     - `HashRecord`
+
+4. 关键状态流转保持不变
+   - 充值：`PENDING/PROCESSING -> COMPLETED`
+   - 提现：`PENDING -> REVIEWING -> COMPLETED`，或 `PENDING/REVIEWING -> REJECTED`
+   - 提现提醒：`ringing / muted / stopped`
+   - 排行榜任务：`REBUILDING -> SYNCED/FAILED`
+   - 报表任务：`PENDING -> RUNNING -> SUCCEEDED/FAILED`
+   - 交易时段与停盘控制：仍以 `TradeRuntimeService + system_config` 为准
+   - 哈希审计：仍统一使用 64 位 `SHA-256`
+
+5. 验证命令
+
+```powershell
+npm --prefix backend run build
+npm --prefix backend run test -- --runInBand
+npm --prefix frontend/admin run build
+```
+
 ## 开发软件
 
 推荐你本地准备这些工具：

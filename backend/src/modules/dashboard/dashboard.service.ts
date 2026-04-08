@@ -1,11 +1,13 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, NotFoundException } from '@nestjs/common'
 import {
   NoticeStatus,
+  Prisma,
   RechargeStatus,
   TradeStatus,
   UserStatus,
   WithdrawalStatus,
 } from '@prisma/client'
+import { randomUUID } from 'crypto'
 import {
   DEFAULT_LOCAL_NOTICE,
   DASHBOARD_RULE_REMINDERS,
@@ -23,7 +25,13 @@ import {
 } from './dashboard.types'
 import { formatDateTime, formatTime, trimText } from './dashboard.utils'
 import { NewsFeedService } from './news-feed.service'
+import { sha256 } from '../../common/utils/hash.util'
 import { PrismaService } from '../../prisma/prisma.service'
+
+type AdminActor = {
+  adminUserId: string
+  username: string
+}
 
 @Injectable()
 export class DashboardService {
@@ -92,15 +100,34 @@ export class DashboardService {
     }
   }
 
-  async publishNotice(body: PublishNoticeDto) {
-    const created = await this.prisma.notice.create({
-      data: {
-        title: body.title.trim(),
-        content: body.content.trim(),
-        sortOrder: body.sortOrder ?? 0,
-        status: NoticeStatus.PUBLISHED,
-        publishedAt: new Date(),
-      },
+  async publishNotice(body: PublishNoticeDto, actor: AdminActor) {
+    const traceId = randomUUID()
+    const created = await this.prisma.$transaction(async (tx) => {
+      const notice = await tx.notice.create({
+        data: {
+          title: body.title.trim(),
+          content: body.content.trim(),
+          sortOrder: body.sortOrder ?? 0,
+          status: NoticeStatus.PUBLISHED,
+          publishedAt: new Date(),
+        },
+      })
+
+      await this.writeNoticeLogs(tx, {
+        actor,
+        action: 'dashboard.notice.publish',
+        traceId,
+        referenceType: 'NOTICE_PUBLISH',
+        referenceId: notice.id,
+        payload: {
+          noticeId: notice.id,
+          title: notice.title,
+          status: notice.status,
+          result: '成功',
+        } as Prisma.InputJsonValue,
+      })
+
+      return notice
     })
 
     return {
@@ -110,6 +137,109 @@ export class DashboardService {
       status: NOTICE_STATUS_LABELS[created.status],
       publishAt: formatDateTime(created.publishedAt),
       pollingEnabled: '是',
+    }
+  }
+
+  async updateNotice(
+    noticeId: string,
+    body: { title: string; content: string; sortOrder?: number },
+    actor: AdminActor,
+  ) {
+    const existing = await this.prisma.notice.findUnique({
+      where: {
+        id: noticeId,
+      },
+    })
+
+    if (!existing) {
+      throw new NotFoundException('公告不存在')
+    }
+
+    const traceId = randomUUID()
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const notice = await tx.notice.update({
+        where: {
+          id: noticeId,
+        },
+        data: {
+          title: body.title.trim(),
+          content: body.content.trim(),
+          ...(typeof body.sortOrder === 'number' ? { sortOrder: body.sortOrder } : {}),
+        },
+      })
+
+      await this.writeNoticeLogs(tx, {
+        actor,
+        action: 'dashboard.notice.update',
+        traceId,
+        referenceType: 'NOTICE_UPDATE',
+        referenceId: notice.id,
+        payload: {
+          noticeId: notice.id,
+          before: {
+            title: existing.title,
+            content: existing.content,
+            sortOrder: existing.sortOrder,
+          },
+          after: {
+            title: notice.title,
+            content: notice.content,
+            sortOrder: notice.sortOrder,
+          },
+          result: '成功',
+        } as Prisma.InputJsonValue,
+      })
+
+      return notice
+    })
+
+    return {
+      id: updated.id,
+      title: updated.title,
+      content: updated.content,
+      status: NOTICE_STATUS_LABELS[updated.status],
+      publishAt: formatDateTime(updated.publishedAt),
+      pollingEnabled: updated.status === NoticeStatus.PUBLISHED ? '是' : '否',
+    }
+  }
+
+  async deleteNotice(noticeId: string, actor: AdminActor) {
+    const existing = await this.prisma.notice.findUnique({
+      where: {
+        id: noticeId,
+      },
+    })
+
+    if (!existing) {
+      throw new NotFoundException('公告不存在')
+    }
+
+    const traceId = randomUUID()
+    await this.prisma.$transaction(async (tx) => {
+      await tx.notice.delete({
+        where: {
+          id: noticeId,
+        },
+      })
+
+      await this.writeNoticeLogs(tx, {
+        actor,
+        action: 'dashboard.notice.delete',
+        traceId,
+        referenceType: 'NOTICE_DELETE',
+        referenceId: noticeId,
+        payload: {
+          noticeId,
+          title: existing.title,
+          result: '成功',
+        } as Prisma.InputJsonValue,
+      })
+    })
+
+    return {
+      id: noticeId,
+      deleted: true,
+      traceId,
     }
   }
 
@@ -542,5 +672,49 @@ export class DashboardService {
 
     start.setHours(0, 0, 0, 0)
     return { gte: start }
+  }
+
+  private async writeNoticeLogs(
+    tx: Prisma.TransactionClient,
+    payload: {
+      actor: AdminActor
+      action: string
+      traceId: string
+      referenceType: string
+      referenceId: string
+      payload: Prisma.InputJsonValue
+    },
+  ) {
+    await tx.adminOperationLog.create({
+      data: {
+        adminUserId: payload.actor.adminUserId,
+        module: 'dashboard',
+        action: payload.action,
+        traceId: payload.traceId,
+        payload: payload.payload,
+      },
+    })
+
+    await tx.auditLog.create({
+      data: {
+        userId: null,
+        actorType: 'ADMIN',
+        actorId: payload.actor.adminUserId,
+        module: 'dashboard',
+        action: payload.action,
+        traceId: payload.traceId,
+        payload: payload.payload,
+      },
+    })
+
+    await tx.hashRecord.create({
+      data: {
+        referenceType: payload.referenceType,
+        referenceId: payload.referenceId,
+        traceId: payload.traceId,
+        sha256: sha256(`${payload.referenceType}:${payload.referenceId}:${payload.traceId}:${JSON.stringify(payload.payload)}`),
+        syncStatus: 'PENDING',
+      },
+    })
   }
 }

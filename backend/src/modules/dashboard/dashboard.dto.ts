@@ -34,3 +34,19 @@ export class PublishNoticeDto {
   @Min(0)
   sortOrder?: number
 }
+
+export class UpdateNoticeDto {
+  @IsString()
+  @IsNotEmpty()
+  title!: string
+
+  @IsString()
+  @IsNotEmpty()
+  content!: string
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  sortOrder?: number
+}
