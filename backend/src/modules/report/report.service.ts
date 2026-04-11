@@ -265,7 +265,7 @@ export class ReportService {
           },
         })
 
-        return createdArtifactShape(created)
+        return createdArtifactShape(placeholder)
       })
       artifact = created as any
     } else {

@@ -40,7 +40,10 @@ export const apiFetch = createApiFetch({
   onNetworkError: (error) => {
     console.error('[API Error]', error.message)
     const t = getT()
-    if (!error.message.includes('请求失败') && !error.message.includes('失效')) {
+    const canFallbackSilently = error.message.includes('Failed to fetch')
+      || error.message.includes('接口返回了非 JSON 内容')
+      || error.message.includes('Cannot GET /api/')
+    if (!canFallbackSilently && !error.message.includes('请求失败') && !error.message.includes('失效')) {
       showToast(error.message || t('errors.networkError'))
     }
   },

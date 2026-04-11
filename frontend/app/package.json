@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "mock": "node mock/mock-server.js",
+    "mock": "node --env-file=../../backend/.env mock/mock-server.js",
     "test": "vitest",
     "test:run": "vitest run"
   },

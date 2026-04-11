@@ -1,86 +1,36 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
-import { Prisma } from '@prisma/client'
-import { PrismaService } from '../../prisma/prisma.service'
 import { TradeRuntimeService } from '../trade/trade-runtime.service'
+
+const OUNCE_TO_GRAM = 31.1035
+
+const METAL_CONFIG = {
+  AU9999: {
+    symbol: 'XAU',
+    name: '现货黄金',
+    url: 'https://api.gold-api.com/price/XAU/CNY',
+  },
+  AG9999: {
+    symbol: 'XAG',
+    name: '现货白银',
+    url: 'https://api.gold-api.com/price/XAG/CNY',
+  },
+} as const
+
+type MarketAssetCode = keyof typeof METAL_CONFIG
 
 @Injectable()
 export class MarketService {
   private readonly logger = new Logger(MarketService.name)
-  private memoryCache:
-    | {
-        price: number
-        source: string
-        timestamp: string
-        status: 'live' | 'degraded'
-      }
-    | null = null
+  private readonly latestPrices = new Map<MarketAssetCode, number>()
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly configService: ConfigService,
-    private readonly tradeRuntimeService: TradeRuntimeService,
-  ) {}
+  constructor(private readonly tradeRuntimeService: TradeRuntimeService) {}
 
-  async getTicker() {
-    const now = new Date()
-    const providerQuote = await this.fetchProviderQuote()
-    if (providerQuote) {
-      this.memoryCache = providerQuote
-      await this.upsertConfig(
-        'market_quote_au9999',
-        {
-          ...providerQuote,
-          refreshSeconds: 4,
-        } as unknown as Prisma.InputJsonValue,
-      )
-      return {
-        assetCode: 'AU9999',
-        price: providerQuote.price,
-        change: '-',
-        precision: 0.01,
-        refreshSeconds: 4,
-        timestamp: providerQuote.timestamp,
-        source: providerQuote.source,
-        status: providerQuote.status,
-      }
-    }
+  async getTicker(assetCode: MarketAssetCode = 'AU9999') {
+    return this.fetchMetalQuote(assetCode)
+  }
 
-    const config = await this.prisma.systemConfig.findUnique({
-      where: {
-        configKey: 'market_quote_au9999',
-      },
-    })
-    const cached = this.toRecord(config?.configValue)
-    if (typeof cached.price === 'number') {
-      return {
-        assetCode: 'AU9999',
-        price: this.toPrice(cached.price),
-        change: '-',
-        precision: 0.01,
-        refreshSeconds: 4,
-        timestamp: typeof cached.timestamp === 'string' ? cached.timestamp : now.toISOString(),
-        source: typeof cached.source === 'string' ? cached.source : 'system-config-cache',
-        status: 'degraded',
-      }
-    }
-
-    const latestTrade = await this.prisma.tradeMatch.findFirst({
-      orderBy: {
-        matchedAt: 'desc',
-      },
-    })
-    const fallbackPrice = latestTrade ? this.toPrice(Number(latestTrade.matchedPrice)) : 568.32
-    return {
-      assetCode: 'AU9999',
-      price: fallbackPrice,
-      change: '-',
-      precision: 0.01,
-      refreshSeconds: 4,
-      timestamp: now.toISOString(),
-      source: latestTrade ? 'trade-match-fallback' : 'local-default',
-      status: 'degraded',
-    }
+  async getPrices() {
+    return Promise.all([this.fetchMetalQuote('AU9999'), this.fetchMetalQuote('AG9999')])
   }
 
   async getTradingPeriods() {
@@ -95,70 +45,52 @@ export class MarketService {
     }))
   }
 
-  private async fetchProviderQuote() {
-    const url = this.configService.get<string>('MARKET_TICKER_URL')
-    if (!url) {
-      return null
+  private async fetchMetalQuote(assetCode: MarketAssetCode) {
+    const config = METAL_CONFIG[assetCode]
+    const response = await fetch(config.url)
+
+    if (!response.ok) {
+      const message = `[MARKET_TICKER_FAILED] ${assetCode} 行情拉取失败: http_${response.status}`
+      this.logger.error(message)
+      throw new Error(message)
     }
 
-    try {
-      const response = await fetch(url, {
-        headers: this.configService.get<string>('MARKET_TICKER_API_KEY')
-          ? {
-              Authorization: `Bearer ${this.configService.get<string>('MARKET_TICKER_API_KEY')}`,
-            }
-          : undefined,
-      })
+    const payload = (await response.json()) as Record<string, unknown>
+    const ouncePrice = Number(payload.price)
 
-      if (!response.ok) {
-        throw new Error(`http_${response.status}`)
-      }
-
-      const payload = (await response.json()) as Record<string, unknown>
-      const rawPrice = payload.price ?? payload.lastPrice ?? payload.last ?? payload.data
-      const parsedPrice =
-        typeof rawPrice === 'number'
-          ? rawPrice
-          : typeof rawPrice === 'string'
-            ? Number(rawPrice)
-            : typeof rawPrice === 'object' && rawPrice && 'price' in rawPrice
-              ? Number((rawPrice as Record<string, unknown>).price)
-              : NaN
-
-      if (!Number.isFinite(parsedPrice)) {
-        throw new Error('invalid_price_payload')
-      }
-
-      return {
-        price: this.toPrice(parsedPrice),
-        source: 'market-provider',
-        timestamp: new Date().toISOString(),
-        status: 'live' as const,
-      }
-    } catch (error) {
-      this.logger.error(
-        `[MARKET_TICKER_FAILED] AU9999 行情拉取失败: ${error instanceof Error ? error.message : String(error)}`,
-      )
-      return null
+    if (!Number.isFinite(ouncePrice)) {
+      const message = `[MARKET_TICKER_FAILED] ${assetCode} 行情拉取失败: invalid_price_payload`
+      this.logger.error(message)
+      throw new Error(message)
     }
-  }
 
-  private async upsertConfig(configKey: string, configValue: Prisma.InputJsonValue) {
-    await this.prisma.systemConfig.upsert({
-      where: { configKey },
-      create: { configKey, configValue },
-      update: { configValue },
-    })
+    const pricePerGram = this.toPrice(ouncePrice / OUNCE_TO_GRAM)
+    const previousPrice = this.latestPrices.get(assetCode) ?? pricePerGram
+    const percentChange = previousPrice === 0 ? 0 : ((pricePerGram - previousPrice) / previousPrice) * 100
+
+    this.latestPrices.set(assetCode, pricePerGram)
+
+    return {
+      id: assetCode,
+      assetCode,
+      symbol: config.symbol,
+      name: config.name,
+      currency: typeof payload.currency === 'string' ? payload.currency : 'CNY',
+      currencySymbol: typeof payload.currencySymbol === 'string' ? payload.currencySymbol : '¥',
+      price: pricePerGram,
+      change: `${percentChange >= 0 ? '+' : ''}${percentChange.toFixed(2)}%`,
+      up: percentChange >= 0,
+      precision: 0.01,
+      refreshSeconds: 4,
+      timestamp: typeof payload.updatedAt === 'string' ? payload.updatedAt : new Date().toISOString(),
+      updatedAtReadable:
+        typeof payload.updatedAtReadable === 'string' ? payload.updatedAtReadable : 'just now',
+      source: 'gold-api.com',
+      status: 'live' as const,
+    }
   }
 
   private toPrice(value: number) {
     return Number(value.toFixed(2))
-  }
-
-  private toRecord(value: unknown) {
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      return value as Record<string, unknown>
-    }
-    return {}
   }
 }

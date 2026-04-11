@@ -1,9 +1,8 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { TradeService } from '../services/trade'
-import { MarketService } from '../services/market'
 import { Loader2, CheckCircle2 } from 'lucide-vue-next'
 import { useMarketPolling } from '../composables/useMarketPolling'
 
@@ -21,17 +20,8 @@ const submitting = ref(false)
 const showSuccess = ref(false)
 const assetName = ref(route.query.assetName || '')
 const assetId = ref(route.query.assetId || '')
-const tradingStatus = ref({
-  isOpen: true,
-  statusText: '开盘',
-  currentSession: '交易时段同步中',
-  nextOpenTime: '--',
-  disabledReason: '',
-  syncMode: '交易时段同步中',
-})
-let tradingStatusTimer = null
 
-// 濡傛灉鏄€氳繃瀵艰埅鏍忕洿鎺ョ偣杩涙潵鐨勶紙娌℃湁 query 鍙傛暟锛夛紝鍒欓粯璁ら€変腑鍒楄〃绗竴涓?
+// 如果是通过导航栏直接点进来的（没有 query 参数），则默认选中列表第一个
 watch(markets, (newMarkets) => {
   if (newMarkets.length > 0 && !assetId.value) {
     assetId.value = newMarkets[0].id
@@ -39,31 +29,22 @@ watch(markets, (newMarkets) => {
   }
 }, { immediate: true })
 
-// 鍒囨崲鍝佺
+// 切换品种
 const selectAsset = (asset) => {
   assetId.value = asset.id
   assetName.value = asset.name
 }
 
-// 鑾峰彇褰撳墠瀹炴椂鍗曚环
+// 获取当前实时单价
 const currentPrice = computed(() => {
   const asset = markets.value.find(m => m.id === assetId.value)
   return asset ? parseFloat(asset.price) : null
 })
 
-// 璁＄畻棰勮鎬婚
+// 计算预计总额
 const totalAmount = computed(() => {
   if (!quantity.value || isNaN(quantity.value) || !currentPrice.value) return '0.00'
   return (currentPrice.value * parseFloat(quantity.value)).toFixed(2)
-})
-
-const isTradeClosed = computed(() => !tradingStatus.value.isOpen)
-
-const submitDisabledReason = computed(() => {
-  if (!isTradeClosed.value) {
-    return ''
-  }
-  return tradingStatus.value.disabledReason || '当前为休市时段，暂不支持提交买卖订单'
 })
 
 const fetchOrders = async () => {
@@ -78,24 +59,7 @@ const fetchOrders = async () => {
   }
 }
 
-const refreshTradingStatus = async () => {
-  try {
-    tradingStatus.value = await MarketService.getTradingStatus()
-  } catch (err) {
-    console.error('Failed to refresh trading status:', err)
-    tradingStatus.value = {
-      isOpen: true,
-      statusText: '状态未知',
-      currentSession: '未获取到交易时段，按安全降级显示',
-      nextOpenTime: '--',
-      disabledReason: '',
-      syncMode: '安全降级显示',
-    }
-  }
-}
-
 const submitOrder = async () => {
-  if (isTradeClosed.value) return
   if (!quantity.value || submitting.value) return
   
   submitting.value = true
@@ -103,7 +67,7 @@ const submitOrder = async () => {
     const json = await TradeService.submitOrder(assetId.value, activeTab.value, quantity.value)
     showSuccess.value = true
     quantity.value = ''
-    fetchOrders() // 鍒锋柊鍒楄〃
+    fetchOrders() // 刷新列表
     setTimeout(() => { showSuccess.value = false }, 2000)
   } catch (err) {
     console.error('Order failed:', err)
@@ -113,22 +77,14 @@ const submitOrder = async () => {
 }
 
 onMounted(() => {
-  refreshTradingStatus()
   fetchOrders()
-  tradingStatusTimer = window.setInterval(refreshTradingStatus, 30000)
-})
-
-onUnmounted(() => {
-  if (tradingStatusTimer) {
-    window.clearInterval(tradingStatusTimer)
-  }
 })
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="space-y-4 bg-[#0b1520] min-h-full text-white">
     <div class="px-4 pt-4">
-      <div class="card-base overflow-hidden relative border-none">
+      <div class="card-base overflow-hidden relative border-none bg-[#1a2735]">
         <!-- Success Overlay -->
         <div v-if="showSuccess" class="absolute inset-0 bg-white/90 dark:bg-gray-800/90 z-10 flex flex-col items-center justify-center animate-in fade-in duration-300">
           <CheckCircle2 class="text-success mb-2" :size="48" />
@@ -136,30 +92,30 @@ onUnmounted(() => {
         </div>
 
         <!-- Tabs -->
-        <div class="flex border-b border-gray-50 dark:border-gray-700">
+        <div class="flex border-b border-[#2a3a4b]">
           <button 
             @click="activeTab = 'buy'"
             class="flex-1 py-4 font-bold text-center transition-colors btn-interact"
-            :class="activeTab === 'buy' ? 'text-danger border-b-2 border-danger bg-danger/5' : 'text-gray-400'"
+            :class="activeTab === 'buy' ? 'text-[#ff5f56] border-b-2 border-[#ff5f56] bg-[#2a2430]' : 'text-[#a6b0c3]'"
           >
             {{ t('market.buyAnchor') }}
           </button>
           <button 
             @click="activeTab = 'sell'"
             class="flex-1 py-4 font-bold text-center transition-colors btn-interact"
-            :class="activeTab === 'sell' ? 'text-success border-b-2 border-success bg-success/5' : 'text-gray-400'"
+            :class="activeTab === 'sell' ? 'text-[#19c58a] border-b-2 border-[#19c58a] bg-[#1d2d32]' : 'text-[#a6b0c3]'"
           >
             {{ t('market.sellUnhook') }}
           </button>
         </div>
 
         <!-- Asset Selector Inside Card -->
-        <div class="px-4 py-3 flex gap-3 overflow-x-auto no-scrollbar border-b border-gray-50 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/30">
+        <div class="px-4 py-3 flex gap-3 overflow-x-auto no-scrollbar border-b border-[#2a3a4b] bg-[#1f2d3b]">
           <button 
             v-for="asset in markets" 
             :key="asset.id"
             @click="selectAsset(asset)"
-            :class="assetId === asset.id ? 'bg-primary text-white shadow-sm' : 'bg-white dark:bg-gray-800 text-gray-500 border border-gray-100 dark:border-gray-700'"
+            :class="assetId === asset.id ? 'bg-[#c99b18] text-white shadow-sm' : 'bg-[#223244] text-[#a6b0c3] border border-[#304255]'"
             class="px-4 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap btn-interact"
           >
             {{ asset.name }}
@@ -167,53 +123,34 @@ onUnmounted(() => {
         </div>
 
         <div class="p-6 space-y-6">
-          <div class="rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/40 p-4">
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <p class="text-xs text-gray-500">交易状态</p>
-                <p class="mt-1 text-base font-bold" :class="tradingStatus.isOpen ? 'text-success' : 'text-danger'">
-                  {{ tradingStatus.statusText }}
-                </p>
-              </div>
-              <span class="text-[11px] text-gray-400">{{ tradingStatus.syncMode }}</span>
-            </div>
-            <div class="mt-3 space-y-1 text-xs text-gray-500">
-              <p>当前时段：<span class="font-medium text-gray-700 dark:text-gray-200">{{ tradingStatus.currentSession }}</span></p>
-              <p>下一开盘时间：<span class="font-medium text-gray-700 dark:text-gray-200">{{ tradingStatus.nextOpenTime }}</span></p>
-            </div>
-          </div>
-
           <div class="space-y-4">
             <div>
               <div class="flex justify-between mb-1">
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('trade.quantity', { assetName }) }}</label>
-                <span class="text-[10px] text-gray-400 tabular-nums">{{ t('trade.currentPrice') }} {{ currentPrice || '--.--' }} CNY/g</span>
+                <label class="block text-sm font-medium text-white">数量（{{ assetName || '现货黄金' }}）</label>
+                <span class="text-[10px] text-[#93a3ba] tabular-nums">{{ t('trade.currentPrice') }} {{ currentPrice || '--.--' }} CNY/g</span>
               </div>
               <input  
                 v-model="quantity"
                 type="number" 
                 :placeholder="t('trade.quantityPlaceholder')"
-                class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                class="w-full px-4 py-3 rounded-xl border border-[#314154] bg-[#13202c] text-white placeholder:text-[#7d8da2] focus:ring-2 focus:ring-[#c99b18]/20 focus:border-[#c99b18] outline-none transition-all"
               />
               <div class="mt-2 flex justify-between items-center px-1">
-                <span class="text-xs text-gray-500">{{ t('trade.estimatedAmount') }}</span>
-                <span class="text-sm font-bold text-primary tabular-nums">楼 {{ totalAmount }}</span>
+                <span class="text-xs text-[#93a3ba]">{{ t('trade.estimatedAmount') }}</span>
+                <span class="text-sm font-bold text-[#c99b18] tabular-nums">¥ {{ totalAmount }}</span>
               </div>
             </div>
           </div>
 
           <button 
             @click="submitOrder"
-            :disabled="!quantity || submitting || isTradeClosed"
+            :disabled="!quantity || submitting"
             class="w-full py-4 text-white font-bold rounded-xl shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2 btn-interact"
-            :class="activeTab === 'buy' ? 'bg-danger shadow-danger/20' : 'bg-success shadow-success/20'"
+            :class="activeTab === 'buy' ? 'bg-[#ff5f56] shadow-[#ff5f56]/20' : 'bg-[#19c58a] shadow-[#19c58a]/20'"
           >
             <Loader2 v-if="submitting" class="animate-spin" :size="20" />
             {{ submitting ? t('trade.submitting') : (activeTab === 'buy' ? t('trade.confirmBuy') : t('trade.confirmSell')) }}
           </button>
-          <p v-if="submitDisabledReason" class="text-xs text-danger text-center -mt-2">
-            {{ submitDisabledReason }}
-          </p>
         </div>
       </div>
     </div>
@@ -221,8 +158,8 @@ onUnmounted(() => {
     <!-- History -->
     <div class="px-4 space-y-3 pb-8">
       <div class="flex items-center justify-between">
-        <h3 class="font-bold text-lg">{{ t('trade.recentOrders') }}</h3>
-        <button v-if="!loading" @click="fetchOrders" class="text-xs text-primary btn-interact font-medium">{{ t('trade.refresh') }}</button>
+        <h3 class="font-bold text-lg text-white">{{ t('trade.recentOrders') }}</h3>
+        <button v-if="!loading" @click="fetchOrders" class="text-xs text-[#c99b18] btn-interact font-medium">{{ t('trade.refresh') }}</button>
       </div>
 
       <div v-if="loading" class="py-10 flex justify-center">
@@ -233,7 +170,7 @@ onUnmounted(() => {
         <div v-for="order in orders" :key="order.id" class="card-base p-4 animate-in slide-in-from-top-2 duration-300">
           <div class="flex justify-between items-center mb-2">
             <div class="flex items-center gap-2">
-              <span class="px-2 py-0.5 text-[10px] rounded font-bold" :class="order.type === '涔板叆' ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'">
+              <span class="px-2 py-0.5 text-[10px] rounded font-bold" :class="order.type === '买入' ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'">
                 {{ order.type }}
               </span>
               <span class="font-bold text-sm">{{ order.name }}</span>
@@ -241,12 +178,12 @@ onUnmounted(() => {
             <span class="text-[10px] text-gray-400">{{ order.time }}</span>
           </div>
           <div class="flex justify-between text-xs text-gray-500">
-            <span>鎴愪氦浠? <span class="tabular-nums font-medium">{{ order.price }}</span></span>
-            <span>鏁伴噺: <span class="tabular-nums font-medium">{{ order.quantity }}g</span></span>
+            <span>成交价: <span class="tabular-nums font-medium">{{ order.price }}</span></span>
+            <span>数量: <span class="tabular-nums font-medium">{{ order.quantity }}g</span></span>
           </div>
         </div>
 
-        <div v-if="orders.length === 0" class="py-10 text-center text-gray-400 text-sm">
+        <div v-if="orders.length === 0" class="py-10 text-center text-[#7d8da2] text-sm">
           {{ t('trade.noOrders') }}
         </div>
       </template>

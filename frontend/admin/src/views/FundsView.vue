@@ -91,45 +91,6 @@ async function handleExport() {
   }, '已通过报表任务导出资金数据')
 }
 
-async function handleApproveWithdrawal() {
-  const selected = getSelectedWithdrawal()
-  if (!selected) {
-    error.value = '请先选中一条提现单'
-    return
-  }
-  await runAction(() => AdminService.approveWithdrawal(selected.orderId), '提现单已进入转账处理中')
-}
-
-async function handleRejectWithdrawal() {
-  const selected = getSelectedWithdrawal()
-  if (!selected) {
-    error.value = '请先选中一条提现单'
-    return
-  }
-  if (!window.confirm(`确认拒绝提现单 ${selected.orderId} 吗？`)) {
-    return
-  }
-  await runAction(() => AdminService.rejectWithdrawal(selected.orderId), '提现单已拒绝并回补资产')
-}
-
-async function handleConfirmWithdrawal() {
-  const selected = getSelectedWithdrawal()
-  if (!selected) {
-    error.value = '请先选中一条提现单'
-    return
-  }
-  await runAction(() => AdminService.confirmWithdrawalCompleted(selected.orderId), '提现单已确认完成')
-}
-
-async function handleMuteAlert() {
-  const selected = getSelectedWithdrawal()
-  if (!selected) {
-    error.value = '请先选中一条提现单'
-    return
-  }
-  await runAction(() => AdminService.muteWithdrawalAlert(selected.orderId), '提现提醒已静音')
-}
-
 function openFundDialog(mode) {
   fundDialog.mode = mode
   fundDialog.uid = filters.uid || ''
@@ -316,12 +277,6 @@ onMounted(loadData)
             </tr>
           </tbody>
         </table>
-        <div class="actions">
-          <button class="primary" @click="handleApproveWithdrawal">通过提现</button>
-          <button class="warn" @click="handleRejectWithdrawal">拒绝提现</button>
-          <button @click="handleConfirmWithdrawal">确认到账</button>
-          <button @click="handleMuteAlert">静音提醒</button>
-        </div>
       </div>
     </article>
 

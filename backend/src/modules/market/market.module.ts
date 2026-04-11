@@ -7,5 +7,6 @@ import { MarketService } from './market.service'
   imports: [TradeModule],
   controllers: [MarketController],
   providers: [MarketService],
+  exports: [MarketService],
 })
 export class MarketModule {}

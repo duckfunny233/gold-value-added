@@ -5,6 +5,9 @@ import router from './router'
 import i18n from './i18n'
 import './assets/main.css'
 
+document.documentElement.classList.add('dark')
+document.body.classList.add('dark')
+
 console.log("process.env.NODE_ENV", process.env.NODE_ENV)
 if (process.env.NODE_ENV === 'development') {
   console.log("璋冭瘯妯″紡")

@@ -1,4 +1,10 @@
-import { apiFetch } from '../utils/request'
+import { API_BASE, apiFetch } from '../utils/request'
+import {
+  buildKLineFallback,
+  cloneData,
+  marketPeriodsFallback,
+  marketPricesFallback,
+} from './fallback-data'
 
 const DEFAULT_TRADING_WINDOWS = [
   {
@@ -17,6 +23,7 @@ const DEFAULT_TRADING_WINDOWS = [
 
 let cachedTradingWindows = DEFAULT_TRADING_WINDOWS
 let hasBootstrappedTradingWindows = false
+const EXPECTED_PERIOD_VALUES = ['1m', 'daily', 'weekly', 'monthly']
 
 const pad = (value) => String(value).padStart(2, '0')
 
@@ -85,6 +92,29 @@ const buildTradingStatus = () => {
   }
 }
 
+const normalizePeriods = (items) => {
+  if (!Array.isArray(items)) {
+    return cloneData(marketPeriodsFallback)
+  }
+
+  const normalized = items
+    .filter((item) => EXPECTED_PERIOD_VALUES.includes(item?.value))
+    .map((item) => {
+      const fallback = marketPeriodsFallback.find((period) => period.value === item.value)
+      return {
+        label: fallback?.label || item.label,
+        value: item.value,
+        type: fallback?.type || item.type || 'candle',
+      }
+    })
+
+  if (normalized.length !== EXPECTED_PERIOD_VALUES.length) {
+    return cloneData(marketPeriodsFallback)
+  }
+
+  return EXPECTED_PERIOD_VALUES.map((value) => normalized.find((item) => item.value === value))
+}
+
 const bootstrapTradingWindows = async () => {
   if (hasBootstrappedTradingWindows) {
     return cachedTradingWindows
@@ -93,12 +123,14 @@ const bootstrapTradingWindows = async () => {
   hasBootstrappedTradingWindows = true
 
   try {
-    const response = await apiFetch('/api/market/periods')
-    const remoteWindows = Array.isArray(response?.data)
-      ? response.data.filter((item) => Array.isArray(item.dayIndexes) && item.startMinutes != null && item.endMinutes != null)
+    const response = await fetch(`${API_BASE}/api/market/periods`)
+    const text = await response.text()
+    const payload = text ? JSON.parse(text) : {}
+    const remoteWindows = Array.isArray(payload?.data)
+      ? payload.data.filter((item) => Array.isArray(item.dayIndexes) && item.startMinutes != null && item.endMinutes != null)
       : []
 
-    cachedTradingWindows = remoteWindows.length ? remoteWindows : DEFAULT_TRADING_WINDOWS
+    cachedTradingWindows = response.ok && remoteWindows.length ? remoteWindows : DEFAULT_TRADING_WINDOWS
   } catch (error) {
     cachedTradingWindows = DEFAULT_TRADING_WINDOWS
   }
@@ -107,16 +139,32 @@ const bootstrapTradingWindows = async () => {
 }
 
 export const MarketService = {
-  getPrices() {
-    return apiFetch('/api/market/prices')
+  async getPrices() {
+    try {
+      return await apiFetch('/api/market/prices')
+    } catch (error) {
+      return { code: 200, data: cloneData(marketPricesFallback) }
+    }
   },
 
-  getPeriods() {
-    return apiFetch('/api/market/periods')
+  async getPeriods() {
+    try {
+      const payload = await apiFetch('/api/market/periods')
+      return {
+        ...payload,
+        data: normalizePeriods(payload?.data),
+      }
+    } catch (error) {
+      return { code: 200, data: cloneData(marketPeriodsFallback) }
+    }
   },
 
-  getKLine(assetId, period) {
-    return apiFetch(`/api/market/kline?period=${period}&asset=${assetId}`)
+  async getKLine(assetId, period) {
+    try {
+      return await apiFetch(`/api/market/kline?period=${period}&asset=${assetId}`)
+    } catch (error) {
+      return { code: 200, data: buildKLineFallback(assetId, period) }
+    }
   },
 
   async getTradingStatus() {

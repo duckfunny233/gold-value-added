@@ -22,6 +22,16 @@ export class UserController {
     return this.userService.getAssetOverview(query)
   }
 
+  @Get('public/leaderboard')
+  getPublicLeaderboard() {
+    return this.userService.getPublicLeaderboard()
+  }
+
+  @Get('public/gold-chain')
+  getPublicGoldChain() {
+    return this.userService.getPublicGoldChain()
+  }
+
   @Get('admin/users/profile')
   @AdminProtected()
   getProfile(@Query() query: UserQueryDto) {

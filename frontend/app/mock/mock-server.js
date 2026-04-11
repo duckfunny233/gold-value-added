@@ -22,120 +22,354 @@ app.use(cors())
 app.use(express.json())
 app.use('/static', express.static('../public'));
 
-// 准备大量模拟数据 (与 handlers.js 保持一致)
-const allNews = Array.from({ length: 25 }, (_, i) => ({
-  id: i + 1,
-  title: `[第${i + 1}条] ${['全球金价波动', '平台安全升级', '市场深度分析', '黄金增值指南'][i % 4]} - 2026行业新动态`,
-  date: `2026-02-${Math.max(1, 13 - Math.floor(i/2)).toString().padStart(2, '0')}`,
-  summary: '这是新闻的简短描述，用于展示分页效果。黄金作为避险资产，在当前市场环境下表现稳健...',
-  // 模拟只有部分新闻有略缩图 (每3条中有一条没有图)
-  thumbnail: i % 3 === 0 ? '' : `https://picsum.photos/seed/news${i}/200/200`
-}))
+const TIANAPI_NEWS_URL = 'https://apis.tianapi.com/caijing/index'
+const newsDetailCache = new Map()
+
+const escapeHtml = (value = '') =>
+  String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
+const requireNewsApiKey = () => {
+  const apiKey = process.env.NEWS_API_KEY
+  if (!apiKey) {
+    throw new Error('NEWS_API_KEY 未配置')
+  }
+
+  return apiKey
+}
+
+const createNewsContent = ({ title, summary, source, url }) => {
+  const blocks = [
+    `<p class="mb-4">${escapeHtml(summary || title)}</p>`,
+    `<p class="mb-4">文章来源：${escapeHtml(source || '天行财经')}</p>`
+  ]
+
+  if (url) {
+    blocks.push(
+      `<p class="mb-4">原文链接：<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a></p>`
+    )
+  }
+
+  return blocks.join('')
+}
+
+const extractTianNewsItems = (result) => {
+  if (Array.isArray(result)) {
+    return {
+      items: result,
+      total: result.length
+    }
+  }
+
+  if (!result || typeof result !== 'object') {
+    return {
+      items: [],
+      total: 0
+    }
+  }
+
+  const items = Array.isArray(result.newslist)
+    ? result.newslist
+    : Array.isArray(result.list)
+      ? result.list
+      : Array.isArray(result.items)
+        ? result.items
+        : (result.id && result.title ? [result] : [])
+
+  const parsedTotal = Number(result.allnum || result.total || result.count || items.length)
+
+  return {
+    items,
+    total: Number.isFinite(parsedTotal) && parsedTotal > 0 ? parsedTotal : items.length
+  }
+}
+
+const normalizeNewsItem = (item, page, limit, index) => {
+  const title = String(item?.title || '').trim()
+  if (!title) {
+    return null
+  }
+
+  const id = String(item.id || `news_${page}_${index}`)
+  const summary = String(item.description || '').trim()
+  const date = String(item.ctime || '').trim()
+  const image = String(item.picUrl || '').trim()
+  const author = String(item.source || '天行财经').trim()
+  const linkUrl = String(item.url || '').trim()
+
+  const normalized = {
+    id,
+    title,
+    date,
+    summary,
+    thumbnail: image,
+    views: '-'
+  }
+
+  newsDetailCache.set(id, {
+    id,
+    title,
+    date,
+    views: '-',
+    author,
+    image,
+    content: createNewsContent({
+      title,
+      summary,
+      source: author,
+      url: linkUrl
+    })
+  })
+
+  return normalized
+}
+
+const fetchTianNewsPage = async (page = 1, limit = 10) => {
+  const requestUrl = new URL(TIANAPI_NEWS_URL)
+  requestUrl.searchParams.set('key', requireNewsApiKey())
+  requestUrl.searchParams.set('page', String(page))
+  requestUrl.searchParams.set('num', String(limit))
+
+  const response = await fetch(requestUrl.toString(), {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json'
+    }
+  })
+
+  if (!response.ok) {
+    throw new Error(`财经新闻拉取失败: HTTP ${response.status}`)
+  }
+
+  const payload = await response.json()
+  if (Number(payload.code) !== 200) {
+    throw new Error(String(payload.msg || '财经新闻拉取失败'))
+  }
+
+  const { items, total } = extractTianNewsItems(payload.result)
+  const normalizedItems = items
+    .map((item, index) => normalizeNewsItem(item, page, limit, index))
+    .filter(Boolean)
+
+  if (!normalizedItems.length) {
+    throw new Error('财经新闻接口未返回可用数据')
+  }
+
+  return {
+    items: normalizedItems,
+    total
+  }
+}
 
 // 1. 获取新闻列表 (支持分页)
-app.get('/api/news', (req, res) => {
-  const page = parseInt(req.query.page || '1')
-  const limit = parseInt(req.query.limit || '5')
-  
-  const start = (page - 1) * limit
-  const end = start + limit
-  const items = allNews.slice(start, end)
+app.get('/api/news', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page || '1')
+    const limit = parseInt(req.query.limit || '5')
+    const { items, total } = await fetchTianNewsPage(page, limit)
 
-  setTimeout(() => {
     res.json({
       code: 200,
       data: {
         items,
-        total: allNews.length,
+        total,
         page,
         limit,
-        totalPages: Math.ceil(allNews.length / limit)
+        totalPages: Math.max(1, Math.ceil(total / limit))
       }
     })
-  }, 600)
+  } catch (error) {
+    return sendUpstreamError(res, error, '财经新闻列表获取失败')
+  }
 })
 
 // 1.1 获取新闻详情
-app.get('/api/news/:id', (req, res) => {
-  const { id } = req.params
-  const news = allNews.find(n => n.id === parseInt(id))
-  
-  if (!news) {
-    return res.status(404).json({ message: '新闻不存在' })
-  }
+app.get('/api/news/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    let detail = newsDetailCache.get(id)
 
-  setTimeout(() => {
-    // 根据标题关键字生成不同的正文内容
-    let dynamicContent = ''
-    if (news.title.includes('金价')) {
-      dynamicContent = `
-        <p class="mb-4">【金影子快讯】今日现货黄金市场表现活跃，受到地缘局势及美联储最新政策声明的影响，金价在早盘阶段一度冲高至关键压力位。分析师认为，当前基本面支撑依然强劲。</p>
-        <p class="mb-4">具体来看，多国央行近期持续披露增持黄金储备的计划，这为金价提供了坚实的下方支撑。投资者普遍关注即将公布的非农就业数据，预计将引发新一轮波动。</p>
-        <p class="mb-4">操作策略方面，建议短线交易者关注支撑位附近的买入机会，中长期投资者可继续持有实物金或黄金凭证。</p>
-      `
-    } else if (news.title.includes('安全')) {
-      dynamicContent = `
-        <p class="mb-4">为了提供更极致的交易体验，金影子平台于今日凌晨完成了底层加密算法的全面升级。本次升级涉及多重签名校验、冷热钱包隔离机制以及毫秒级风险预警系统。</p>
-        <p class="mb-4">平台技术负责人表示：“资产安全是我们的生命线。通过此次升级，我们进一步巩固了防御体系，能够更从容地应对各种复杂的网络攻击环境。”</p>
-        <p class="mb-4">用户无需任何操作，所有升级流程已由后台自动完成，充值与提现功能运行平稳。</p>
-      `
-    } else if (news.title.includes('分析')) {
-      dynamicContent = `
-        <p class="mb-4">宏观经济分析报告指出，当前全球流动性环境正发生深刻变化。在通胀预期波动与增长压力并存的背景下，大宗商品尤其是贵金属的资产配置价值进一步凸显。</p>
-        <p class="mb-4">报告详细拆解了过去三个季度的市场数据，显示黄金与传统风险资产的相关性正在降低。这意味着在投资组合中加入黄金，能有效降低整体回撤水平。</p>
-        <p class="mb-4">专家建议，在资产配置中应保持10%-15%的黄金权重，以应对潜在的市场不确定性。</p>
-      `
-    } else {
-      dynamicContent = `
-        <p class="mb-4">欢迎阅读黄金增值指南。作为投资者，理解复利效应与黄金定投的逻辑至关重要。黄金不仅是避险工具，更是跨越经济周期的财富存储器。</p>
-        <p class="mb-4">本指南将从入门知识出发，为您解析如何通过小额定投的方式，逐步建立起属于自己的“黄金护城河”。</p>
-        <p class="mb-4">我们将持续更新更多实操案例，助您在波动的市场中保持定力，实现财富的稳健增值。</p>
-      `
+    if (!detail) {
+      await fetchTianNewsPage(1, 50)
+      detail = newsDetailCache.get(id)
+    }
+
+    if (!detail) {
+      return res.status(404).json({ code: 404, message: '新闻不存在' })
     }
 
     res.json({
       code: 200,
-      data: {
-        ...news,
-        views: Math.floor(Math.random() * 2000) + 500,
-        author: '金影子研究院',
-        // 详情页主图模拟 (ID为偶数时提供图)
-        image: parseInt(id) % 2 === 0 ? `https://picsum.photos/seed/detail${id}/800/400` : '',
-        content: dynamicContent
-      }
+      data: detail
     })
-  }, 300)
+  } catch (error) {
+    return sendUpstreamError(res, error, '财经新闻详情获取失败')
+  }
 })
 
 // 2. 实时行情 (Market Prices)
-const marketData = {
-  AU9999: { name: '现货黄金', price: 2654.40, base: 2650 },
-  AG9999: { name: '现货白银', price: 31.22, base: 31 },
-  USDX: { name: '美指', price: 104.15, base: 104 },
-  OIL: { name: '原油', price: 78.50, base: 78 }
+const OUNCE_TO_GRAM = 31.1035
+const liveMetalConfig = {
+  AU9999: {
+    name: '现货黄金',
+    symbol: 'XAU',
+    url: 'https://api.gold-api.com/price/XAU/CNY'
+  },
+  AG9999: {
+    name: '现货白银',
+    symbol: 'XAG',
+    url: 'https://api.gold-api.com/price/XAG/CNY'
+  }
+}
+const latestLiveMetalPrices = new Map()
+const staticMarketData = {
+  USDX: { name: '美指', price: 104.15, base: 104.00 },
+  OIL: { name: '原油', price: 78.50, base: 78.00 }
+}
+const profilePositionTemplates = {
+  gold: [
+    { level: '影子金币', weight: 10, count: 2, bgImage: '/images/金影子金币.jpg' },
+    { level: '影子金币', weight: 50, count: 1, bgImage: '/images/金叶币.jpg' },
+    { level: '影子金币', weight: 500, count: 0, bgImage: '/images/影子金币.jpg' },
+    { level: '黄金条', weight: 5000, count: 0, bgImage: '/images/黄金条.jpg' },
+    { level: '黄金砖', weight: 50000, count: 0, bgImage: '/images/黄金砖.jpg' }
+  ],
+  silver: [
+    { level: '影子金币', weight: 10, count: 10, bgImage: '/images/金影子金币.jpg' },
+    { level: '影子金币', weight: 50, count: 3, bgImage: '/images/金叶币_银.jpg' },
+    { level: '影子金币', weight: 500, count: 1, bgImage: '/images/影子金币_银.jpg' },
+    { level: '黄金条', weight: 5000, count: 0, bgImage: '/images/黄金条_银.jpg' },
+    { level: '黄金砖', weight: 50000, count: 0, bgImage: '/images/黄金砖_银.jpg' }
+  ]
+}
+const profileBaseBalance = 85400
+const profileYesterdayProfit = 12450
+const profileAccumulatedProfit = 450200
+
+const formatMoney = (value) =>
+  Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+const sendUpstreamError = (res, error, message) => {
+  console.error(message, error)
+  return res.status(502).json({
+    code: 502,
+    message
+  })
 }
 
-app.get('/api/market/prices', (req, res) => {
-  const result = Object.entries(marketData).map(([id, item]) => {
-    // 模拟价格微小波动
-    const volatility = item.price * 0.0005 
+const fetchLiveMetalSnapshot = async (assetId) => {
+  const config = liveMetalConfig[assetId]
+  if (!config) {
+    throw new Error(`unsupported_live_asset:${assetId}`)
+  }
+
+  const response = await fetch(config.url)
+  if (!response.ok) {
+    throw new Error(`gold_api_http_${response.status}`)
+  }
+
+  const payload = await response.json()
+  const ouncePrice = Number(payload.price)
+  if (!Number.isFinite(ouncePrice)) {
+    throw new Error(`gold_api_invalid_price:${assetId}`)
+  }
+
+  return {
+    assetId,
+    name: config.name,
+    symbol: config.symbol,
+    pricePerGram: Number((ouncePrice / OUNCE_TO_GRAM).toFixed(2)),
+    currency: payload.currency || 'CNY',
+    currencySymbol: payload.currencySymbol || '¥',
+    updatedAt: payload.updatedAt || new Date().toISOString(),
+    updatedAtReadable: payload.updatedAtReadable || 'just now'
+  }
+}
+
+const buildLiveMarketRow = async (assetId) => {
+  const snapshot = await fetchLiveMetalSnapshot(assetId)
+  const previousPrice = latestLiveMetalPrices.get(assetId) ?? snapshot.pricePerGram
+  const percentChange = previousPrice === 0
+    ? 0
+    : ((snapshot.pricePerGram - previousPrice) / previousPrice) * 100
+
+  latestLiveMetalPrices.set(assetId, snapshot.pricePerGram)
+
+  return {
+    id: assetId,
+    name: snapshot.name,
+    symbol: snapshot.symbol,
+    price: snapshot.pricePerGram,
+    change: `${percentChange >= 0 ? '+' : ''}${percentChange.toFixed(2)}%`,
+    up: percentChange >= 0,
+    currency: snapshot.currency,
+    currencySymbol: snapshot.currencySymbol,
+    updatedAt: snapshot.updatedAt,
+    updatedAtReadable: snapshot.updatedAtReadable
+  }
+}
+
+const buildStaticMarketRows = () =>
+  Object.entries(staticMarketData).map(([id, item]) => {
+    const volatility = item.price * 0.0005
     const change = (Math.random() - 0.5) * volatility
     item.price = parseFloat((item.price + change).toFixed(2))
-    
-    const percentChange = ((item.price - item.base) / item.base * 100).toFixed(2)
-    
+
+    const percentChange = ((item.price - item.base) / item.base) * 100
+
     return {
       id,
       name: item.name,
-      price: item.price.toFixed(2),
-      change: (percentChange > 0 ? '+' : '') + percentChange + '%',
+      price: item.price,
+      change: `${percentChange >= 0 ? '+' : ''}${percentChange.toFixed(2)}%`,
       up: percentChange >= 0
     }
   })
-  res.json({
-    code: 200,
-    data: result
-  })
+
+const resolveAssetPrice = async (assetId) => {
+  if (liveMetalConfig[assetId]) {
+    const snapshot = await fetchLiveMetalSnapshot(assetId)
+    return snapshot.pricePerGram
+  }
+
+  const staticAsset = staticMarketData[assetId]
+  return staticAsset ? staticAsset.price : 0
+}
+
+const buildProfilePositions = (templates, pricePerGram) =>
+  templates.map((item) => ({
+    level: item.level,
+    weight: `${item.weight}g`,
+    price: formatMoney(item.weight * pricePerGram),
+    count: item.count,
+    bgImage: item.bgImage
+  }))
+
+const calculatePositionsValue = (positions) =>
+  positions.reduce((sum, item) => {
+    const itemPrice = parseFloat(String(item.price).replace(/,/g, '')) || 0
+    const count = Number(item.count) || 0
+    return sum + itemPrice * count
+  }, 0)
+
+app.get('/api/market/prices', async (req, res) => {
+  try {
+    const liveRows = await Promise.all([
+      buildLiveMarketRow('AU9999'),
+      buildLiveMarketRow('AG9999')
+    ])
+
+    res.json({
+      code: 200,
+      data: [...liveRows, ...buildStaticMarketRows()]
+    })
+  } catch (error) {
+    return sendUpstreamError(res, error, '实时贵金属行情获取失败')
+  }
 })
 
 // 2.1 K线周期配置
@@ -240,6 +474,140 @@ const chatMessages = {
   3: generateMessages(3, 40)
 }
 
+const friendDirectory = [
+  {
+    id: 101,
+    uid: 'U0002101',
+    nickname: '金市观察员',
+    avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=gold-observer',
+    intro: '擅长贵金属波段分析，常分享上金所盘面观察。',
+    city: '上海',
+    tags: ['黄金', '行情分析', 'AU9999'],
+    mutualFriends: 3,
+    status: '可添加'
+  },
+  {
+    id: 102,
+    uid: 'U0002102',
+    nickname: '银链研究员',
+    avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=silver-link',
+    intro: '关注白银套利与跨市场机会。',
+    city: '杭州',
+    tags: ['白银', '套利', '短线'],
+    mutualFriends: 1,
+    status: '可添加'
+  },
+  {
+    id: 103,
+    uid: 'U0002103',
+    nickname: '上金所数据台',
+    avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=sgedata',
+    intro: '同步上金所交易时间与盘口节奏。',
+    city: '深圳',
+    tags: ['上金所', '数据', '盘口'],
+    mutualFriends: 5,
+    status: '可添加'
+  }
+]
+
+const groupCandidates = [
+  {
+    id: 201,
+    uid: 'U0002201',
+    nickname: '贵金属套利营',
+    avatar: 'https://api.dicebear.com/7.x/shapes/svg?seed=group-1',
+    role: '群成员'
+  },
+  {
+    id: 202,
+    uid: 'U0002202',
+    nickname: '盘中快讯官',
+    avatar: 'https://api.dicebear.com/7.x/shapes/svg?seed=group-2',
+    role: '群成员'
+  },
+  {
+    id: 203,
+    uid: 'U0002203',
+    nickname: '量化小队长',
+    avatar: 'https://api.dicebear.com/7.x/shapes/svg?seed=group-3',
+    role: '群成员'
+  },
+  {
+    id: 204,
+    uid: 'U0002204',
+    nickname: '白银策略官',
+    avatar: 'https://api.dicebear.com/7.x/shapes/svg?seed=group-4',
+    role: '群成员'
+  }
+]
+
+const friendRequests = []
+
+const createQrDataUri = (label = '金影子二维码') => {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
+      <rect width="240" height="240" rx="20" fill="#ffffff"/>
+      <g fill="#0f172a">
+        <rect x="22" y="22" width="54" height="54" rx="4"/>
+        <rect x="34" y="34" width="30" height="30" rx="2" fill="#ffffff"/>
+        <rect x="164" y="22" width="54" height="54" rx="4"/>
+        <rect x="176" y="34" width="30" height="30" rx="2" fill="#ffffff"/>
+        <rect x="22" y="164" width="54" height="54" rx="4"/>
+        <rect x="34" y="176" width="30" height="30" rx="2" fill="#ffffff"/>
+        <rect x="98" y="24" width="12" height="12"/>
+        <rect x="122" y="24" width="12" height="12"/>
+        <rect x="98" y="48" width="12" height="12"/>
+        <rect x="122" y="48" width="12" height="12"/>
+        <rect x="98" y="72" width="12" height="12"/>
+        <rect x="110" y="84" width="12" height="12"/>
+        <rect x="134" y="84" width="12" height="12"/>
+        <rect x="86" y="108" width="12" height="12"/>
+        <rect x="110" y="108" width="12" height="12"/>
+        <rect x="134" y="108" width="12" height="12"/>
+        <rect x="158" y="108" width="12" height="12"/>
+        <rect x="86" y="132" width="12" height="12"/>
+        <rect x="110" y="132" width="12" height="12"/>
+        <rect x="146" y="132" width="12" height="12"/>
+        <rect x="170" y="132" width="12" height="12"/>
+        <rect x="86" y="156" width="12" height="12"/>
+        <rect x="122" y="156" width="12" height="12"/>
+        <rect x="146" y="156" width="12" height="12"/>
+        <rect x="170" y="156" width="12" height="12"/>
+        <rect x="98" y="180" width="12" height="12"/>
+        <rect x="122" y="180" width="12" height="12"/>
+        <rect x="146" y="180" width="12" height="12"/>
+        <rect x="170" y="180" width="12" height="12"/>
+      </g>
+      <text x="120" y="226" text-anchor="middle" font-size="14" fill="#64748b" font-family="Arial, sans-serif">${label}</text>
+    </svg>
+  `
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
+}
+
+const scanResultMap = {
+  'friend:101': {
+    type: 'friend',
+    title: '识别到好友二维码',
+    description: '可查看金市观察员资料并发起好友申请',
+    actionLabel: '查看用户信息',
+    targetId: 101
+  },
+  'group:3301': {
+    type: 'group',
+    title: '识别到群聊二维码',
+    description: '可加入“全球黄金交流群”并直接进入群聊',
+    actionLabel: '加入并进入群聊',
+    targetId: 3
+  },
+  'url:activity-88': {
+    type: 'url',
+    title: '识别到活动二维码',
+    description: '已解析为官方活动链接，可在后续接入真实跳转。',
+    actionLabel: '查看活动说明',
+    targetId: 'activity-88'
+  }
+}
+
 // --- 模拟机器人自动发言定时任务 ---
 const robotNames = ['王五', '李雷', '韩梅梅', '交易员-小明', '金市分析师']
 const robotMessages = [
@@ -326,6 +694,203 @@ app.post('/api/chat/send', (req, res) => {
   })
 })
 
+app.get('/api/chat/friend-search', (req, res) => {
+  const keyword = String(req.query.keyword || '').trim().toLowerCase()
+  const items = keyword
+    ? friendDirectory.filter((item) => item.nickname.toLowerCase().includes(keyword) || item.uid.toLowerCase().includes(keyword))
+    : friendDirectory
+
+  res.json({
+    code: 200,
+    data: items
+  })
+})
+
+app.get('/api/chat/friend-profile/:id', (req, res) => {
+  const item = friendDirectory.find((friend) => String(friend.id) === String(req.params.id))
+
+  if (!item) {
+    return res.status(404).json({ code: 404, message: '未找到该用户' })
+  }
+
+  res.json({
+    code: 200,
+    data: item
+  })
+})
+
+app.post('/api/chat/friend-request', (req, res) => {
+  const { targetUserId, message } = req.body
+  const request = {
+    requestId: `fr_${Date.now()}`,
+    targetUserId,
+    message: message || '你好，我想添加你为好友',
+    status: 'pending'
+  }
+
+  friendRequests.unshift(request)
+
+  res.json({
+    code: 200,
+    data: request
+  })
+})
+
+app.post('/api/chat/friend-request/:requestId/confirm', (req, res) => {
+  const request = friendRequests.find((item) => item.requestId === req.params.requestId)
+  if (!request) {
+    return res.status(404).json({ code: 404, message: '好友申请不存在' })
+  }
+
+  request.status = 'accepted'
+
+  const friend = friendDirectory.find((item) => String(item.id) === String(request.targetUserId))
+  const nextChatId = chats.length + 1
+
+  if (friend && !chats.find((item) => item.name === friend.nickname)) {
+    chats.unshift({
+      id: nextChatId,
+      name: friend.nickname,
+      lastMsg: '我们已经成为好友，开始聊天吧',
+      time: '刚刚',
+      type: 'user'
+    })
+    chatMessages[nextChatId] = generateMessages(nextChatId, 8)
+  }
+
+  res.json({
+    code: 200,
+    data: {
+      requestId: request.requestId,
+      status: 'accepted',
+      chatId: chats[0]?.id || nextChatId,
+      chatName: friend?.nickname || '新好友'
+    }
+  })
+})
+
+app.get('/api/chat/group-candidates', (req, res) => {
+  res.json({
+    code: 200,
+    data: groupCandidates
+  })
+})
+
+app.post('/api/chat/groups', (req, res) => {
+  const { name, memberIds = [], notice } = req.body
+  const nextChatId = chats.length + 1
+  const members = groupCandidates.filter((item) => memberIds.includes(item.id))
+
+  chats.unshift({
+    id: nextChatId,
+    name: name || '新建群聊',
+    lastMsg: `${members.length} 位成员已加入群聊`,
+    time: '刚刚',
+    type: 'group'
+  })
+
+  chatMessages[nextChatId] = [
+    {
+      id: Date.now(),
+      text: `群聊创建成功：${name || '新建群聊'}${notice ? `，群公告：${notice}` : ''}`,
+      self: false,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+  ]
+
+  res.json({
+    code: 200,
+    data: {
+      groupId: `grp_${nextChatId}`,
+      chatId: nextChatId,
+      name: name || '新建群聊',
+      memberCount: members.length,
+      status: 'created'
+    }
+  })
+})
+
+app.post('/api/chat/scan/parse', (req, res) => {
+  const { code } = req.body
+  const result = scanResultMap[code] || scanResultMap['url:activity-88']
+
+  res.json({
+    code: 200,
+    data: result
+  })
+})
+
+app.get('/api/chat/my-qr', (req, res) => {
+  res.json({
+    code: 200,
+    data: {
+      uid: 'U0001001',
+      nickname: '黄金投资者_888',
+      qrCode: createQrDataUri('金影子·我的二维码'),
+      tips: ['扫码可添加我为好友', '当前为 mock 二维码展示']
+    }
+  })
+})
+
+app.get('/api/chat/transfer-targets', (req, res) => {
+  const chatType = String(req.query.chatType || 'user')
+  const chatTitle = String(req.query.chatTitle || '')
+
+  if (chatType === 'group') {
+    return res.json({
+      code: 200,
+      data: groupCandidates.map((item) => ({
+        id: item.id,
+        nickname: item.nickname,
+        avatar: item.avatar,
+        uid: item.uid
+      }))
+    })
+  }
+
+  const friend = friendDirectory.find((item) => item.nickname === chatTitle) || friendDirectory[0]
+  return res.json({
+    code: 200,
+    data: friend ? [{
+      id: friend.id,
+      nickname: friend.nickname,
+      avatar: friend.avatar,
+      uid: friend.uid
+    }] : []
+  })
+})
+
+app.post('/api/chat/transfer', (req, res) => {
+  const { chatId, amount, recipientName, note } = req.body
+  const transferMessage = {
+    id: Date.now(),
+    type: 'transfer',
+    self: true,
+    amount: Number(amount) || 0,
+    recipientName: recipientName || '收款方',
+    note: note || '',
+    status: '转账成功',
+    text: `向 ${recipientName || '收款方'} 转账 ¥${Number(amount || 0).toFixed(2)}`,
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+
+  if (!chatMessages[chatId]) {
+    chatMessages[chatId] = []
+  }
+  chatMessages[chatId].push(transferMessage)
+
+  const chat = chats.find((item) => String(item.id) === String(chatId))
+  if (chat) {
+    chat.lastMsg = transferMessage.text
+    chat.time = transferMessage.time
+  }
+
+  res.json({
+    code: 200,
+    data: transferMessage
+  })
+})
+
 // 6. 交易 (Trade)
 const orders = [] // 清空死数据，由用户操作产生
 
@@ -336,24 +901,30 @@ app.get('/api/trade/orders', (req, res) => {
   })
 })
 
-app.post('/api/trade/order', (req, res) => {
+app.post('/api/trade/order', async (req, res) => {
   const { assetId, type, quantity } = req.body
   
-  // 根据 assetId 匹配名称和基准价
   const assetMap = {
-    'AU9999': { name: '现货黄金', basePrice: 485 },
-    'AG9999': { name: '现货白银', basePrice: 31 },
-    'USDX': { name: '美指', basePrice: 104 },
-    'OIL': { name: '原油', basePrice: 78 }
+    'AU9999': { name: '现货黄金' },
+    'AG9999': { name: '现货白银' },
+    'USDX': { name: '美指' },
+    'OIL': { name: '原油' }
   }
   
   const asset = assetMap[assetId] || assetMap['AU9999']
+  let currentPrice = 0
+
+  try {
+    currentPrice = await resolveAssetPrice(assetId)
+  } catch (error) {
+    return sendUpstreamError(res, error, '实时成交价获取失败')
+  }
   
   const newOrder = {
     id: orders.length + 1,
     type: type === 'buy' ? '买入' : '卖出',
     name: asset.name,
-    price: (asset.basePrice + Math.random() * (asset.basePrice * 0.01)).toFixed(2),
+    price: currentPrice.toFixed(2),
     quantity,
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
@@ -369,18 +940,16 @@ app.post('/api/trade/order', (req, res) => {
 })
 
 // 7. 行情图表 (Market Chart)
-app.get('/api/market/kline', (req, res) => {
+app.get('/api/market/kline', async (req, res) => {
   const { period = '1m', asset = 'AU9999' } = req.query
   const data = []
-  
-  // 根据品种决定基准价格
-  const assetBasePrices = {
-    'AU9999': 485.25,
-    'AG9999': 31.50,
-    'USDX': 104.20,
-    'OIL': 78.80
+
+  let basePrice = 0
+  try {
+    basePrice = await resolveAssetPrice(asset)
+  } catch (error) {
+    return sendUpstreamError(res, error, 'K 线基准价获取失败')
   }
-  let basePrice = assetBasePrices[asset] || 485.25
 
   const now = Date.now()
   
@@ -428,39 +997,41 @@ app.get('/api/market/kline', (req, res) => {
 })
 
 // 8. 用户信息 (User Profile)
-app.get('/api/user/profile', (req, res) => {
-  res.json({
-    code: 200,
-    data: {
-      id: '8829103',
-      username: '黄金投资者_888',
-      nickname: '黄金投资者_888',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=GoldInvestor',
-      level: 'Vip 3',
-      fee: '0.2%',
-      assets: [
-        { key: 'profile.assets.total', value: '1,250,000.00', unit: 'CNY' },
-        { key: 'profile.assets.balance', value: '85,400.00', unit: 'CNY' },
-        { key: 'profile.assets.marketValue', value: '1,154,600.00', unit: 'CNY' },
-        { key: 'profile.assets.yesterdayProfit', value: '+12,450.00', unit: 'CNY', trend: 'up' },
-        { key: 'profile.assets.accumulatedProfit', value: '+450,200.00', unit: 'CNY', trend: 'up' },
-      ],
-      goldPositions: [
-        { level: '影子金币', weight: '10g', price: '5,652.00', count: 2, bgImage: '/images/金影子金币.jpg' },
-        { level: '影子金币', weight: '50g', price: '28,260.00', count: 1, bgImage: '/images/金叶币.jpg' },
-        { level: '影子金币', weight: '500g', price: '56,520.00', count: 0, bgImage: '/images/影子金币.jpg' },
-        { level: '黄金条', weight: '5000g', price: '282,600.00', count: 0, bgImage: '/images/黄金条.jpg' },
-        { level: '黄金砖', weight: '50000g', price: '565,200.00', count: 0, bgImage: '/images/黄金砖.jpg' },
-      ],
-      silverPositions: [
-        { level: '影子金币', weight: '10g', price: '820.00', count: 10, bgImage: '/images/金影子金币.jpg' },
-        { level: '影子金币', weight: '50g', price: '4,100.00', count: 3, bgImage: '/images/金叶币_银.jpg' },
-        { level: '影子金币', weight: '500g', price: '8,200.00', count: 1, bgImage: '/images/影子金币_银.jpg' },
-        { level: '黄金条', weight: '5000g', price: '41,000.00', count: 0, bgImage: '/images/黄金条_银.jpg' },
-        { level: '黄金砖', weight: '50000g', price: '82,000.00', count: 0, bgImage: '/images/黄金砖_银.jpg' },
-      ]
-    }
-  })
+app.get('/api/user/profile', async (req, res) => {
+  try {
+    const [goldPricePerGram, silverPricePerGram] = await Promise.all([
+      resolveAssetPrice('AU9999'),
+      resolveAssetPrice('AG9999')
+    ])
+
+    const goldPositions = buildProfilePositions(profilePositionTemplates.gold, goldPricePerGram)
+    const silverPositions = buildProfilePositions(profilePositionTemplates.silver, silverPricePerGram)
+    const marketValue = calculatePositionsValue(goldPositions) + calculatePositionsValue(silverPositions)
+    const totalAssets = profileBaseBalance + marketValue
+
+    res.json({
+      code: 200,
+      data: {
+        id: '8829103',
+        username: '黄金投资者_888',
+        nickname: '黄金投资者_888',
+        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=GoldInvestor',
+        level: 'Vip 3',
+        fee: '0.2%',
+        assets: [
+          { key: 'profile.assets.total', value: formatMoney(totalAssets), unit: 'CNY' },
+          { key: 'profile.assets.balance', value: formatMoney(profileBaseBalance), unit: 'CNY' },
+          { key: 'profile.assets.marketValue', value: formatMoney(marketValue), unit: 'CNY' },
+          { key: 'profile.assets.yesterdayProfit', value: `+${formatMoney(profileYesterdayProfit)}`, unit: 'CNY', trend: 'up' },
+          { key: 'profile.assets.accumulatedProfit', value: `+${formatMoney(profileAccumulatedProfit)}`, unit: 'CNY', trend: 'up' },
+        ],
+        goldPositions,
+        silverPositions
+      }
+    })
+  } catch (error) {
+    return sendUpstreamError(res, error, '用户金银持仓现价获取失败')
+  }
 })
 
 // 9. 热门活动 (Activities/Banners)

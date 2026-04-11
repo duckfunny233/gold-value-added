@@ -27,6 +27,7 @@ import { formatDateTime, formatTime, trimText } from './dashboard.utils'
 import { NewsFeedService } from './news-feed.service'
 import { sha256 } from '../../common/utils/hash.util'
 import { PrismaService } from '../../prisma/prisma.service'
+import { MarketService } from '../market/market.service'
 
 type AdminActor = {
   adminUserId: string
@@ -38,6 +39,7 @@ export class DashboardService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly newsFeedService: NewsFeedService,
+    private readonly marketService: MarketService,
   ) {}
 
   async getDashboard(query: DashboardQueryDto) {
@@ -269,15 +271,7 @@ export class DashboardService {
             status: UserStatus.FROZEN,
           },
         }),
-        this.prisma.tradeOrder.aggregate({
-          _avg: {
-            price: true,
-          },
-          where: {
-            status: TradeStatus.FILLED,
-            createdAt: range,
-          },
-        }),
+        this.marketService.getTicker('AU9999'),
         this.prisma.tradeOrder.count({
           where: {
             status: {
@@ -289,7 +283,7 @@ export class DashboardService {
       ])
 
     const pendingCount = pendingWithdrawals + pendingRecharges
-    const averagePrice = goldReference._avg.price ? Number(goldReference._avg.price).toFixed(2) : '563.20'
+    const livePrice = Number(goldReference.price).toFixed(2)
 
     return [
       {
@@ -304,8 +298,8 @@ export class DashboardService {
       },
       {
         label: '黄金参考价',
-        value: `¥${averagePrice}/克`,
-        note: `按 ${query.date || 'today'} 时间范围成交均价聚合`,
+        value: `¥${livePrice}/克`,
+        note: `来自 gold-api.com 实时接口，更新于 ${goldReference.updatedAtReadable || goldReference.timestamp}`,
       },
       {
         label: '交易状态',

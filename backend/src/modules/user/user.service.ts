@@ -31,6 +31,87 @@ type AdminActor = {
 export class UserService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async getPublicLeaderboard() {
+    const assets = await this.prisma.asset.findMany({
+      include: {
+        user: {
+          select: {
+            uid: true,
+            nickname: true,
+            username: true,
+          },
+        },
+      },
+      orderBy: [{ totalAsset: 'desc' }, { goldHoldingGrams: 'desc' }, { updatedAt: 'desc' }],
+      take: 10,
+    })
+
+    return {
+      items: assets.map((item, index) => ({
+        sequenceNo: index + 1,
+        uid: item.user.uid,
+        nickname: item.user.nickname || item.user.username,
+        goldGrams: toNumber(item.goldHoldingGrams),
+        investedAmount: toNumber(item.totalAsset),
+        updatedAt: formatDateTime(item.updatedAt),
+      })),
+    }
+  }
+
+  async getPublicGoldChain() {
+    const assets = await this.prisma.asset.findMany({
+      include: {
+        user: {
+          select: {
+            uid: true,
+            nickname: true,
+            username: true,
+            tradeOrders: {
+              select: {
+                side: true,
+                assetCode: true,
+                quantityGrams: true,
+                filledGrams: true,
+                submittedAt: true,
+              },
+              orderBy: {
+                submittedAt: 'desc',
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+      take: 12,
+    })
+
+    return {
+      items: assets.map((item, index) => {
+        const buyCount = item.user.tradeOrders.filter((order) => order.side === 'BUY').length
+        const sellCount = item.user.tradeOrders.filter((order) => order.side === 'SELL').length
+        const silverGrams = item.user.tradeOrders
+          .filter((order) => order.assetCode === 'AG9999')
+          .reduce((sum, order) => sum + toNumber(order.filledGrams || order.quantityGrams), 0)
+        const lastTradeAt = item.user.tradeOrders[0]?.submittedAt || item.updatedAt
+
+        return {
+          sequenceNo: 100001 + index,
+          uid: item.user.uid,
+          nickname: item.user.nickname || item.user.username,
+          buyInfo: `买入 ${buyCount} 笔 / 卖出 ${sellCount} 笔`,
+          buyCount,
+          sellCount,
+          goldGrams: toNumber(item.goldHoldingGrams),
+          silverGrams: Number(silverGrams.toFixed(2)),
+          totalAssets: toNumber(item.totalAsset),
+          updatedAt: formatDateTime(lastTradeAt),
+        }
+      }),
+    }
+  }
+
   async getAssetOverview(query: UserQueryDto) {
     const user = await this.findUser(query)
     if (!user?.asset) {

@@ -1,11 +1,19 @@
 import { apiFetch } from '../utils/request'
+import { cloneData, tradeOrdersFallback } from './fallback-data'
 
 export const TradeService = {
   async getOrders() {
-    const response = await apiFetch('/api/trade/orders')
-    return {
-      ...response,
-      data: Array.isArray(response?.data) ? response.data : [],
+    try {
+      const response = await apiFetch('/api/trade/orders')
+      return {
+        ...response,
+        data: Array.isArray(response?.data) ? response.data : [],
+      }
+    } catch (error) {
+      return {
+        code: 200,
+        data: cloneData(tradeOrdersFallback),
+      }
     }
   },
 

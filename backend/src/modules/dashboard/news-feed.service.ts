@@ -1,58 +1,53 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
+import { Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { Cron, CronExpression } from '@nestjs/schedule'
 import { createHash } from 'crypto'
-import { NEWS_CACHE_TTL_MS, NEWS_ERROR_CODES } from './dashboard.constants'
+import { NEWS_ERROR_CODES } from './dashboard.constants'
 import { NoticeFeedResult, UnifiedNotice } from './dashboard.types'
-import { Prisma } from '@prisma/client'
 import { formatDateTime, pickFirstString, trimText } from './dashboard.utils'
-import { PrismaService } from '../../prisma/prisma.service'
 
-type RemoteNotice = {
+const TIANAPI_NEWS_URL = 'https://apis.tianapi.com/caijing/index'
+
+type TianNewsItem = Record<string, unknown>
+
+type AppNewsListItem = {
+  id: string
+  title: string
+  date: string
+  summary: string
+  thumbnail: string
+  views?: string
+}
+
+type AppNewsDetail = {
+  id: string
+  title: string
+  date: string
+  views: string
+  author: string
+  image: string
+  content: string
+  summary: string
+  linkUrl?: string
+}
+
+type NormalizedNews = {
   notice: UnifiedNotice
-  rawPayload: Record<string, unknown>
+  listItem: AppNewsListItem
+  detail: AppNewsDetail
 }
 
 @Injectable()
-export class NewsFeedService implements OnModuleInit {
+export class NewsFeedService {
   private readonly logger = new Logger(NewsFeedService.name)
-  private disabledLogged = false
+  private readonly detailCache = new Map<string, AppNewsDetail>()
 
-  constructor(
-    private readonly configService: ConfigService,
-    private readonly prisma: PrismaService,
-  ) {}
-
-  async onModuleInit() {
-    await this.refreshCache('startup')
-  }
-
-  @Cron(CronExpression.EVERY_MINUTE)
-  async refreshCacheBySchedule() {
-    await this.refreshCache('schedule')
-  }
+  constructor(private readonly configService: ConfigService) {}
 
   async getFeed(): Promise<NoticeFeedResult> {
-    const url = this.getNewsApiUrl()
-
-    if (url) {
-      try {
-        return await this.fetchAndPersistRemote(url)
-      } catch (error) {
-        return this.handleFetchFailure(error, 'request')
-      }
-    }
-
-    this.logDisabled()
-    return this.readDatabaseCache()
-  }
-
-  private async fetchAndPersistRemote(url: string): Promise<NoticeFeedResult> {
-    const notices = await this.fetchRemoteNotices(url)
-    await this.saveDatabaseCache(notices, url)
+    const { items } = await this.fetchNewsPage(1, 10)
 
     return {
-      notices: notices.map((item) => ({ ...item.notice })),
+      notices: items.map((item) => ({ ...item.notice })),
       meta: {
         source: 'remote',
         cachedAt: formatDateTime(new Date()),
@@ -60,126 +55,155 @@ export class NewsFeedService implements OnModuleInit {
     }
   }
 
-  private async refreshCache(reason: 'startup' | 'schedule') {
-    const url = this.getNewsApiUrl()
-    if (!url) {
-      this.logDisabled()
-      return
-    }
+  async getNewsList(page = 1, limit = 10) {
+    const { items, total } = await this.fetchNewsPage(page, limit)
 
-    try {
-      const notices = await this.fetchRemoteNotices(url)
-      await this.saveDatabaseCache(notices, url)
-      this.logger.log(`新闻缓存刷新成功 (${reason})，共 ${notices.length} 条`)
-    } catch (error) {
-      await this.handleFetchFailure(error, reason)
+    return {
+      items: items.map((item) => item.listItem),
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
     }
   }
 
-  private getNewsApiUrl() {
-    return this.configService.get<string>('NEWS_API_URL')?.trim() || ''
-  }
-
-  private buildHeaders() {
-    const apiKey = this.configService.get<string>('NEWS_API_KEY')?.trim()
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
+  async getNewsDetail(id: string) {
+    const cached = this.detailCache.get(id)
+    if (cached) {
+      return cached
     }
 
-    if (apiKey) {
-      headers.Authorization = `Bearer ${apiKey}`
-      headers['X-API-Key'] = apiKey
+    const { items } = await this.fetchNewsPage(1, 50)
+    const detail = items.find((item) => item.detail.id === id)?.detail
+
+    if (!detail) {
+      throw new NotFoundException('新闻不存在')
     }
 
-    return headers
+    return detail
   }
 
-  private async fetchRemoteNotices(url: string) {
-    const response = await fetch(url, {
-      headers: this.buildHeaders(),
+  private async fetchNewsPage(page: number, limit: number) {
+    const apiKey = this.requireApiKey()
+    const requestUrl = new URL(TIANAPI_NEWS_URL)
+    requestUrl.searchParams.set('key', apiKey)
+    requestUrl.searchParams.set('page', String(page))
+    requestUrl.searchParams.set('num', String(limit))
+
+    const response = await fetch(requestUrl.toString(), {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
       signal: AbortSignal.timeout(8000),
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
+      const message = `[${NEWS_ERROR_CODES.FETCH_FAILED}] 财经新闻拉取失败: HTTP ${response.status}`
+      this.logger.error(message)
+      throw new Error(message)
     }
 
-    const contentType = response.headers.get('content-type') || ''
-    const payload = contentType.includes('application/json')
-      ? await response.json()
-      : JSON.parse(await response.text())
-
-    const items = this.extractItems(payload)
-    const notices = items
-      .map((item, index) => this.normalizeRemoteNotice(item, index))
-      .filter((item): item is RemoteNotice => Boolean(item))
-      .slice(0, 10)
-
-    if (!notices.length) {
-      throw new Error(NEWS_ERROR_CODES.EMPTY_RESPONSE)
+    const payload = (await response.json()) as Record<string, unknown>
+    const code = Number(payload.code)
+    if (code !== 200) {
+      const message = `[${NEWS_ERROR_CODES.FETCH_FAILED}] 财经新闻拉取失败: ${String(payload.msg || 'unknown_error')}`
+      this.logger.error(message)
+      throw new Error(message)
     }
 
-    return notices
+    const { items: rawItems, total } = this.extractTianItems(payload.result)
+    const normalized = rawItems
+      .map((item, index) => this.normalizeNews(item, page, limit, index))
+      .filter((item): item is NormalizedNews => Boolean(item))
+
+    if (!normalized.length) {
+      const message = `[${NEWS_ERROR_CODES.EMPTY_RESPONSE}] 财经新闻接口未返回可用新闻`
+      this.logger.error(message)
+      throw new Error(message)
+    }
+
+    normalized.forEach((item) => {
+      this.detailCache.set(item.detail.id, item.detail)
+    })
+
+    return {
+      items: normalized,
+      total,
+    }
   }
 
-  private extractItems(payload: unknown): unknown[] {
-    if (Array.isArray(payload)) {
-      return payload
+  private requireApiKey() {
+    const apiKey = this.configService.get<string>('NEWS_API_KEY')?.trim()
+    if (!apiKey) {
+      throw new Error(`[${NEWS_ERROR_CODES.FETCH_FAILED}] NEWS_API_KEY 未配置`)
     }
 
-    if (!payload || typeof payload !== 'object') {
-      return []
-    }
-
-    const record = payload as Record<string, unknown>
-    for (const key of ['data', 'items', 'articles', 'news', 'list', 'records', 'result']) {
-      const value = record[key]
-      if (Array.isArray(value)) {
-        return value
-      }
-
-      const nested = this.extractItems(value)
-      if (nested.length) {
-        return nested
-      }
-    }
-
-    return []
+    return apiKey
   }
 
-  private normalizeRemoteNotice(item: unknown, index: number): RemoteNotice | null {
-    if (!item || typeof item !== 'object') {
-      return null
+  private extractTianItems(result: unknown) {
+    if (Array.isArray(result)) {
+      return {
+        items: result,
+        total: result.length,
+      }
     }
 
-    const record = item as Record<string, unknown>
-    const title = pickFirstString(record.title, record.headline, record.name, record.subject)
+    if (!result || typeof result !== 'object') {
+      return {
+        items: [],
+        total: 0,
+      }
+    }
+
+    const record = result as Record<string, unknown>
+    const items =
+      this.pickItemArray(record.newslist) ||
+      this.pickItemArray(record.list) ||
+      this.pickItemArray(record.items) ||
+      (this.looksLikeNewsItem(record) ? [record] : [])
+
+    const total = this.pickTotal(record, items.length)
+
+    return { items, total }
+  }
+
+  private pickItemArray(value: unknown) {
+    return Array.isArray(value) ? value : null
+  }
+
+  private pickTotal(record: Record<string, unknown>, fallbackTotal: number) {
+    const total = Number(record.allnum ?? record.total ?? record.count ?? fallbackTotal)
+    return Number.isFinite(total) && total > 0 ? total : fallbackTotal
+  }
+
+  private looksLikeNewsItem(value: Record<string, unknown>) {
+    return Boolean(pickFirstString(value.id, value.title, value.description))
+  }
+
+  private normalizeNews(item: TianNewsItem, page: number, limit: number, index: number): NormalizedNews | null {
+    const title = pickFirstString(item.title)
     if (!title) {
       return null
     }
 
-    const content = trimText(
-      pickFirstString(record.summary, record.description, record.content, record.text, record.body),
-      180,
-    )
-    const publishedAt = this.parseDate(
-      record.publishedAt,
-      record.publishAt,
-      record.pubDate,
-      record.date,
-      record.time,
-      record.createdAt,
-    )
-    const linkUrl = pickFirstString(record.url, record.link, record.href)
-    const imageUrl = pickFirstString(record.image, record.imageUrl, record.thumbnail, record.cover)
-    const publishedAtIso = publishedAt ? publishedAt.toISOString() : null
+    const linkUrl = pickFirstString(item.url)
+    const publishedAt = this.parseDate(pickFirstString(item.ctime))
+    const publishedAtIso = publishedAt?.toISOString() ?? null
+    const summary = trimText(pickFirstString(item.description), 180)
+    const imageUrl = pickFirstString(item.picUrl)
+    const author = pickFirstString(item.source) || '天行财经'
+    const newsId =
+      pickFirstString(item.id) ||
+      this.createNewsId(title, publishedAtIso, linkUrl, (page - 1) * limit + index)
 
     return {
       notice: {
-        id: this.createExternalId(title, publishedAtIso, linkUrl, index),
+        id: newsId,
         title,
-        content,
-        text: content || title,
+        content: summary,
+        text: summary || title,
         status: '外部新闻',
         publishAt: formatDateTime(publishedAt),
         pollingEnabled: '是',
@@ -189,35 +213,42 @@ export class NewsFeedService implements OnModuleInit {
         publishedAtIso,
         sortTimestamp: publishedAt?.getTime() ?? Date.now() - index,
       },
-      rawPayload: record,
+      listItem: {
+        id: newsId,
+        title,
+        date: pickFirstString(item.ctime) || formatDateTime(publishedAt),
+        summary,
+        thumbnail: imageUrl,
+      },
+      detail: {
+        id: newsId,
+        title,
+        date: pickFirstString(item.ctime) || formatDateTime(publishedAt),
+        views: '-',
+        author,
+        image: imageUrl,
+        summary,
+        linkUrl: linkUrl || undefined,
+        content: this.buildDetailContent({
+          title,
+          summary,
+          author,
+          linkUrl,
+        }),
+      },
     }
   }
 
-  private parseDate(...values: unknown[]) {
-    for (const value of values) {
-      if (value instanceof Date && !Number.isNaN(value.getTime())) {
-        return value
-      }
-
-      if (typeof value === 'number') {
-        const date = new Date(value)
-        if (!Number.isNaN(date.getTime())) {
-          return date
-        }
-      }
-
-      if (typeof value === 'string' && value.trim()) {
-        const date = new Date(value)
-        if (!Number.isNaN(date.getTime())) {
-          return date
-        }
-      }
+  private parseDate(value: string) {
+    if (!value) {
+      return null
     }
 
-    return null
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? null : date
   }
 
-  private createExternalId(title: string, publishedAt: string | null, linkUrl: string, index: number) {
+  private createNewsId(title: string, publishedAt: string | null, linkUrl: string, index: number) {
     const hash = createHash('sha1')
       .update([title, publishedAt || '', linkUrl || '', String(index)].join('|'))
       .digest('hex')
@@ -226,101 +257,27 @@ export class NewsFeedService implements OnModuleInit {
     return `news_${hash}`
   }
 
-  private async saveDatabaseCache(notices: RemoteNotice[], sourceUrl: string) {
-    const fetchedAt = new Date()
-    await this.prisma.$transaction([
-      this.prisma.newsCache.deleteMany(),
-      this.prisma.newsCache.createMany({
-        data: notices.map((item) => ({
-          title: item.notice.title,
-          summary: item.notice.content,
-          source: sourceUrl,
-          url: item.notice.linkUrl ?? null,
-          publishedAt: item.notice.publishedAtIso ? new Date(item.notice.publishedAtIso) : null,
-          fetchedAt,
-          rawPayload: item.rawPayload as Prisma.InputJsonValue,
-        })),
-      }),
-    ])
-  }
+  private buildDetailContent(input: { title: string; summary: string; author: string; linkUrl: string }) {
+    const blocks = [
+      `<p>${this.escapeHtml(input.summary || input.title)}</p>`,
+      `<p>文章来源：${this.escapeHtml(input.author)}</p>`,
+    ]
 
-  private async readDatabaseCache(): Promise<NoticeFeedResult> {
-    const dbRows = await this.prisma.newsCache.findMany({
-      orderBy: [{ publishedAt: 'desc' }, { fetchedAt: 'desc' }],
-      take: 10,
-    })
-
-    if (!dbRows.length) {
-      return {
-        notices: [],
-        meta: {
-          source: 'disabled',
-          cachedAt: null,
-        },
-      }
-    }
-
-    const fetchedAt = dbRows[0].fetchedAt
-    const isFresh = Date.now() - fetchedAt.getTime() < NEWS_CACHE_TTL_MS
-
-    return {
-      notices: dbRows.map((item, index) => ({
-        id: this.createExternalId(item.title, item.publishedAt?.toISOString() ?? null, item.url ?? '', index),
-        title: item.title,
-        content: item.summary,
-        text: item.summary || item.title,
-        status: '外部新闻缓存',
-        publishAt: formatDateTime(item.publishedAt),
-        pollingEnabled: '是',
-        source: 'external',
-        linkUrl: item.url ?? undefined,
-        publishedAtIso: item.publishedAt?.toISOString() ?? null,
-        sortTimestamp: item.publishedAt?.getTime() ?? item.fetchedAt.getTime(),
-      })),
-      meta: {
-        source: 'db-cache',
-        code: isFresh ? undefined : NEWS_ERROR_CODES.DB_CACHE_FALLBACK,
-        cachedAt: formatDateTime(fetchedAt),
-      },
-    }
-  }
-
-  private async handleFetchFailure(error: unknown, reason: 'request' | 'startup' | 'schedule'): Promise<NoticeFeedResult> {
-    const message = error instanceof Error ? error.message : String(error)
-    this.logger.error(`[${NEWS_ERROR_CODES.FETCH_FAILED}] 新闻源拉取失败 (${reason}): ${message}`)
-
-    const dbCacheResult = await this.readDatabaseCache()
-    if (dbCacheResult.notices.length) {
-      this.logger.warn(
-        `[${NEWS_ERROR_CODES.DB_CACHE_FALLBACK}] 外部新闻源异常，继续使用数据库缓存，cachedAt=${dbCacheResult.meta.cachedAt}`,
+    if (input.linkUrl) {
+      blocks.push(
+        `<p>原文链接：<a href="${this.escapeHtml(input.linkUrl)}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(input.linkUrl)}</a></p>`,
       )
-      return {
-        notices: dbCacheResult.notices,
-        meta: {
-          source: 'db-cache',
-          code: NEWS_ERROR_CODES.DB_CACHE_FALLBACK,
-          cachedAt: dbCacheResult.meta.cachedAt,
-        },
-      }
     }
 
-    this.logger.warn(`[${NEWS_ERROR_CODES.LOCAL_FALLBACK}] 无可用数据库缓存，将由本地公告兜底`)
-    return {
-      notices: [],
-      meta: {
-        source: 'disabled',
-        code: NEWS_ERROR_CODES.LOCAL_FALLBACK,
-        cachedAt: null,
-      },
-    }
+    return blocks.join('')
   }
 
-  private logDisabled() {
-    if (this.disabledLogged) {
-      return
-    }
-
-    this.disabledLogged = true
-    this.logger.log('未配置 NEWS_API_URL，公告接口将只返回本地公告')
+  private escapeHtml(value: string) {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
   }
 }

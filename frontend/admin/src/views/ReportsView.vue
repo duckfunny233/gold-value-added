@@ -20,6 +20,18 @@ const loading = ref(false)
 const error = ref('')
 const actionMessage = ref('')
 
+function triggerDownload(fileName, content, contentType) {
+  const blob = new Blob([content], { type: contentType || 'application/octet-stream' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
 async function loadData() {
   loading.value = true
   error.value = ''
@@ -75,10 +87,16 @@ async function handleExportReport(format) {
     error.value = '请先选中一条报表任务'
     return
   }
-  await runAction(
-    () => AdminService.exportReportJob(jobId, { format }),
-    `报表已按 ${format.toUpperCase()} 导出`,
-  )
+  error.value = ''
+  actionMessage.value = ''
+  try {
+    const result = await AdminService.exportReportJob(jobId, { format })
+    triggerDownload(result.fileName, result.content || '', result.contentType)
+    actionMessage.value = `报表已按 ${format.toUpperCase()} 导出`
+    await loadData()
+  } catch (err) {
+    error.value = err.message || '报表操作失败'
+  }
 }
 
 onMounted(loadData)

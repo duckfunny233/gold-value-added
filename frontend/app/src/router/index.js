@@ -12,6 +12,9 @@ import ChatDetail from '../views/ChatDetail.vue'
 import NewsList from '../views/NewsList.vue'
 import NewsDetail from '../views/NewsDetail.vue'
 import GoldChain from '../views/GoldChain.vue'
+import AddFriend from '../views/chat/AddFriend.vue'
+import CreateGroup from '../views/chat/CreateGroup.vue'
+import Scan from '../views/chat/Scan.vue'
 
 const routes = [
   {
@@ -43,6 +46,21 @@ const routes = [
     path: '/activity/:id',
     name: 'ActivityDetail',
     component: NewsDetail
+  },
+  {
+    path: '/chat/add-friend',
+    name: 'AddFriend',
+    component: AddFriend
+  },
+  {
+    path: '/chat/create-group',
+    name: 'CreateGroup',
+    component: CreateGroup
+  },
+  {
+    path: '/chat/scan',
+    name: 'Scan',
+    component: Scan
   },
   {
     path: '/',

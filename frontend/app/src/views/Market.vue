@@ -77,7 +77,7 @@ const changePeriod = (p) => {
   fetchKLineData()
 }
 
-// 鍔ㄦ€侀粯璁ら€変腑
+// 动态默认选中
 watch(markets, (newMarkets) => {
   if (newMarkets.length > 0 && !currentAsset.value) {
     currentAsset.value = newMarkets[0]

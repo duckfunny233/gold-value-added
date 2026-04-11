@@ -12,7 +12,7 @@ export const NEWS_ERROR_CODES = {
 export const DASHBOARD_RULE_REMINDERS = [
   '公告发布后，前端首页应按轮巡方式自动展示。',
   '系统监控必须覆盖同步延迟、排行榜重排、支付对账。',
-  '外部新闻异常时优先返回缓存，再降级本地公告。',
+  '外部财经新闻统一接入天行财经接口展示。',
 ]
 
 export const MODULE_LABELS = {

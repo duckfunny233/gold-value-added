@@ -7,9 +7,19 @@ import { MarketService } from './market.service'
 export class MarketController {
   constructor(private readonly marketService: MarketService) {}
 
+  @Get('market/prices')
+  getPrices() {
+    return this.marketService.getPrices()
+  }
+
   @Get('app/market/au9999/ticker')
   getTicker() {
-    return this.marketService.getTicker()
+    return this.marketService.getTicker('AU9999')
+  }
+
+  @Get('app/market/ag9999/ticker')
+  getSilverTicker() {
+    return this.marketService.getTicker('AG9999')
   }
 
   @Get('market/periods')

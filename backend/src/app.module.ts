@@ -8,6 +8,7 @@ import { TraceIdMiddleware } from './common/middleware/trace-id.middleware'
 import { AdminAuthModule } from './modules/admin-auth/admin-auth.module'
 import { AuditModule } from './modules/audit/audit.module'
 import { AuthModule } from './modules/auth/auth.module'
+import { ChatModule } from './modules/chat/chat.module'
 import { DashboardModule } from './modules/dashboard/dashboard.module'
 import { FundModule } from './modules/fund/fund.module'
 import { LeaderboardModule } from './modules/leaderboard/leaderboard.module'
@@ -31,6 +32,7 @@ import { PrismaModule } from './prisma/prisma.module'
     AdminAuthModule,
     SystemModule,
     AuthModule,
+    ChatModule,
     UserModule,
     FundModule,
     TradeModule,

@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { init, dispose } from 'klinecharts'
 
@@ -19,7 +19,7 @@ let chart = null
 onMounted(() => {
   if (chartContainer.value) {
     chart = init(chartContainer.value)
-    // 閸╄櫣顢呴柊宥囩枂
+    // 基础配置
     updateStyles()
     
     if (props.data && props.data.length > 0) {
