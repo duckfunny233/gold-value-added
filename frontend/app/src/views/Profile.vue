@@ -7,6 +7,8 @@ import ImageCarousel from '../components/ImageCarousel.vue'
 import { UserService } from '../services/user'
 import { AuthService } from '../services/auth'
 import { useToast } from '../composables/useToast'
+import RechargeModal from '../components/profile/RechargeModal.vue'
+import WithdrawModal from '../components/profile/WithdrawModal.vue'
 
 defineOptions({ name: 'Profile' })
 
@@ -16,6 +18,8 @@ const { showToast } = useToast()
 const assetType = ref('gold') // 'gold' | 'silver'
 const showAmount = ref(true)
 const isRefreshing = ref(false)
+const showRechargeModal = ref(false)
+const showWithdrawModal = ref(false)
 
 const userProfile = ref({
   username: t('profile.loading'),
@@ -57,6 +61,23 @@ const toggleAmount = () => {
 
 const showComingSoon = () => {
   showToast(t('profile.comingSoon'))
+}
+
+const parseAmount = (value) => {
+  const amount = Number(String(value || 0).replace(/,/g, ''))
+  return Number.isFinite(amount) ? amount : 0
+}
+
+const availableBalance = computed(() => parseAmount(getAssetByIndex(1).value))
+
+const handleRechargeSuccess = () => {
+  showToast('充值成功，余额已更新')
+  fetchProfile(true)
+}
+
+const handleWithdrawSuccess = () => {
+  showToast('提现申请已提交，状态：到账中')
+  fetchProfile(true)
 }
 
 const logout = async () => {
@@ -111,7 +132,7 @@ const silverSummary = computed(() => {
         <h3 class="text-xl font-bold">{{ userProfile.nickname }}</h3>
         <p class="text-xs text-gray-400">{{ t('profile.idPrefix') }} {{ userProfile.id }}</p>
       </div>
-      <button class="ml-auto text-gray-400 btn-interact p-2"><Settings :size="20" /></button>
+      <button @click="router.push('/settings')" class="ml-auto text-gray-400 btn-interact p-2"><Settings :size="20" /></button>
     </div>
 
     <!-- Operations -->
@@ -119,14 +140,14 @@ const silverSummary = computed(() => {
       <div class="card-base p-4 flex flex-col gap-6 relative">
         
         <div class="flex justify-around">
-          <button @click="showComingSoon" class="flex flex-col items-center gap-2 btn-interact">
+          <button @click="showRechargeModal = true" class="flex flex-col items-center gap-2 btn-interact">
             <div class="w-12 h-12 bg-danger/10 text-danger rounded-full flex items-center justify-center">
               <ArrowUpCircle :size="24" />
             </div>
             <span class="text-[11px] font-bold">{{ t('profile.recharge') }}</span>
           </button>
 
-          <button @click="showComingSoon" class="flex flex-col items-center gap-2 btn-interact">
+          <button @click="showWithdrawModal = true" class="flex flex-col items-center gap-2 btn-interact">
             <div class="w-12 h-12 bg-success/10 text-success rounded-full flex items-center justify-center">
               <ArrowDownCircle :size="24" />
             </div>
@@ -158,38 +179,39 @@ const silverSummary = computed(() => {
         <div class="absolute -top-10 -right-10 w-40 h-40 bg-white/5 rounded-full blur-3xl"></div>
         
         <template v-if="userProfile.assets && userProfile.assets.length > 0">
-          <div class="mb-4">
-            <div class="flex items-center gap-2 mb-1">
-              <p class="text-gray-400 text-xs">{{ t(getAssetByIndex(0).key) }} ({{ getAssetByIndex(0).unit }})</p>
-              <button @click="toggleAmount" class="text-gray-500 hover:text-white transition-colors btn-interact">
-                <component :is="showAmount ? Eye : EyeOff" :size="14" />
-              </button>
-            </div>
-            <div class="flex items-baseline gap-3">
-              <h2 class="text-3xl font-bold tabular-nums">
+          <div class="grid grid-cols-2 gap-6">
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <p class="text-gray-400 text-xs">{{ t(getAssetByIndex(0).key) }} ({{ getAssetByIndex(0).unit }})</p>
+                <button @click="toggleAmount" class="text-gray-500 hover:text-white transition-colors btn-interact">
+                  <component :is="showAmount ? Eye : EyeOff" :size="14" />
+                </button>
+              </div>
+              <h2 class="text-3xl font-bold tabular-nums leading-none">
                 {{ showAmount ? getAssetByIndex(0).value : '****' }}
               </h2>
-              <span class="text-xs text-gray-400">
-                {{ t('profile.tempAssets') }} <span class="text-gray-300">{{ showAmount ? '¥0.00' : '****' }}</span>
-              </span>
             </div>
-          </div>
-          <div class="grid grid-cols-2 gap-y-4">
+            <div class="self-end pl-6">
+              <p class="text-gray-400 text-[10px] mb-1">{{ t('profile.tempAssets') }}</p>
+              <p class="font-bold text-sm tabular-nums leading-none">{{ showAmount ? '¥0.00' : '****' }}</p>
+            </div>
+
             <div>
               <p class="text-gray-400 text-[10px] mb-1">{{ t(getAssetByIndex(1).key) }}</p>
               <p class="font-bold text-sm tabular-nums">{{ showAmount ? getAssetByIndex(1).value : '****' }}</p>
             </div>
-            <div>
+            <div class="pl-6">
               <p class="text-gray-400 text-[10px] mb-1">{{ t(getAssetByIndex(2).key) }}</p>
               <p class="font-bold text-sm tabular-nums">{{ showAmount ? getAssetByIndex(2).value : '****' }}</p>
             </div>
+
             <div>
               <p class="text-gray-400 text-[10px] mb-1">{{ t(getAssetByIndex(3).key) }}</p>
               <p class="font-bold text-sm tabular-nums" :class="getAssetByIndex(3).trend === 'up' ? 'text-red-400' : ''">
                 {{ showAmount ? getAssetByIndex(3).value : '****' }}
               </p>
             </div>
-            <div>
+            <div class="pl-6">
               <p class="text-gray-400 text-[10px] mb-1">{{ t(getAssetByIndex(4).key) }}</p>
               <p class="font-bold text-sm tabular-nums" :class="getAssetByIndex(4).trend === 'up' ? 'text-red-400' : ''">
                 {{ showAmount ? getAssetByIndex(4).value : '****' }}
@@ -306,4 +328,17 @@ const silverSummary = computed(() => {
     </div>
 
   </div>
+
+  <RechargeModal
+    :visible="showRechargeModal"
+    @close="showRechargeModal = false"
+    @success="handleRechargeSuccess"
+  />
+
+  <WithdrawModal
+    :visible="showWithdrawModal"
+    :available-balance="availableBalance"
+    @close="showWithdrawModal = false"
+    @success="handleWithdrawSuccess"
+  />
 </template>

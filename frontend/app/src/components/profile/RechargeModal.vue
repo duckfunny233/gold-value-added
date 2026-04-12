@@ -1,0 +1,151 @@
+<script setup>
+import { computed, ref, watch } from 'vue'
+import { X, WalletCards } from 'lucide-vue-next'
+import { UserService } from '../../services/user'
+import { showToast } from '../../composables/useToast'
+
+const props = defineProps({
+  visible: {
+    type: Boolean,
+    default: false,
+  },
+})
+
+const emit = defineEmits(['close', 'success'])
+
+const channels = [
+  { label: '微信', value: 'wechat' },
+  { label: '支付宝', value: 'alipay' },
+  { label: '银行卡', value: 'bankcard' },
+]
+
+const selectedChannel = ref('wechat')
+const amount = ref('')
+const creating = ref(false)
+const confirming = ref(false)
+const order = ref(null)
+
+const amountValue = computed(() => Number(amount.value))
+const canCreate = computed(() => amountValue.value > 0 && !creating.value)
+
+const reset = () => {
+  selectedChannel.value = 'wechat'
+  amount.value = ''
+  creating.value = false
+  confirming.value = false
+  order.value = null
+}
+
+watch(() => props.visible, (value) => {
+  if (!value) reset()
+})
+
+const createOrder = async () => {
+  if (!canCreate.value) return
+  creating.value = true
+  try {
+    const response = await UserService.createRechargeOrder(selectedChannel.value, amountValue.value)
+    order.value = response.data
+    showToast('支付单已创建，请完成付款')
+  } catch (error) {
+    showToast(error.message || '创建支付单失败')
+  } finally {
+    creating.value = false
+  }
+}
+
+const confirmPaid = async () => {
+  if (!order.value?.orderId) return
+  confirming.value = true
+  try {
+    const response = await UserService.confirmRecharge(order.value.orderId)
+    emit('success', response.data)
+    emit('close')
+  } catch (error) {
+    showToast(error.message || '确认支付失败')
+  } finally {
+    confirming.value = false
+  }
+}
+</script>
+
+<template>
+  <teleport to="body">
+    <div v-if="visible" class="fixed inset-0 z-[130] flex items-end justify-center">
+      <div class="absolute inset-0 bg-black/60" @click="emit('close')"></div>
+      <div class="relative w-full rounded-t-[28px] border border-[#304255] bg-[#162331] p-5 text-white shadow-2xl">
+        <button @click="emit('close')" class="absolute right-4 top-4 text-[#8e9bb0] btn-interact">
+          <X :size="20" />
+        </button>
+
+        <div class="mb-5 flex items-center gap-3">
+          <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#223244] text-[#ff6a62]">
+            <WalletCards :size="22" />
+          </div>
+          <div>
+            <h3 class="text-lg font-bold">账户充值</h3>
+            <p class="text-xs text-[#8e9bb0]">选择渠道并输入金额，完成支付后自动入账</p>
+          </div>
+        </div>
+
+        <div v-if="!order" class="space-y-4">
+          <div>
+            <p class="mb-2 text-xs text-[#8e9bb0]">充值渠道</p>
+            <div class="grid grid-cols-3 gap-2">
+              <button
+                v-for="channel in channels"
+                :key="channel.value"
+                @click="selectedChannel = channel.value"
+                class="rounded-xl border px-3 py-2 text-sm font-bold btn-interact"
+                :class="selectedChannel === channel.value ? 'border-[#c99b18] bg-[#243447] text-[#f2c24a]' : 'border-[#304255] bg-[#101b28] text-[#c9d5e2]'"
+              >
+                {{ channel.label }}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <p class="mb-2 text-xs text-[#8e9bb0]">充值金额</p>
+            <div class="flex items-center rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3">
+              <span class="mr-3 text-lg font-bold text-[#f2c24a]">¥</span>
+              <input
+                v-model="amount"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="请输入充值金额"
+                class="w-full bg-transparent text-white outline-none placeholder:text-[#6f8093]"
+              />
+            </div>
+          </div>
+
+          <button
+            @click="createOrder"
+            class="w-full rounded-2xl px-4 py-3 text-sm font-bold text-white btn-interact"
+            :class="canCreate ? 'bg-[#ff5f56]' : 'bg-[#304255] text-[#72859a]'"
+            :disabled="!canCreate"
+          >
+            {{ creating ? '创建支付单中...' : '去支付' }}
+          </button>
+        </div>
+
+        <div v-else class="space-y-4">
+          <div class="rounded-2xl border border-[#304255] bg-[#101b28] p-4 text-sm">
+            <p class="text-[#8e9bb0]">订单号：{{ order.orderId }}</p>
+            <p class="mt-2 text-[#dce6f0]">渠道：{{ channels.find(item => item.value === order.channel)?.label || '未知' }}</p>
+            <p class="mt-2 font-bold text-[#f2c24a]">金额：¥{{ Number(order.amount || 0).toFixed(2) }}</p>
+            <p class="mt-2 text-[#8e9bb0]">{{ order.payHint || '请完成支付后点击确认' }}</p>
+          </div>
+
+          <button
+            @click="confirmPaid"
+            class="w-full rounded-2xl bg-[#19c58a] px-4 py-3 text-sm font-bold text-white btn-interact"
+            :disabled="confirming"
+          >
+            {{ confirming ? '确认中...' : '我已完成付款' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </teleport>
+</template>

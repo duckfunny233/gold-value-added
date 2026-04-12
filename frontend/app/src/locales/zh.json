@@ -115,7 +115,7 @@
     "quarterlyK": "季K",
     "yearlyK": "年K",
     "buyAnchor": "买入锚定",
-    "sellUnhook": "卖出解锚"
+    "sellUnhook": "卖出脱钩"
   },
   "trade": {
     "quantity": "数量（{{ assetName }}）",

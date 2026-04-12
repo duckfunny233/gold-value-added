@@ -15,6 +15,12 @@ import GoldChain from '../views/GoldChain.vue'
 import AddFriend from '../views/chat/AddFriend.vue'
 import CreateGroup from '../views/chat/CreateGroup.vue'
 import Scan from '../views/chat/Scan.vue'
+import SettingsHome from '../views/settings/SettingsHome.vue'
+import SecuritySettings from '../views/settings/SecuritySettings.vue'
+import AccountSettings from '../views/settings/AccountSettings.vue'
+import GeneralSettings from '../views/settings/GeneralSettings.vue'
+import HelpServiceSettings from '../views/settings/HelpServiceSettings.vue'
+import AboutSettings from '../views/settings/AboutSettings.vue'
 
 const routes = [
   {
@@ -61,6 +67,36 @@ const routes = [
     path: '/chat/scan',
     name: 'Scan',
     component: Scan
+  },
+  {
+    path: '/settings',
+    name: 'SettingsHome',
+    component: SettingsHome
+  },
+  {
+    path: '/settings/security',
+    name: 'SecuritySettings',
+    component: SecuritySettings
+  },
+  {
+    path: '/settings/account',
+    name: 'AccountSettings',
+    component: AccountSettings
+  },
+  {
+    path: '/settings/general',
+    name: 'GeneralSettings',
+    component: GeneralSettings
+  },
+  {
+    path: '/settings/help',
+    name: 'HelpServiceSettings',
+    component: HelpServiceSettings
+  },
+  {
+    path: '/settings/about',
+    name: 'AboutSettings',
+    component: AboutSettings
   },
   {
     path: '/',

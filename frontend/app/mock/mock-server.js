@@ -246,9 +246,11 @@ const profilePositionTemplates = {
     { level: '黄金砖', weight: 50000, count: 0, bgImage: '/images/黄金砖_银.jpg' }
   ]
 }
-const profileBaseBalance = 85400
+let profileBaseBalance = 85400
 const profileYesterdayProfit = 12450
 const profileAccumulatedProfit = 450200
+const rechargeOrders = new Map()
+const withdrawSmsTokens = new Map()
 
 const formatMoney = (value) =>
   Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -1032,6 +1034,126 @@ app.get('/api/user/profile', async (req, res) => {
   } catch (error) {
     return sendUpstreamError(res, error, '用户金银持仓现价获取失败')
   }
+})
+
+app.post('/api/wallet/recharge', (req, res) => {
+  const { channel, amount } = req.body
+  const rechargeAmount = Number(amount || 0)
+
+  if (!['wechat', 'alipay', 'bankcard'].includes(channel)) {
+    return res.status(400).json({ code: 400, message: '充值渠道不支持' })
+  }
+
+  if (!Number.isFinite(rechargeAmount) || rechargeAmount <= 0) {
+    return res.status(400).json({ code: 400, message: '充值金额不合法' })
+  }
+
+  const orderId = `re_${Date.now()}`
+  const order = {
+    orderId,
+    channel,
+    amount: rechargeAmount,
+    status: 'pending',
+    payHint: '请完成支付后点击“我已完成付款”',
+  }
+  rechargeOrders.set(orderId, order)
+
+  res.json({
+    code: 200,
+    data: order
+  })
+})
+
+app.post('/api/wallet/recharge/:orderId/confirm', (req, res) => {
+  const order = rechargeOrders.get(req.params.orderId)
+  if (!order) {
+    return res.status(404).json({ code: 404, message: '充值订单不存在' })
+  }
+
+  if (order.status !== 'paid') {
+    order.status = 'paid'
+    profileBaseBalance += Number(order.amount || 0)
+  }
+
+  res.json({
+    code: 200,
+    data: {
+      orderId: order.orderId,
+      status: order.status,
+      amount: order.amount,
+      channel: order.channel
+    }
+  })
+})
+
+app.post('/api/wallet/withdraw/send-sms', (req, res) => {
+  const { amount } = req.body
+  const withdrawAmount = Number(amount || 0)
+
+  if (!Number.isFinite(withdrawAmount) || withdrawAmount <= 0) {
+    return res.status(400).json({ code: 400, message: '提现金额不合法' })
+  }
+
+  if (withdrawAmount > profileBaseBalance) {
+    return res.status(400).json({ code: 400, message: '余额不足，无法提现' })
+  }
+
+  const smsToken = `sms_${Date.now()}`
+  const smsCode = '123456'
+  withdrawSmsTokens.set(smsToken, {
+    code: smsCode,
+    createdAt: Date.now(),
+    expireSeconds: 60
+  })
+
+  res.json({
+    code: 200,
+    data: {
+      smsToken,
+      maskedMobile: '138****1024',
+      expireSeconds: 60
+    }
+  })
+})
+
+app.post('/api/wallet/withdraw', (req, res) => {
+  const { channel, amount, smsCode, smsToken } = req.body
+  const withdrawAmount = Number(amount || 0)
+
+  if (!['wechat', 'alipay', 'bankcard'].includes(channel)) {
+    return res.status(400).json({ code: 400, message: '提现渠道不支持' })
+  }
+
+  if (!Number.isFinite(withdrawAmount) || withdrawAmount <= 0) {
+    return res.status(400).json({ code: 400, message: '提现金额不合法' })
+  }
+
+  if (withdrawAmount > profileBaseBalance) {
+    return res.status(400).json({ code: 400, message: '余额不足，无法提现' })
+  }
+
+  const smsRecord = withdrawSmsTokens.get(String(smsToken))
+  if (!smsRecord) {
+    return res.status(400).json({ code: 400, message: '验证码已失效，请重新获取' })
+  }
+
+  if (String(smsRecord.code) !== String(smsCode)) {
+    return res.status(400).json({ code: 400, message: '短信验证码错误' })
+  }
+
+  profileBaseBalance -= withdrawAmount
+  withdrawSmsTokens.delete(String(smsToken))
+
+  res.json({
+    code: 200,
+    data: {
+      withdrawId: `wd_${Date.now()}`,
+      status: 'processing',
+      amount: withdrawAmount,
+      channel,
+      message: '提现申请已提交，预计 1-24 小时到账'
+    }
+  })
 })
 
 // 9. 热门活动 (Activities/Banners)

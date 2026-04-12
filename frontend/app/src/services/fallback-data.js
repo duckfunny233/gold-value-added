@@ -1,10 +1,32 @@
 export const cloneData = (value) => JSON.parse(JSON.stringify(value))
 
 export const marketPricesFallback = [
-  { id: 'AU9999', name: '现货黄金', price: '2649.51', change: '-0.02%', up: true },
-  { id: 'AG9999', name: '现货白银', price: '31.18', change: '+0.58%', up: true },
-  { id: 'USDX', name: '美指', price: '104.08', change: '+0.08%', up: true },
-  { id: 'OIL', name: '原油', price: '78.52', change: '+0.67%', up: true },
+  { id: 'AU9999', name: '黄金9999 Au99.99', price: '1046.20', change: '+0.12%', up: true, unit: '元/克' },
+  { id: 'AUTD', name: '黄金延期 Au(T+D)', price: '1048.50', change: '+0.08%', up: true, unit: '元/克' },
+  { id: 'AG9999', name: '白银9999 Ag99.99', price: '16.65', change: '+0.32%', up: true, unit: '元/克' },
+  { id: 'AGTD', name: '白银延期 Ag(T+D)', price: '18.83', change: '+0.27%', up: true, unit: '元/克' },
+  { id: 'LME_CU', name: '伦敦铜 LME', price: '0.0860', change: '+0.14%', up: true, unit: '元/克' },
+  { id: 'LME_AL', name: '伦敦铝 LME', price: '0.0238', change: '-0.11%', up: false, unit: '元/克' },
+  { id: 'SH_CU', name: '上海铜 沪铜主力', price: '0.0978', change: '+0.09%', up: true, unit: '元/克' },
+  { id: 'SH_AL', name: '上海铝 沪铝主力', price: '0.0195', change: '-0.06%', up: false, unit: '元/克' },
+  { id: 'SH_ZN', name: '上海锌 沪锌主力', price: '0.0210', change: '+0.07%', up: true, unit: '元/克' },
+  { id: 'SH_NI', name: '上海镍 沪镍主力', price: '0.1350', change: '+0.10%', up: true, unit: '元/克' },
+  { id: 'SH_RB', name: '螺纹钢 沪螺纹主力', price: '0.003093', change: '-0.03%', up: false, unit: '元/克' },
+  { id: 'SH_J', name: '焦炭 沪焦炭主力', price: '0.002200', change: '+0.02%', up: true, unit: '元/克' },
+  { id: 'OIL', name: '美原油 WTI', price: '62.30', change: '+0.25%', up: true, unit: '美元/桶' },
+  { id: 'BRENT', name: '布伦特原油', price: '66.80', change: '+0.21%', up: true, unit: '美元/桶' },
+  { id: 'NG', name: '天然气 NYMEX', price: '2.85', change: '-0.15%', up: false, unit: '美元/MMBtu' },
+  { id: 'USD_CNY', name: '美元兑人民币', price: '6.8305', change: '+0.01%', up: true, unit: '汇率' },
+  { id: 'EUR_USD', name: '欧元兑美元', price: '1.1725', change: '-0.02%', up: false, unit: '汇率' },
+  { id: 'GBP_USD', name: '英镑兑美元', price: '1.3463', change: '+0.03%', up: true, unit: '汇率' },
+  { id: 'USD_JPY', name: '美元兑日元', price: '148.20', change: '+0.04%', up: true, unit: '汇率' },
+  { id: 'USDX', name: '美元指数', price: '98.645', change: '+0.05%', up: true, unit: '点' },
+  { id: 'SSE', name: '上证指数', price: '3986.22', change: '+0.40%', up: true, unit: '点' },
+  { id: 'SZSE', name: '深证成指', price: '14309.47', change: '+0.35%', up: true, unit: '点' },
+  { id: 'CYB', name: '创业板指', price: '3448.79', change: '+0.28%', up: true, unit: '点' },
+  { id: 'NASDAQ', name: '纳斯达克', price: '19645.77', change: '+0.22%', up: true, unit: '点' },
+  { id: 'DJI', name: '道琼斯', price: '39800.00', change: '+0.18%', up: true, unit: '点' },
+  { id: 'SPX', name: '标普500', price: '5280.00', change: '+0.16%', up: true, unit: '点' },
 ]
 
 export const marketPeriodsFallback = [

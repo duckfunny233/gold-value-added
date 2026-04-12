@@ -64,7 +64,13 @@ const submitOrder = async () => {
   
   submitting.value = true
   try {
-    const json = await TradeService.submitOrder(assetId.value, activeTab.value, quantity.value)
+    const json = await TradeService.submitOrder(
+      assetId.value,
+      activeTab.value,
+      quantity.value,
+      assetName.value || '未命名品种',
+      currentPrice.value
+    )
     showSuccess.value = true
     quantity.value = ''
     fetchOrders() // 刷新列表
@@ -110,7 +116,8 @@ onMounted(() => {
         </div>
 
         <!-- Asset Selector Inside Card -->
-        <div class="px-4 py-3 flex gap-3 overflow-x-auto no-scrollbar border-b border-[#2a3a4b] bg-[#1f2d3b]">
+        <div class="px-4 pt-3 pb-2 border-b border-[#2a3a4b] bg-[#1f2d3b]">
+          <div class="flex gap-3 overflow-x-auto no-scrollbar pb-1">
           <button 
             v-for="asset in markets" 
             :key="asset.id"
@@ -120,6 +127,7 @@ onMounted(() => {
           >
             {{ asset.name }}
           </button>
+          </div>
         </div>
 
         <div class="p-6 space-y-6">

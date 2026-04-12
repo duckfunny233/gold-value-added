@@ -21,11 +21,47 @@ const DEFAULT_TRADING_WINDOWS = [
   },
 ]
 
+const INSTRUMENT_CATALOG = [
+  { id: 'AU9999', name: '黄金9999 Au99.99', basePrice: 1046.2, decimals: 2, unit: '元/克', volatility: 0.0020, source: 'external' },
+  { id: 'AUTD', name: '黄金延期 Au(T+D)', basePrice: 1048.5, decimals: 2, unit: '元/克', volatility: 0.0018, source: 'local' },
+  { id: 'AG9999', name: '白银9999 Ag99.99', basePrice: 16.65, decimals: 2, unit: '元/克', volatility: 0.0035, source: 'external' },
+  { id: 'AGTD', name: '白银延期 Ag(T+D)', basePrice: 18.83, decimals: 2, unit: '元/克', volatility: 0.0032, source: 'local' },
+
+  { id: 'LME_CU', name: '伦敦铜 LME', basePrice: 0.086, decimals: 4, unit: '元/克', volatility: 0.0040, source: 'local' },
+  { id: 'LME_AL', name: '伦敦铝 LME', basePrice: 0.0238, decimals: 4, unit: '元/克', volatility: 0.0040, source: 'local' },
+  { id: 'SH_CU', name: '上海铜 沪铜主力', basePrice: 0.0978, decimals: 4, unit: '元/克', volatility: 0.0038, source: 'local' },
+  { id: 'SH_AL', name: '上海铝 沪铝主力', basePrice: 0.0195, decimals: 4, unit: '元/克', volatility: 0.0038, source: 'local' },
+  { id: 'SH_ZN', name: '上海锌 沪锌主力', basePrice: 0.021, decimals: 4, unit: '元/克', volatility: 0.0038, source: 'local' },
+  { id: 'SH_NI', name: '上海镍 沪镍主力', basePrice: 0.135, decimals: 4, unit: '元/克', volatility: 0.0045, source: 'local' },
+  { id: 'SH_RB', name: '螺纹钢 沪螺纹主力', basePrice: 0.003093, decimals: 6, unit: '元/克', volatility: 0.0045, source: 'local' },
+  { id: 'SH_J', name: '焦炭 沪焦炭主力', basePrice: 0.0022, decimals: 6, unit: '元/克', volatility: 0.0045, source: 'local' },
+
+  { id: 'OIL', name: '美原油 WTI', basePrice: 62.3, decimals: 2, unit: '美元/桶', volatility: 0.0030, source: 'external' },
+  { id: 'BRENT', name: '布伦特原油', basePrice: 66.8, decimals: 2, unit: '美元/桶', volatility: 0.0030, source: 'local' },
+  { id: 'NG', name: '天然气 NYMEX', basePrice: 2.85, decimals: 2, unit: '美元/MMBtu', volatility: 0.0040, source: 'local' },
+
+  { id: 'USD_CNY', name: '美元兑人民币', basePrice: 6.8305, decimals: 4, unit: '汇率', volatility: 0.0010, source: 'local' },
+  { id: 'EUR_USD', name: '欧元兑美元', basePrice: 1.1725, decimals: 4, unit: '汇率', volatility: 0.0012, source: 'local' },
+  { id: 'GBP_USD', name: '英镑兑美元', basePrice: 1.3463, decimals: 4, unit: '汇率', volatility: 0.0012, source: 'local' },
+  { id: 'USD_JPY', name: '美元兑日元', basePrice: 148.2, decimals: 2, unit: '汇率', volatility: 0.0012, source: 'local' },
+  { id: 'USDX', name: '美元指数', basePrice: 98.645, decimals: 3, unit: '点', volatility: 0.0015, source: 'external' },
+
+  { id: 'SSE', name: '上证指数', basePrice: 3986.22, decimals: 2, unit: '点', volatility: 0.0020, source: 'local' },
+  { id: 'SZSE', name: '深证成指', basePrice: 14309.47, decimals: 2, unit: '点', volatility: 0.0020, source: 'local' },
+  { id: 'CYB', name: '创业板指', basePrice: 3448.79, decimals: 2, unit: '点', volatility: 0.0022, source: 'local' },
+  { id: 'NASDAQ', name: '纳斯达克', basePrice: 19645.77, decimals: 2, unit: '点', volatility: 0.0022, source: 'local' },
+  { id: 'DJI', name: '道琼斯', basePrice: 39800, decimals: 2, unit: '点', volatility: 0.0020, source: 'local' },
+  { id: 'SPX', name: '标普500', basePrice: 5280, decimals: 2, unit: '点', volatility: 0.0020, source: 'local' },
+]
+
+const EXTERNAL_IDS = new Set(['AU9999', 'AG9999', 'OIL', 'USDX'])
+const localQuoteState = new Map()
 let cachedTradingWindows = DEFAULT_TRADING_WINDOWS
 let hasBootstrappedTradingWindows = false
 const EXPECTED_PERIOD_VALUES = ['1m', 'daily', 'weekly', 'monthly']
 
 const pad = (value) => String(value).padStart(2, '0')
+const formatPrice = (value, decimals) => Number(value).toFixed(decimals)
 
 const formatDateTime = (date) => {
   const month = pad(date.getMonth() + 1)
@@ -36,6 +72,40 @@ const formatDateTime = (date) => {
 }
 
 const getMinutesOfDay = (date) => date.getHours() * 60 + date.getMinutes()
+
+const normalizeRemoteQuote = (item, catalog) => {
+  const priceValue = Number(item?.price)
+  const safePrice = Number.isFinite(priceValue) ? priceValue : catalog.basePrice
+  const change = typeof item?.change === 'string' ? item.change : '+0.00%'
+  const up = typeof item?.up === 'boolean' ? item.up : !change.startsWith('-')
+  return {
+    id: catalog.id,
+    name: catalog.name,
+    price: formatPrice(safePrice, catalog.decimals),
+    change,
+    up,
+    unit: catalog.unit,
+    source: 'external',
+  }
+}
+
+const buildLocalQuote = (catalog) => {
+  const previous = localQuoteState.has(catalog.id) ? localQuoteState.get(catalog.id) : catalog.basePrice
+  const drift = (Math.random() - 0.5) * (catalog.basePrice * catalog.volatility)
+  const next = Math.max(catalog.basePrice * 0.4, previous + drift)
+  localQuoteState.set(catalog.id, next)
+
+  const changePct = ((next - catalog.basePrice) / catalog.basePrice) * 100
+  return {
+    id: catalog.id,
+    name: catalog.name,
+    price: formatPrice(next, catalog.decimals),
+    change: `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`,
+    up: changePct >= 0,
+    unit: catalog.unit,
+    source: 'local',
+  }
+}
 
 const getNextOpenTime = (windows, now) => {
   for (let offset = 0; offset < 7; offset += 1) {
@@ -138,12 +208,28 @@ const bootstrapTradingWindows = async () => {
   return cachedTradingWindows
 }
 
+const buildMergedMarketQuotes = (remoteQuotes = []) => {
+  const remoteMap = new Map(Array.isArray(remoteQuotes) ? remoteQuotes.map((item) => [item.id, item]) : [])
+
+  return INSTRUMENT_CATALOG.map((catalog) => {
+    if (EXTERNAL_IDS.has(catalog.id) && remoteMap.has(catalog.id)) {
+      return normalizeRemoteQuote(remoteMap.get(catalog.id), catalog)
+    }
+    return buildLocalQuote(catalog)
+  })
+}
+
 export const MarketService = {
   async getPrices() {
     try {
-      return await apiFetch('/api/market/prices')
+      const response = await apiFetch('/api/market/prices')
+      return {
+        code: 200,
+        data: buildMergedMarketQuotes(response?.data || []),
+      }
     } catch (error) {
-      return { code: 200, data: cloneData(marketPricesFallback) }
+      const fallbackData = buildMergedMarketQuotes(cloneData(marketPricesFallback))
+      return { code: 200, data: fallbackData }
     }
   },
 
