@@ -3,7 +3,7 @@ import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { TradeService } from '../services/trade'
-import { Loader2, CheckCircle2 } from 'lucide-vue-next'
+import { Loader2 } from 'lucide-vue-next'
 import { useMarketPolling } from '../composables/useMarketPolling'
 
 defineOptions({ name: 'Trade' })
@@ -17,7 +17,6 @@ const quantity = ref('')
 const orders = ref([])
 const loading = ref(false)
 const submitting = ref(false)
-const showSuccess = ref(false)
 const assetName = ref(route.query.assetName || '')
 const assetId = ref(route.query.assetId || '')
 const BUY_ARRIVAL_STORAGE_KEY = 'jyz_last_buy_arrival'
@@ -25,7 +24,7 @@ const buyFeedback = ref({
   visible: false,
   grams: 0,
   animatedGrams: 0,
-  image: '/影子金币10g黄金.jpg',
+  image: '/影子金币10g黄金.png',
 })
 let buyFeedbackRaf = null
 let buyFeedbackTimer = null
@@ -86,17 +85,16 @@ const resolveBuyAssetType = () => {
 }
 
 const resolveBuyImage = (grams, type) => {
-  if (grams >= 5000) return type === 'gold' ? '/黄金砖5000g黄金.jpg' : '/黄金砖5000g白银.png'
-  if (grams >= 1000) return type === 'gold' ? '/黄金条1000g黄金.png' : '/黄金条1000g白银.jpg'
-  if (grams >= 500) return type === 'gold' ? '/金影子金币.jpg' : '/金叶币_银.jpg'
+  if (grams >= 5000) return type === 'gold' ? '/黄金砖5000g黄金.png' : '/黄金砖5000g白银.png'
+  if (grams >= 1000) return type === 'gold' ? '/黄金条1000g黄金.png' : '/黄金条1000g白银.png'
   if (grams >= 100) return type === 'gold' ? '/龙币100g黄金.png' : '/龙币100g白银.png'
   if (grams >= 50) return type === 'gold' ? '/金叶币50g黄金.png' : '/金叶币50g白银.png'
-  return type === 'gold' ? '/影子金币10g黄金.jpg' : '/影子金币_银.jpg'
+  return type === '/影子金币10g黄金.png' 
 }
 
 const runBuyCounter = (target) => {
   const begin = 0
-  const duration = 880
+  const duration = 1000
   const start = performance.now()
   const tick = (now) => {
     const progress = Math.min(1, (now - start) / duration)
@@ -124,7 +122,7 @@ const triggerBuyFeedback = (grams) => {
   runBuyCounter(buyFeedback.value.grams)
   buyFeedbackTimer = setTimeout(() => {
     buyFeedback.value.visible = false
-  }, 1900)
+  }, 2000)
 }
 
 const submitOrder = async () => {
@@ -155,10 +153,8 @@ const submitOrder = async () => {
       window.dispatchEvent(new CustomEvent('jyz-buy-arrival', { detail: arrivalPayload }))
     }
 
-    showSuccess.value = true
     quantity.value = ''
     fetchOrders() // 刷新列表
-    setTimeout(() => { showSuccess.value = false }, 2000)
   } catch (err) {
     console.error('Order failed:', err)
   } finally {
@@ -179,15 +175,11 @@ onBeforeUnmount(() => {
   <div class="space-y-4 bg-[#0b1520] min-h-full text-white">
     <div class="px-4 pt-4">
       <div class="card-base overflow-hidden relative border-none bg-[#1a2735]">
-        <!-- Success Overlay -->
-        <div v-if="showSuccess" class="absolute inset-0 bg-white/90 dark:bg-gray-800/90 z-10 flex flex-col items-center justify-center animate-in fade-in duration-300">
-          <CheckCircle2 class="text-success mb-2" :size="48" />
-          <p class="font-bold text-success">{{ t('trade.orderSuccess') }}</p>
-        </div>
-
         <div v-if="buyFeedback.visible && activeTab === 'buy'" class="buy-feedback-layer">
-          <img :src="buyFeedback.image" alt="到账" class="buy-feedback-image" />
-          <p class="buy-feedback-text">到账 +{{ buyFeedback.animatedGrams.toFixed(2) }}g</p>
+          <div class="buy-feedback-box">
+            <img src="/黄金1.png" alt="到账" class="buy-feedback-image" />
+            <p class="buy-feedback-text">到账 +{{ buyFeedback.animatedGrams.toFixed(2) }}g</p>
+          </div>
         </div>
 
         <!-- Tabs -->
@@ -300,38 +292,57 @@ onBeforeUnmount(() => {
   z-index: 9;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: center;
   align-items: center;
-  padding-bottom: 74px;
+  padding-bottom: 40px;
 }
 
 .buy-feedback-image {
-  width: 56px;
-  height: 56px;
+  width: 80px;
+  height: 80px;
   object-fit: contain;
-  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.45));
-  animation: buyFlyIn 0.85s cubic-bezier(0.24, 0.88, 0.29, 1);
+  filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.5))
+          drop-shadow(0 0 20px rgba(255, 215, 0, 0.4));
+  animation: buyFlyIn 0.9s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 
 .buy-feedback-text {
-  margin-top: 2px;
+  margin-top: 12px;
   color: #f2c24a;
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 700;
-  text-shadow: 0 0 12px rgba(11, 19, 28, 0.95);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  animation: textPop 0.5s ease-out 0.6s both;
+}
+
+@keyframes textPop {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 @keyframes buyFlyIn {
   0% {
-    transform: translateY(62px) scale(0.82);
+    transform: translateY(-120px) scale(0.5);
     opacity: 0;
   }
-  58% {
-    transform: translateY(-8px) scale(1.07);
+  50% {
+    transform: translateY(10px) scale(1.1);
     opacity: 1;
   }
-  82% {
-    transform: translateY(2px) scale(0.98);
+  70% {
+    transform: translateY(-5px) scale(0.95);
+  }
+  85% {
+    transform: translateY(2px) scale(1.02);
   }
   100% {
     transform: translateY(0) scale(1);
