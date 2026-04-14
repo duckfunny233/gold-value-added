@@ -86,10 +86,13 @@ const handleLogin = async () => {
           {{ isLoading ? t('common.submitting') : t('auth.login.loginBtn') }}
         </button>
 
-        <div class="flex justify-between text-sm px-1">
+        <div class="flex justify-start text-sm px-1">
           <router-link to="/register" class="text-primary hover:underline font-medium">{{ t('auth.login.registerLink') }}</router-link>
-          <router-link to="/forgot-password" class="text-gray-500 hover:underline">{{ t('auth.login.forgotPassword') }}</router-link>
         </div>
+
+        <p class="px-1 text-xs text-gray-500 dark:text-gray-400">
+          密钥由用户自行设置并妥善保管，若遗忘请联系人工客服并走后台审核找回。
+        </p>
       </div>
     </div>
   </div>

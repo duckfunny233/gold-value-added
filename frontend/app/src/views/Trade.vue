@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { TradeService } from '../services/trade'
@@ -20,6 +20,15 @@ const submitting = ref(false)
 const showSuccess = ref(false)
 const assetName = ref(route.query.assetName || '')
 const assetId = ref(route.query.assetId || '')
+const BUY_ARRIVAL_STORAGE_KEY = 'jyz_last_buy_arrival'
+const buyFeedback = ref({
+  visible: false,
+  grams: 0,
+  animatedGrams: 0,
+  image: '/影子金币10g黄金.jpg',
+})
+let buyFeedbackRaf = null
+let buyFeedbackTimer = null
 
 // 如果是通过导航栏直接点进来的（没有 query 参数），则默认选中列表第一个
 watch(markets, (newMarkets) => {
@@ -59,9 +68,69 @@ const fetchOrders = async () => {
   }
 }
 
+const clearBuyFeedback = () => {
+  if (buyFeedbackRaf) {
+    cancelAnimationFrame(buyFeedbackRaf)
+    buyFeedbackRaf = null
+  }
+  if (buyFeedbackTimer) {
+    clearTimeout(buyFeedbackTimer)
+    buyFeedbackTimer = null
+  }
+}
+
+const resolveBuyAssetType = () => {
+  const id = String(assetId.value || '').toUpperCase()
+  const name = String(assetName.value || '')
+  return id.includes('AG') || name.includes('银') ? 'silver' : 'gold'
+}
+
+const resolveBuyImage = (grams, type) => {
+  if (grams >= 5000) return type === 'gold' ? '/黄金砖5000g黄金.jpg' : '/黄金砖5000g白银.png'
+  if (grams >= 1000) return type === 'gold' ? '/黄金条1000g黄金.png' : '/黄金条1000g白银.jpg'
+  if (grams >= 500) return type === 'gold' ? '/金影子金币.jpg' : '/金叶币_银.jpg'
+  if (grams >= 100) return type === 'gold' ? '/龙币100g黄金.png' : '/龙币100g白银.png'
+  if (grams >= 50) return type === 'gold' ? '/金叶币50g黄金.png' : '/金叶币50g白银.png'
+  return type === 'gold' ? '/影子金币10g黄金.jpg' : '/影子金币_银.jpg'
+}
+
+const runBuyCounter = (target) => {
+  const begin = 0
+  const duration = 880
+  const start = performance.now()
+  const tick = (now) => {
+    const progress = Math.min(1, (now - start) / duration)
+    const eased = 1 - Math.pow(1 - progress, 3)
+    buyFeedback.value.animatedGrams = Number((begin + (target - begin) * eased).toFixed(2))
+    if (progress < 1) {
+      buyFeedbackRaf = requestAnimationFrame(tick)
+      return
+    }
+    buyFeedbackRaf = null
+  }
+  buyFeedbackRaf = requestAnimationFrame(tick)
+}
+
+const triggerBuyFeedback = (grams) => {
+  if (!Number.isFinite(grams) || grams <= 0) return
+  clearBuyFeedback()
+
+  const type = resolveBuyAssetType()
+  buyFeedback.value.visible = true
+  buyFeedback.value.grams = Number(grams.toFixed(2))
+  buyFeedback.value.animatedGrams = 0
+  buyFeedback.value.image = resolveBuyImage(grams, type)
+
+  runBuyCounter(buyFeedback.value.grams)
+  buyFeedbackTimer = setTimeout(() => {
+    buyFeedback.value.visible = false
+  }, 1900)
+}
+
 const submitOrder = async () => {
   if (!quantity.value || submitting.value) return
-  
+
+  const submitQuantity = Number(quantity.value)
   submitting.value = true
   try {
     const json = await TradeService.submitOrder(
@@ -71,6 +140,21 @@ const submitOrder = async () => {
       assetName.value || '未命名品种',
       currentPrice.value
     )
+
+    if (activeTab.value === 'buy' && Number.isFinite(submitQuantity) && submitQuantity > 0) {
+      triggerBuyFeedback(submitQuantity)
+      const arrivalPayload = {
+        id: Date.now(),
+        assetId: assetId.value,
+        assetName: assetName.value || '未命名品种',
+        grams: Number(submitQuantity.toFixed(2)),
+        createdAt: new Date().toISOString(),
+        orderId: json?.data?.id || '',
+      }
+      localStorage.setItem(BUY_ARRIVAL_STORAGE_KEY, JSON.stringify(arrivalPayload))
+      window.dispatchEvent(new CustomEvent('jyz-buy-arrival', { detail: arrivalPayload }))
+    }
+
     showSuccess.value = true
     quantity.value = ''
     fetchOrders() // 刷新列表
@@ -85,6 +169,10 @@ const submitOrder = async () => {
 onMounted(() => {
   fetchOrders()
 })
+
+onBeforeUnmount(() => {
+  clearBuyFeedback()
+})
 </script>
 
 <template>
@@ -95,6 +183,11 @@ onMounted(() => {
         <div v-if="showSuccess" class="absolute inset-0 bg-white/90 dark:bg-gray-800/90 z-10 flex flex-col items-center justify-center animate-in fade-in duration-300">
           <CheckCircle2 class="text-success mb-2" :size="48" />
           <p class="font-bold text-success">{{ t('trade.orderSuccess') }}</p>
+        </div>
+
+        <div v-if="buyFeedback.visible && activeTab === 'buy'" class="buy-feedback-layer">
+          <img :src="buyFeedback.image" alt="到账" class="buy-feedback-image" />
+          <p class="buy-feedback-text">到账 +{{ buyFeedback.animatedGrams.toFixed(2) }}g</p>
         </div>
 
         <!-- Tabs -->
@@ -198,3 +291,51 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.buy-feedback-layer {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  padding-bottom: 74px;
+}
+
+.buy-feedback-image {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.45));
+  animation: buyFlyIn 0.85s cubic-bezier(0.24, 0.88, 0.29, 1);
+}
+
+.buy-feedback-text {
+  margin-top: 2px;
+  color: #f2c24a;
+  font-size: 12px;
+  font-weight: 700;
+  text-shadow: 0 0 12px rgba(11, 19, 28, 0.95);
+}
+
+@keyframes buyFlyIn {
+  0% {
+    transform: translateY(62px) scale(0.82);
+    opacity: 0;
+  }
+  58% {
+    transform: translateY(-8px) scale(1.07);
+    opacity: 1;
+  }
+  82% {
+    transform: translateY(2px) scale(0.98);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+</style>

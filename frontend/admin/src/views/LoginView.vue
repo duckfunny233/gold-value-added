@@ -15,7 +15,7 @@ const form = reactive({
 const submit = async () => {
   error.value = ''
   if (!form.username || !form.password) {
-    error.value = '请输入账号和密码'
+    error.value = '请输入账号和密钥'
     return
   }
 
@@ -47,8 +47,8 @@ const submit = async () => {
         </label>
 
         <label>
-          密码
-          <input v-model="form.password" type="password" autocomplete="current-password" placeholder="请输入密码" />
+          密钥
+          <input v-model="form.password" type="password" autocomplete="current-password" placeholder="请输入密钥" />
         </label>
 
         <p v-if="error" class="login-error" role="alert">{{ error }}</p>

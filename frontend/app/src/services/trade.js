@@ -31,7 +31,7 @@ export const TradeService = {
   },
 
   async submitOrder(assetId, type, quantity, assetName, price) {
-    if (!API_TRADE_ASSET_IDS.has(assetId)) {
+    const createLocalSuccess = () => {
       const localOrder = buildLocalOrder(assetName, type, quantity, price)
       localTradeOrders.unshift(localOrder)
       return {
@@ -41,9 +41,18 @@ export const TradeService = {
       }
     }
 
-    return apiFetch('/api/trade/order', {
-      method: 'POST',
-      body: JSON.stringify({ assetId, type, quantity })
-    })
+    if (!API_TRADE_ASSET_IDS.has(assetId)) {
+      return createLocalSuccess()
+    }
+
+    try {
+      return await apiFetch('/api/trade/order', {
+        method: 'POST',
+        body: JSON.stringify({ assetId, type, quantity })
+      })
+    } catch (error) {
+      // 调试场景：后端不可用时自动降级到本地假接口，保证页面可联调与动画可测试
+      return createLocalSuccess()
+    }
   }
 }

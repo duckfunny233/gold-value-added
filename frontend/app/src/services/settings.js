@@ -4,6 +4,7 @@ const defaultState = {
   security: {
     realNameStatus: '已实名',
     passwordSet: true,
+    secretKey: 'Key@2026',
     biometricEnabled: false,
     devices: [
       { id: 'dev_1', name: 'iPhone 15 Pro', location: '上海', lastActive: '2026-04-12 10:26', trusted: true },
@@ -12,7 +13,7 @@ const defaultState = {
     loginLogs: [
       { id: 'log_1', time: '2026-04-12 10:26', ip: '116.233.**.**', result: '成功' },
       { id: 'log_2', time: '2026-04-11 21:03', ip: '183.129.**.**', result: '成功' },
-      { id: 'log_3', time: '2026-04-10 09:18', ip: '101.69.**.**', result: '密码错误' },
+      { id: 'log_3', time: '2026-04-10 09:18', ip: '101.69.**.**', result: '密钥错误' },
     ],
   },
   account: {
@@ -64,13 +65,20 @@ const writeState = (nextState) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState))
 }
 
+const normalizeSecurity = (security = {}) => {
+  const merged = { ...clone(defaultState).security, ...security }
+  // 前端只返回展示所需字段，密钥不回传到页面
+  const { secretKey, ...viewData } = merged
+  return viewData
+}
+
 export const SettingsService = {
   async getSettingsOverview() {
     await wait()
     return {
       code: 200,
       data: [
-        { key: 'security', title: '账户安全', desc: '实名认证、密码/指纹设置、设备管理、登录日志' },
+        { key: 'security', title: '账户安全', desc: '实名认证、密钥/指纹设置、设备管理、登录日志' },
         { key: 'account', title: '账户管理', desc: '个人信息、手机号换绑、头像/昵称修改' },
         { key: 'general', title: '通用设置', desc: '消息通知、界面主题、行情刷新频率' },
         { key: 'help', title: '帮助服务', desc: '在线客服、常见问题、意见反馈' },
@@ -81,7 +89,7 @@ export const SettingsService = {
 
   async getSecuritySettings() {
     await wait()
-    return { code: 200, data: readState().security }
+    return { code: 200, data: normalizeSecurity(readState().security) }
   },
 
   async updateSecuritySettings(patch) {
@@ -89,7 +97,7 @@ export const SettingsService = {
     const state = readState()
     state.security = { ...state.security, ...patch }
     writeState(state)
-    return { code: 200, data: state.security }
+    return { code: 200, data: normalizeSecurity(state.security) }
   },
 
   async removeDevice(deviceId) {
@@ -98,6 +106,25 @@ export const SettingsService = {
     state.security.devices = state.security.devices.filter((item) => item.id !== deviceId)
     writeState(state)
     return { code: 200, data: state.security.devices }
+  },
+
+  async changeSecretKey(currentKey, newKey) {
+    await wait()
+    const state = readState()
+    const current = String(currentKey || '')
+    const next = String(newKey || '')
+    const savedKey = state.security?.secretKey || defaultState.security.secretKey
+
+    if (next.length < 6) {
+      throw new Error('新密钥长度不能少于6位')
+    }
+    if (current !== savedKey) {
+      throw new Error('旧密钥不正确')
+    }
+
+    state.security = { ...state.security, secretKey: next }
+    writeState(state)
+    return { code: 200, message: '密钥修改成功' }
   },
 
   async getAccountSettings() {

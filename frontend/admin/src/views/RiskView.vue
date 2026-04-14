@@ -131,7 +131,7 @@ function openAdminDialog() {
 
 async function submitAdminDialog() {
   if (!adminDialog.username.trim() || !adminDialog.password.trim() || !adminDialog.roleId) {
-    error.value = '请完整填写管理员账号、密码和角色'
+    error.value = '请完整填写管理员账号、密钥和角色'
     return
   }
 
@@ -324,8 +324,8 @@ onMounted(loadData)
         <input v-model="adminDialog.username" maxlength="30" placeholder="请输入管理员账号" />
       </label>
       <label>
-        登录密码
-        <input v-model="adminDialog.password" type="password" maxlength="30" placeholder="请输入管理员密码" />
+        登录密钥
+        <input v-model="adminDialog.password" type="password" maxlength="30" placeholder="请输入管理员密钥" />
       </label>
       <label>
         显示名称

@@ -76,14 +76,18 @@ export const profileFallback = {
     { key: 'profile.assets.accumulatedProfit', value: '+450,200.00', unit: 'CNY', trend: 'up' },
   ],
   goldPositions: [
-    { level: '影子金币', weight: '10g', price: '5,652.00', count: 2, bgImage: '/金影子金币.jpg' },
-    { level: '影子金币', weight: '50g', price: '28,260.00', count: 1, bgImage: '/金叶币.jpg' },
-    { level: '黄金条', weight: '5000g', price: '282,600.00', count: 0, bgImage: '/黄金条.jpg' },
+    { level: '影子金币', weight: '10g', price: '10,462.00', count: 2, bgImage: '/影子金币10g黄金.png' },
+    { level: '金叶币', weight: '50g', price: '52,310.00', count: 1, bgImage: '/金叶币50g黄金.png' },
+    { level: '龙金币', weight: '100g', price: '104,620.00', count: 1, bgImage: '/龙币100g黄金.png' },
+    { level: '黄金条', weight: '1000g', price: '1,046,200.00', count: 0, bgImage: '/黄金条1000g黄金.png' },
+    { level: '黄金砖', weight: '5000g', price: '5,231,000.00', count: 0, bgImage: '/黄金砖5000g黄金.png' },
   ],
   silverPositions: [
-    { level: '影子金币', weight: '10g', price: '820.00', count: 10, bgImage: '/金影子金币.jpg' },
-    { level: '影子金币', weight: '50g', price: '4,100.00', count: 3, bgImage: '/金叶币_银.jpg' },
-    { level: '黄金条', weight: '5000g', price: '41,000.00', count: 0, bgImage: '/黄金条_银.jpg' },
+    { level: '影子银币', weight: '10g', price: '188.30', count: 10, bgImage: '/影子金币10g黄金.png' },
+    { level: '银叶币', weight: '50g', price: '941.50', count: 3, bgImage: '/金叶币50g白银.png' },
+    { level: '龙银币', weight: '100g', price: '1,883.00', count: 1, bgImage: '/龙币100g白银.png' },
+    { level: '白银条', weight: '1000g', price: '18,830.00', count: 0, bgImage: '/黄金条1000g白银.png' },
+    { level: '白银砖', weight: '5000g', price: '94,150.00', count: 0, bgImage: '/黄金砖5000g白银.png' },
   ],
 }
 
