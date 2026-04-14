@@ -2,7 +2,7 @@
 import { Wallet, ArrowUpCircle, ArrowDownCircle, RefreshCw, Shield, ChevronRight, Settings, LogOut, Eye, EyeOff, Repeat } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ref, onMounted, onActivated, computed } from 'vue'
+import { ref, onMounted, onActivated, onBeforeUnmount, computed } from 'vue'
 import ImageCarousel from '../components/ImageCarousel.vue'
 import { UserService } from '../services/user'
 import { AuthService } from '../services/auth'
@@ -20,6 +20,11 @@ const showAmount = ref(true)
 const isRefreshing = ref(false)
 const showRechargeModal = ref(false)
 const showWithdrawModal = ref(false)
+const BUY_EVENT_NAME = 'jyz-buy-arrival'
+const BUY_EVENT_STORAGE_KEY = 'jyz_last_buy_arrival'
+const SPEC_GRAMS = [10, 50, 100, 1000, 5000]
+const holdDeltaGrams = ref({ gold: 0, silver: 0 })
+const processedEventIds = ref(new Set())
 
 const userProfile = ref({
   username: t('profile.loading'),
@@ -46,14 +51,6 @@ const fetchProfile = async (silent = false) => {
     isRefreshing.value = false
   }
 }
-
-onMounted(() => {
-  fetchProfile()
-})
-
-onActivated(() => {
-  fetchProfile(true) // 每次切回页面时自动静默同步数据
-})
 
 const toggleAmount = () => {
   showAmount.value = !showAmount.value
@@ -125,6 +122,7 @@ const flyInItems = ref(new Set())
 const displayedCounts = ref({})
 const showArrivalFeedback = ref(false)
 const arrivalFeedbackText = ref('')
+let arrivalTimer = null
 
 // 数字跳动动画
 const animateNumber = (key, targetValue, duration = 800) => {
@@ -149,6 +147,84 @@ const animateNumber = (key, targetValue, duration = 800) => {
   requestAnimationFrame(updateNumber)
 }
 
+const parseGram = (weight) => {
+  const gram = Number(String(weight || '').replace(/[^\d.]/g, ''))
+  return Number.isFinite(gram) ? gram : 0
+}
+
+const resolveAssetType = (payload) => {
+  const name = String(payload?.assetName || '')
+  const id = String(payload?.assetId || '').toUpperCase()
+  return name.includes('银') || id.includes('AG') ? 'silver' : 'gold'
+}
+
+const getDefaultImageByGram = (type, gram) => {
+  const goldMap = {
+    10: '/影子金币10g黄金.jpg',
+    50: '/金叶币50g黄金.png',
+    100: '/龙币100g黄金.png',
+    1000: '/黄金条1000g黄金.png',
+    5000: '/黄金砖5000g黄金.jpg',
+  }
+  const silverMap = {
+    10: '/影子金币_银.jpg',
+    50: '/金叶币50g白银.png',
+    100: '/龙币100g白银.png',
+    1000: '/黄金条1000g白银.jpg',
+    5000: '/黄金砖5000g白银.png',
+  }
+  const map = type === 'gold' ? goldMap : silverMap
+  return map[gram] || map[10]
+}
+
+const getBaseTotalGrams = (type) => {
+  const source = type === 'gold' ? userProfile.value.goldPositions : userProfile.value.silverPositions
+  return source.reduce((sum, item) => sum + parseGram(item.weight) * Number(item.count || 0), 0)
+}
+
+const normalizeCountsByTotal = (totalGrams) => {
+  const counts = {}
+  let remaining = Number(totalGrams || 0)
+  const descending = [...SPEC_GRAMS].sort((a, b) => b - a)
+
+  descending.forEach((gram) => {
+    const count = Math.floor(remaining / gram)
+    counts[gram] = count
+    remaining = Number((remaining - count * gram).toFixed(4))
+  })
+  return counts
+}
+
+const buildDisplayPositionsByType = (type) => {
+  const source = type === 'gold' ? userProfile.value.goldPositions : userProfile.value.silverPositions
+  const totalGrams = getBaseTotalGrams(type) + Number(holdDeltaGrams.value[type] || 0)
+  const counts = normalizeCountsByTotal(totalGrams)
+  const sourceByGram = new Map()
+
+  source.forEach((item) => {
+    const gram = parseGram(item.weight)
+    if (!gram || sourceByGram.has(gram)) return
+    sourceByGram.set(gram, item)
+  })
+
+  return SPEC_GRAMS.map((gram) => {
+    const src = sourceByGram.get(gram)
+    const count = Number(counts[gram] || 0)
+    const unitPrice = parseAmount(src?.price || 0)
+    const totalPrice = unitPrice * count
+    return {
+      level: src?.level || (type === 'gold' ? `黄金${gram}g` : `白银${gram}g`),
+      weight: String(gram),
+      count,
+      price: totalPrice.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      bgImage: src?.bgImage || getDefaultImageByGram(type, gram),
+      gram,
+    }
+  })
+}
+
+const displayPositions = computed(() => buildDisplayPositionsByType(assetType.value))
+
 // 触发买入成功动画
 const triggerBuyAnimation = (itemKey, weight, count) => {
   // 飞入动画
@@ -159,7 +235,7 @@ const triggerBuyAnimation = (itemKey, weight, count) => {
   animateNumber(itemKey, numericWeight)
   
   // 显示到账反馈
-  arrivalFeedbackText.value = `+${count} 份黄金已到账`
+  arrivalFeedbackText.value = `到账 +${Number(weight || 0).toFixed(2)}g`
   showArrivalFeedback.value = true
   
   // 清除飞入动画状态
@@ -168,32 +244,83 @@ const triggerBuyAnimation = (itemKey, weight, count) => {
   }, 1000)
   
   // 隐藏到账反馈
-  setTimeout(() => {
+  if (arrivalTimer) clearTimeout(arrivalTimer)
+  arrivalTimer = setTimeout(() => {
     showArrivalFeedback.value = false
   }, 2500)
 }
 
 // 获取显示的数字
-const getDisplayedWeight = (item, index) => {
-  const key = `${item.level}-${index}`
+const getDisplayedWeight = (item) => {
+  const key = `${assetType.value}-${item.gram}`
   if (displayedCounts.value[key] !== undefined) {
     return displayedCounts.value[key]
   }
-  return item.weight
+  return Number(item.weight || 0).toFixed(0)
 }
 
 // 检查是否正在飞入动画
-const isFlyingIn = (item, index) => {
-  const key = `${item.level}-${index}`
+const isFlyingIn = (item) => {
+  const key = `${assetType.value}-${item.gram}`
   return flyInItems.value.has(key)
 }
 
 // 获取金币显示数量（用于v-for循环）
 const getCoinCount = (count) => {
   const num = parseInt(count) || 0
-  // 至少显示1个（持有0份时显示默认图片）
-  return Math.max(Math.min(num, 5), 1)
+  return Math.max(num, 0)
 }
+
+const handleBuyArrival = (payload) => {
+  const grams = Number(payload?.grams || 0)
+  if (!Number.isFinite(grams) || grams <= 0) return
+
+  const id = payload?.id || `${payload?.createdAt || Date.now()}_${grams}`
+  if (processedEventIds.value.has(id)) return
+  processedEventIds.value.add(id)
+
+  const type = resolveAssetType(payload)
+  const beforeCounts = normalizeCountsByTotal(getBaseTotalGrams(type) + Number(holdDeltaGrams.value[type] || 0))
+  holdDeltaGrams.value[type] = Number((Number(holdDeltaGrams.value[type] || 0) + grams).toFixed(4))
+  const afterCounts = normalizeCountsByTotal(getBaseTotalGrams(type) + Number(holdDeltaGrams.value[type] || 0))
+
+  SPEC_GRAMS.forEach((gram) => {
+    const inc = Number(afterCounts[gram] || 0) - Number(beforeCounts[gram] || 0)
+    if (inc > 0) {
+      const key = `${type}-${gram}`
+      triggerBuyAnimation(key, gram, inc)
+    }
+  })
+}
+
+const buyEventHandler = (event) => handleBuyArrival(event?.detail)
+
+const consumeStoredBuyEvent = () => {
+  const raw = localStorage.getItem(BUY_EVENT_STORAGE_KEY)
+  if (!raw) return
+  try {
+    const payload = JSON.parse(raw)
+    handleBuyArrival(payload)
+  } finally {
+    localStorage.removeItem(BUY_EVENT_STORAGE_KEY)
+  }
+}
+
+onMounted(() => {
+  fetchProfile()
+  consumeStoredBuyEvent()
+  window.addEventListener(BUY_EVENT_NAME, buyEventHandler)
+})
+
+onActivated(() => {
+  fetchProfile(true)
+  consumeStoredBuyEvent()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener(BUY_EVENT_NAME, buyEventHandler)
+  if (arrivalTimer) clearTimeout(arrivalTimer)
+})
 </script>
 
 <template>
@@ -339,7 +466,7 @@ const getCoinCount = (count) => {
         </div>
       </div>
 
-      <ImageCarousel :items="assetType === 'gold' ? userProfile.goldPositions : userProfile.silverPositions">
+      <ImageCarousel :items="displayPositions">
         <template #default="{ item, index }">
           <div class="w-full h-full relative group overflow-hidden rounded-2xl gold-card" :class="assetType === 'silver' ? 'silver-card' : ''">
             <!-- 遮罩层 - 放在金币下面 -->
@@ -352,7 +479,7 @@ const getCoinCount = (count) => {
                   v-for="coinIdx in getCoinCount(item.count)" 
                   :key="coinIdx"
                   class="gold-coin"
-                  :class="{ 'fly-in-bounce': isFlyingIn(item, index) && coinIdx === parseInt(item.count || 0), 'silver-coin': assetType === 'silver' }"
+                  :class="{ 'fly-in-bounce': isFlyingIn(item) && coinIdx === parseInt(item.count || 0), 'silver-coin': assetType === 'silver' }"
                   :style="{
                     backgroundImage: `url(${item.bgImage})`,
                     zIndex: coinIdx,
@@ -360,10 +487,6 @@ const getCoinCount = (count) => {
                     animationDelay: `${(coinIdx - 1) * 0.15}s`
                   }"
                 ></div>
-              </div>
-              <!-- 如果份数超过5，显示 +N 标识 -->
-              <div v-if="parseInt(item.count || 0) > 5" class="coin-more-indicator" :class="assetType === 'silver' ? 'silver-indicator' : ''">
-                +{{ parseInt(item.count || 0) - 5 }}
               </div>
             </div>
 
@@ -389,7 +512,7 @@ const getCoinCount = (count) => {
                 <div class="flex justify-between items-end">
                   <div>
                     <p class="text-[9px] text-white/70 uppercase font-bold">{{ t('profile.weight') }}</p>
-                    <p class="text-sm font-bold">{{ getDisplayedWeight(item, index) }} g</p>
+                    <p class="text-sm font-bold">{{ getDisplayedWeight(item) }} g</p>
                   </div>
                   <div class="text-right">
                     <p class="text-[9px] text-white/70 uppercase font-bold">{{ t('profile.marketValue') }}</p>

@@ -31,9 +31,12 @@ export const marketPricesFallback = [
 
 export const marketPeriodsFallback = [
   { label: 'market.timeShare', value: '1m', type: 'area' },
+  { label: 'market.hourlyK', value: 'hourly', type: 'candle' },
   { label: 'market.dailyK', value: 'daily', type: 'candle' },
   { label: 'market.weeklyK', value: 'weekly', type: 'candle' },
   { label: 'market.monthlyK', value: 'monthly', type: 'candle' },
+  { label: 'market.quarterlyK', value: 'quarterly', type: 'candle' },
+  { label: 'market.yearlyK', value: 'yearly', type: 'candle' },
 ]
 
 export const buildKLineFallback = () => {

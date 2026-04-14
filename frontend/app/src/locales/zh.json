@@ -109,6 +109,7 @@
     "connecting": "正在连接行情服务...",
     "selectAsset": "请选择交易品种",
     "timeShare": "分时",
+    "hourlyK": "小时线",
     "dailyK": "日K",
     "weeklyK": "周K",
     "monthlyK": "月K",

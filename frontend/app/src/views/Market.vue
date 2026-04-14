@@ -124,7 +124,7 @@ onMounted(() => {
       <div class="rounded-3xl border border-[#2b3b4c] bg-[#162331] overflow-hidden flex flex-col h-[300px]">
         <div class="px-4 py-3 flex justify-between items-center border-b border-[#2a3a4b]">
           <h4 class="font-bold text-sm">{{ currentAsset?.name || t('market.selectAsset') }}</h4>
-          <div class="flex gap-4 text-[10px] text-[#8e9bb0]">
+          <div class="flex gap-2 overflow-x-auto no-scrollbar text-[10px] text-[#8e9bb0]">
             <template v-if="periodsLoading">
               <span class="text-[#6f8094]">{{ t('common.loading') }}</span>
             </template>

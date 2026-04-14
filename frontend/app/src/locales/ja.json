@@ -109,6 +109,7 @@
     "connecting": "相場サーバーに接続中...",
     "selectAsset": "銘柄を選択してください",
     "timeShare": "分時",
+    "hourlyK": "1時間",
     "dailyK": "日足",
     "weeklyK": "週足",
     "monthlyK": "月足",

@@ -58,7 +58,7 @@ const EXTERNAL_IDS = new Set(['AU9999', 'AG9999', 'OIL', 'USDX'])
 const localQuoteState = new Map()
 let cachedTradingWindows = DEFAULT_TRADING_WINDOWS
 let hasBootstrappedTradingWindows = false
-const EXPECTED_PERIOD_VALUES = ['1m', 'daily', 'weekly', 'monthly']
+const EXPECTED_PERIOD_VALUES = ['1m', 'hourly', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly']
 
 const pad = (value) => String(value).padStart(2, '0')
 const formatPrice = (value, decimals) => Number(value).toFixed(decimals)

@@ -109,6 +109,7 @@
     "connecting": "Connecting to market server...",
     "selectAsset": "Please select an asset",
     "timeShare": "1D",
+    "hourlyK": "1H",
     "dailyK": "1W",
     "weeklyK": "1M",
     "monthlyK": "1Y",
