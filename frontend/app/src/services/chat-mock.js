@@ -44,41 +44,48 @@ export const cloneChatMock = (value) => JSON.parse(JSON.stringify(value))
 export const chatListMock = [
   {
     id: 1,
-    name: '系统消息',
-    lastMsg: '您的账户实名认证已通过',
+    nameKey: 'chat.list.system.name',
+    name: 'System',
+    lastMsgKey: 'chat.list.system.lastMsg',
+    lastMsg: 'Your real-name verification has passed',
     time: '10:30',
     type: 'system',
   },
   {
     id: 2,
-    name: '客服专员',
-    lastMsg: '您好，请问有什么可以帮您的？',
+    nameKey: 'chat.list.service.name',
+    name: 'Service Agent',
+    lastMsgKey: 'chat.list.service.lastMsg',
+    lastMsg: 'Hello, how may I help you?',
     time: '09:15',
     type: 'user',
   },
   {
     id: 3,
-    name: '全球黄金交流群',
-    lastMsg: '张三：今天的金价涨势不错',
-    time: '昨天',
+    nameKey: 'chat.list.group.name',
+    name: 'Global Gold Group',
+    lastMsgKey: 'chat.list.group.lastMsg',
+    lastMsg: 'Zhang: Gold price is strong today',
+    timeKey: 'chat.timeYesterday',
+    time: 'Yesterday',
     type: 'group',
   },
 ]
 
 export const chatMessagesMock = {
   1: [
-    { id: 10101, text: '您的账户实名认证已通过。', self: false, time: '10:12' },
-    { id: 10102, text: '您已获得完整交易权限。', self: false, time: '10:30' },
+    { id: 10101, textKey: 'chat.message.system.verified', text: 'Your real-name verification has passed.', self: false, time: '10:12' },
+    { id: 10102, textKey: 'chat.message.system.permission', text: 'You now have full trading permissions.', self: false, time: '10:30' },
   ],
   2: [
-    { id: 20101, text: '您好，请问有什么可以帮您的？', self: false, time: '09:15' },
-    { id: 20102, text: '我想了解一下黄金买入规则。', self: true, time: '09:16' },
-    { id: 20103, text: '好的，我这边为您发送最新说明。', self: false, time: '09:18' },
+    { id: 20101, textKey: 'chat.message.service.greeting', text: 'Hello, how may I help you?', self: false, time: '09:15' },
+    { id: 20102, textKey: 'chat.message.service.askRule', text: 'I want to know the buy-anchor rules.', self: true, time: '09:16' },
+    { id: 20103, textKey: 'chat.message.service.replyRule', text: 'Sure, I will send you the latest guide.', self: false, time: '09:18' },
   ],
   3: [
-    { id: 30101, text: '张三：今天的金价涨势不错', self: false, time: '昨天' },
-    { id: 30102, text: '李四：上金所夜盘节奏很关键。', self: false, time: '昨天' },
-    { id: 30103, text: '我：先观察一下 485 一线。', self: true, time: '昨天' },
+    { id: 30101, textKey: 'chat.message.group.msg1', text: 'Zhang: Gold price is strong today', self: false, timeKey: 'chat.timeYesterday', time: 'Yesterday' },
+    { id: 30102, textKey: 'chat.message.group.msg2', text: 'Li: Night session rhythm is critical.', self: false, timeKey: 'chat.timeYesterday', time: 'Yesterday' },
+    { id: 30103, textKey: 'chat.message.group.msg3', text: 'Me: Watching the 485 line first.', self: true, timeKey: 'chat.timeYesterday', time: 'Yesterday' },
   ],
 }
 
@@ -243,7 +250,7 @@ export const buildTransferMessage = ({ amount, recipientName, note = '' }) => ({
   amount,
   recipientName,
   note,
-  status: '转账成功',
-  text: `向 ${recipientName} 转账 ¥${Number(amount).toFixed(2)}`,
+  status: 'completed',
+  text: `Transfer ¥${Number(amount).toFixed(2)} to ${recipientName}`,
   time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
 })

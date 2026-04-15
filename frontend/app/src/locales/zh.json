@@ -16,7 +16,114 @@
     "reload": "重新加载",
     "placeholder": "请输入消息...",
     "loadMore": "上拉加载更多",
-    "syncing": "同步中..."
+    "syncing": "同步中...",
+    "detailTitle": "聊天详情",
+    "systemNoTransfer": "系统消息不支持转账交易",
+    "myQr": {
+      "title": "我的二维码",
+      "desc": "扫码即可添加好友",
+      "uidLabel": "UID：",
+      "copyUid": "复制 UID",
+      "copySuccess": "UID 已复制",
+      "copyFailed": "复制失败，请手动复制"
+    },
+    "transfer": {
+      "title": "转账交易",
+      "groupDesc": "选择群友后发起转账",
+      "singleDesc": "向 {name} 发起转账",
+      "currentFriend": "当前好友",
+      "loadingTargets": "正在加载可转账对象...",
+      "groupReceiver": "收款群友",
+      "receiver": "收款对象",
+      "amount": "转账金额",
+      "amountPlaceholder": "输入转账金额",
+      "note": "备注信息",
+      "notePlaceholder": "选填，方便对方识别",
+      "processing": "处理中...",
+      "confirm": "确认转账",
+      "sentToast": "转账交易已发送",
+      "submitted": "已提交",
+      "completed": "已完成",
+      "recipientLabel": "收款人：",
+      "noteLabel": "备注："
+    },
+    "addFriendPage": {
+      "searchPlaceholder": "输入昵称或 UID 搜索用户",
+      "searching": "搜索中...",
+      "mutualFriends": "共同好友 {count} 位",
+      "view": "查看",
+      "cityLabel": "所在地：",
+      "sendRequest": "发起好友申请",
+      "progress": "申请进度",
+      "requestSent": "已向 {name} 发起好友申请",
+      "messageLabel": "留言：",
+      "accepted": "对方已确认，好友关系已建立。",
+      "confirming": "确认中...",
+      "simulateConfirm": "模拟对方确认",
+      "sendMessage": "发消息",
+      "requestMessage": "你好，我是黄金投资者_888，希望添加你为好友。",
+      "newFriend": "新好友"
+    },
+    "createGroupPage": {
+      "defaultName": "贵金属快讯群",
+      "defaultNotice": "关注盘中资讯与上金所节奏同步",
+      "groupName": "群聊名称",
+      "notice": "群公告",
+      "selectMembers": "选择成员",
+      "selectedCount": "已选 {count} 人",
+      "selected": "已选",
+      "select": "选择",
+      "selectedMembers": "已选成员",
+      "created": "群聊创建成功",
+      "createdDesc": "{name} · {count} 位成员已加入",
+      "enterGroup": "进入群聊",
+      "newGroup": "新建群聊"
+    },
+    "scanPage": {
+      "cameraOpen": "摄像头已开启，正在模拟识别二维码...",
+      "parsedReady": "已完成解析，可继续处理结果",
+      "mockList": "模拟二维码内容",
+      "parsing": "解析中..."
+    },
+    "timeYesterday": "昨天",
+    "timeJustNow": "刚刚",
+    "list": {
+      "system": {
+        "name": "系统消息",
+        "lastMsg": "您的账户实名认证已通过"
+      },
+      "service": {
+        "name": "客服专员",
+        "lastMsg": "您好，请问有什么可以帮您的？"
+      },
+      "group": {
+        "name": "全球黄金交流群",
+        "lastMsg": "张三：今天的金价涨势不错"
+      }
+    },
+    "message": {
+      "system": {
+        "verified": "您的账户实名认证已通过。",
+        "permission": "您已获得完整交易权限。"
+      },
+      "service": {
+        "greeting": "您好，请问有什么可以帮您的？",
+        "askRule": "我想了解一下黄金买入规则。",
+        "replyRule": "好的，我这边为您发送最新说明。"
+      },
+      "group": {
+        "msg1": "张三：今天的金价涨势不错",
+        "msg2": "李四：上金所夜盘节奏很关键。",
+        "msg3": "我：先观察一下 485 一线。",
+        "created": "群聊创建成功：{name}"
+      },
+      "friend": {
+        "connected": "我们已经成为好友，开始聊天吧"
+      },
+      "transfer": {
+        "summary": "转账 ¥{amount} 给 {name}"
+      }
+    }
   },
   "language": "语言",
   "common": {
@@ -54,7 +161,8 @@
       "usernamePlaceholder": "请输入用户名",
       "passwordPlaceholder": "请输入密钥",
       "fillAll": "请完整填写信息",
-      "loginFailed": "登录失败，请检查用户名或密钥"
+      "loginFailed": "登录失败，请检查用户名或密钥",
+      "keyNotice": "密钥由用户自行设置并妥善保管，若遗忘请联系人工客服并走后台审核找回。"
     },
     "register": {
       "title": "注册账号",
@@ -93,7 +201,11 @@
       "phonePlaceholder": "请输入绑定手机号",
       "codePlaceholder": "请输入短信验证码",
       "newPasswordPlaceholder": "请输入新密钥",
-      "fillAll": "请完整填写信息"
+      "fillAll": "请完整填写信息",
+      "manualTitle": "密钥找回说明",
+      "manualDesc1": "密钥由用户自行设置并妥善保管，本端不提供线上自助找回流程。",
+      "manualDesc2": "若确实遗忘密钥，请联系人工客服，提交身份资料后由后台审核处理。",
+      "manualBackLogin": "返回登录"
     }
   },
   "home": {
@@ -102,7 +214,17 @@
     "viewMore": "查看更多",
     "loadingNews": "新闻加载中...",
     "noNotice": "暂无公告",
-    "connectionFailed": "网络连接失败"
+    "connectionFailed": "网络连接失败",
+    "newsLoading": "新闻加载中...",
+    "noNewsAutoRefresh": "暂无新闻，稍后自动刷新",
+    "pyramidTitle": "实时金字塔排名",
+    "pyramidSubtitle": "仅展示昵称和买入黄金克数，顶端为投入最多买手",
+    "updatedAt": "更新 {time}",
+    "syncing": "同步中",
+    "noRanking": "暂无排名数据",
+    "goldChainEntry": "金链入口",
+    "goldChainAria": "进入金链半公开数据页",
+    "buyerRank": "买手{index}"
   },
   "market": {
     "realTime": "实时行情",
@@ -116,10 +238,13 @@
     "quarterlyK": "季K",
     "yearlyK": "年K",
     "buyAnchor": "买入锚定",
-    "sellUnhook": "卖出脱钩"
+    "sellUnhook": "卖出脱钩",
+    "products": "品种栏",
+    "productsHint": "上下滑动查看更多品种",
+    "quoteFallback": "实时行情"
   },
   "trade": {
-    "quantity": "数量（{{ assetName }}）",
+    "quantity": "数量（{assetName}）",
     "currentPrice": "当前价格",
     "quantityPlaceholder": "请输入交易数量",
     "estimatedAmount": "预估金额",
@@ -129,7 +254,20 @@
     "recentOrders": "最近订单",
     "refresh": "刷新",
     "noOrders": "暂无订单记录",
-    "orderSuccess": "下单成功"
+    "orderSuccess": "下单成功",
+    "spotGold": "现货黄金",
+    "unnamedAsset": "未命名品种",
+    "arrival": "到账 +{grams}g",
+    "arrivalAlt": "到账动画",
+    "dealPrice": "成交价",
+    "dealQuantity": "数量",
+    "orderType": {
+      "buy": "买入",
+      "sell": "卖出"
+    },
+    "errors": {
+      "insufficientBalance": "可用资产不足，无法发起买入"
+    }
   },
   "profile": {
     "idPrefix": "ID:",
@@ -156,7 +294,11 @@
       "marketValue": "持仓市值",
       "yesterdayProfit": "昨日收益",
       "accumulatedProfit": "累计收益"
-    }
+    },
+    "rechargeSuccess": "充值成功，余额已更新",
+    "withdrawSubmitted": "提现申请已提交，状态：到账中",
+    "arrivalFeedback": "到账 +{grams}g",
+    "shareUnit": "份"
   },
   "news": {
     "newsListTitle": "资讯列表",
@@ -182,5 +324,247 @@
   "errors": {
     "sessionExpired": "登录状态已过期，请重新登录",
     "networkError": "网络异常，请稍后再试"
+  },
+  "settings": {
+    "title": "设置",
+    "overview": {
+      "security": {
+        "title": "账户安全",
+        "desc": "实名认证、密钥/指纹设置、设备管理、登录日志"
+      },
+      "account": {
+        "title": "账户管理",
+        "desc": "个人信息、手机号换绑、头像/昵称修改"
+      },
+      "general": {
+        "title": "通用设置",
+        "desc": "消息通知、界面主题、行情刷新频率"
+      },
+      "help": {
+        "title": "帮助服务",
+        "desc": "在线客服、常见问题、意见反馈"
+      },
+      "about": {
+        "title": "关于我们",
+        "desc": "版本信息、系统公告、用户协议/隐私政策"
+      },
+      "cancel-account": {
+        "title": "注销账号",
+        "desc": "风险告知、身份验证、不可恢复注销流程"
+      }
+    },
+    "payment": {
+      "wechat": "微信",
+      "alipay": "支付宝",
+      "bankcard": "银行卡"
+    },
+    "security": {
+      "title": "账户安全",
+      "sectionRealName": "实名认证与安全开关",
+      "sectionDevices": "设备管理",
+      "sectionChangeKey": "修改密钥",
+      "sectionLoginLogs": "登录日志",
+      "realNameStatus": "实名认证状态",
+      "keyProtection": "密钥保护",
+      "biometric": "指纹/生物识别",
+      "enabled": "已开启",
+      "disabled": "未开启",
+      "remove": "移除",
+      "currentKey": "旧密钥",
+      "currentKeyPlaceholder": "请输入旧密钥",
+      "newKey": "新密钥",
+      "newKeyPlaceholder": "请输入新密钥（至少6位）",
+      "confirmKey": "确认新密钥",
+      "confirmKeyPlaceholder": "请再次输入新密钥",
+      "keyRule": "密钥由用户自行设置、自行保管。支持数字、字母、符号自由组合，长度至少6位。",
+      "confirmChangeKey": "确认修改密钥",
+      "ipLabel": "IP：",
+      "manualResetNote": "本端不提供自助找回密钥。若遗忘密钥，请联系人工客服并走后台审核流程处理。",
+      "status": {
+        "verified": "已实名"
+      },
+      "log": {
+        "success": "成功",
+        "failed": "失败"
+      },
+      "toast": {
+        "updated": "设置已更新",
+        "deviceRemoved": "设备已移除",
+        "fillAll": "请完整填写密钥信息",
+        "keyTooShort": "新密钥长度不能少于6位",
+        "keyMismatch": "两次输入的新密钥不一致",
+        "keyChanged": "密钥修改成功，请妥善保管",
+        "keyChangeFailed": "密钥修改失败",
+        "currentKeyWrong": "旧密钥不正确"
+      }
+    },
+    "account": {
+      "title": "账户管理",
+      "sectionProfile": "个人信息",
+      "nickname": "昵称",
+      "currentAvatar": "当前头像",
+      "avatarTip": "点击加号替换头像",
+      "avatarRule": "支持 JPG / PNG，大小不超过 2MB",
+      "sectionPhone": "手机号换绑",
+      "currentMobile": "当前手机号：",
+      "phoneFlow": "换绑流程：身份验证 → 新号验证 → 绑定完成（本版为 mock）",
+      "save": "保存账户设置",
+      "uploadTitle": "上传头像",
+      "uploadDesc": "选择图片后可先预览，再确认替换",
+      "selectImage": "选择图片",
+      "confirmReplace": "确认替换",
+      "bindStatus": {
+        "bound": "已绑定",
+        "unbound": "已解绑"
+      },
+      "toast": {
+        "saved": "账户信息已保存",
+        "uploadImageOnly": "请上传图片文件",
+        "uploadTooLarge": "头像大小不能超过 2MB",
+        "selectImageFirst": "请先选择头像图片",
+        "avatarReplaced": "头像已替换，记得保存设置"
+      }
+    },
+    "general": {
+      "title": "通用设置",
+      "sectionNotice": "消息通知",
+      "sectionTheme": "界面主题",
+      "sectionRefresh": "行情刷新频率",
+      "save": "保存通用设置",
+      "seconds": "{value} 秒",
+      "notice": {
+        "system": "系统通知",
+        "trade": "交易提醒",
+        "service": "客服消息"
+      },
+      "theme": {
+        "dark": "深色主题",
+        "auto": "跟随系统"
+      },
+      "toast": {
+        "saved": "通用设置已保存"
+      }
+    },
+    "help": {
+      "title": "帮助服务",
+      "customerService": "在线客服",
+      "customerDesc": "点击进入客服会话",
+      "customerTitle": "客服专员",
+      "faqTitle": "常见问题",
+      "feedbackTitle": "意见反馈",
+      "feedbackPlaceholder": "请输入你的意见或建议",
+      "feedbackSubmit": "提交反馈",
+      "faq": {
+        "q1": "充值后多久到账？",
+        "a1": "正常情况下 1-3 分钟到账，异常时可联系客服处理。",
+        "q2": "提现为什么显示到账中？",
+        "a2": "提现提交后进入渠道处理流程，预计 1-24 小时到账。",
+        "q3": "交易时间不在开盘时段怎么办？",
+        "a3": "系统按上金所时段同步，休市期间无法提交买卖。"
+      },
+      "toast": {
+        "emptyFeedback": "请先填写反馈内容",
+        "feedbackSubmitted": "意见反馈已提交"
+      }
+    },
+    "about": {
+      "title": "关于我们",
+      "sectionVersion": "版本信息",
+      "sectionNotices": "系统公告",
+      "sectionPolicies": "协议与政策（仅查看入口）",
+      "currentVersion": "当前版本：",
+      "buildDate": "构建日期：",
+      "userAgreement": "用户协议",
+      "privacyPolicy": "隐私政策",
+      "entryToast": "{title}入口（仅查看）",
+      "notice": {
+        "maintenance": "系统维护通知",
+        "syncUpgrade": "交易时段同步优化上线"
+      }
+    },
+    "cancel": {
+      "title": "注销账号",
+      "riskTitle": "风险告知",
+      "riskDesc": "注销后将彻底清除账户敏感数据并解绑关联信息，账号立即失效且不可恢复。",
+      "verifyTitle": "身份验证",
+      "verifyKey": "密钥验证",
+      "verifyKeyPlaceholder": "请输入密钥",
+      "smsLabel": "短信验证码（{mobile}）",
+      "smsPlaceholder": "请输入验证码",
+      "sendCode": "发送验证码",
+      "apply": "申请注销账号",
+      "confirmTitle": "确认注销账号",
+      "confirmDesc": "注销后将执行数据清除与解绑，账号状态失效且不可恢复，请谨慎确认。",
+      "confirmRisk": "我已阅读并确认上述风险，愿意继续注销",
+      "canceling": "注销中...",
+      "confirmAction": "确认注销",
+      "canceledUser": "已注销用户",
+      "toast": {
+        "codeSent": "验证码已发送（mock：654321）",
+        "codeFailed": "验证码发送失败",
+        "enterKey": "请先输入密钥",
+        "enterSms": "请先输入短信验证码",
+        "completeVerify": "请勾选风险告知并完成身份验证",
+        "canceled": "账号已注销，信息已清除",
+        "failed": "注销失败，请稍后重试",
+        "keyVerifyFailed": "密钥验证失败",
+        "smsWrong": "验证码错误"
+      }
+    },
+    "recharge": {
+      "title": "账户充值",
+      "desc": "选择渠道并输入金额，完成支付后自动入账",
+      "channel": "充值渠道：",
+      "amount": "充值金额：",
+      "amountPlaceholder": "请输入充值金额",
+      "creating": "创建支付单中...",
+      "payNow": "去支付",
+      "orderNo": "订单号：",
+      "payHint": "请完成支付后点击确认",
+      "confirming": "确认中...",
+      "paidDone": "我已完成付款",
+      "toast": {
+        "orderCreated": "支付单已创建，请完成付款",
+        "createFailed": "创建支付单失败",
+        "confirmFailed": "确认支付失败"
+      }
+    },
+    "withdraw": {
+      "title": "账户提现",
+      "desc": "选择到账渠道、输入金额并完成短信验证",
+      "available": "可提现余额：",
+      "channel": "提现到",
+      "amount": "提现金额",
+      "amountPlaceholder": "请输入提现金额",
+      "smsCode": "短信验证码",
+      "mobilePlaceholder": "请输入手机号",
+      "mobileInvalid": "请输入 11 位手机号",
+      "smsPlaceholder": "输入验证码",
+      "getCode": "获取验证码",
+      "sending": "发送中...",
+      "confirm": "确认提现",
+      "submitting": "提交中...",
+      "hint": "提交成功后将显示“到账中”，预计 1-24 小时到账。",
+      "toast": {
+        "codeSent": "验证码已发送，测试码 123456",
+        "codeFailed": "验证码发送失败",
+        "submitFailed": "提现失败"
+      }
+    }
+  },
+  "goldChain": {
+    "title": "金链半公开数据",
+    "syncing": "同步中",
+    "updated": "已更新",
+    "loading": "正在同步链上摘要...",
+    "noData": "暂无可展示数据",
+    "userNo": "链上用户{index}",
+    "tradeInfo": "买入 {buy} 笔 / 卖出 {sell} 笔",
+    "metrics": {
+      "trade": "买卖数据",
+      "gold": "黄金克数",
+      "silver": "白银克数",
+      "totalAsset": "总资产"
+    }
   }
 }

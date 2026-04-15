@@ -1,15 +1,17 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ArrowLeft, CheckCircle2, Users } from 'lucide-vue-next'
 import { ChatService } from '../../services/chat'
 
 const router = useRouter()
+const { t } = useI18n()
 const loading = ref(false)
 const candidates = ref([])
 const selectedIds = ref([])
-const groupName = ref('贵金属快讯群')
-const notice = ref('关注盘中资讯与上金所节奏同步')
+const groupName = ref(t('chat.createGroupPage.defaultName'))
+const notice = ref(t('chat.createGroupPage.defaultNotice'))
 const createResult = ref(null)
 
 const selectedMembers = computed(() => candidates.value.filter((item) => selectedIds.value.includes(item.id)))
@@ -47,7 +49,7 @@ const enterGroupChat = () => {
   if (!createResult.value?.chatId) return
   router.replace({
     path: `/chat/${createResult.value.chatId}`,
-    query: { title: createResult.value.name || groupName.value || '新建群聊' },
+    query: { title: createResult.value.name || groupName.value || t('chat.createGroupPage.newGroup') },
   })
 }
 
@@ -59,7 +61,7 @@ onMounted(loadCandidates)
     <header class="flex items-center gap-4 border-b border-[#233242] bg-[#1a2735] px-4 py-3">
       <button @click="router.back()" class="btn-interact text-[#cfd8e3]"><ArrowLeft :size="24" /></button>
       <div>
-        <h2 class="text-lg font-bold">创建群聊</h2>
+        <h2 class="text-lg font-bold">{{ t('chat.createGroup') }}</h2>
       </div>
     </header>
 
@@ -67,11 +69,11 @@ onMounted(loadCandidates)
       <section class="rounded-3xl border border-[#2b3b4c] bg-[#162331] p-4">
         <div class="space-y-3">
           <label class="block text-sm">
-            <span class="mb-2 block text-[#8e9bb0]">群聊名称</span>
+            <span class="mb-2 block text-[#8e9bb0]">{{ t('chat.createGroupPage.groupName') }}</span>
             <input v-model="groupName" class="w-full rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3 text-white outline-none" />
           </label>
           <label class="block text-sm">
-            <span class="mb-2 block text-[#8e9bb0]">群公告</span>
+            <span class="mb-2 block text-[#8e9bb0]">{{ t('chat.createGroupPage.notice') }}</span>
             <textarea v-model="notice" rows="3" class="w-full rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3 text-white outline-none"></textarea>
           </label>
         </div>
@@ -79,8 +81,8 @@ onMounted(loadCandidates)
 
       <section class="rounded-3xl border border-[#2b3b4c] bg-[#162331] p-4">
         <div class="flex items-center justify-between">
-          <h3 class="text-base font-bold">选择成员</h3>
-          <span class="text-xs text-[#c99b18]">已选 {{ selectedIds.length }} 人</span>
+          <h3 class="text-base font-bold">{{ t('chat.createGroupPage.selectMembers') }}</h3>
+          <span class="text-xs text-[#c99b18]">{{ t('chat.createGroupPage.selectedCount', { count: selectedIds.length }) }}</span>
         </div>
         <div class="mt-4 grid grid-cols-1 gap-3">
           <button
@@ -96,14 +98,14 @@ onMounted(loadCandidates)
               <p class="mt-1 text-xs text-[#8e9bb0]">{{ item.uid }} · {{ item.role }}</p>
             </div>
             <span class="text-xs" :class="selectedIds.includes(item.id) ? 'text-[#c99b18]' : 'text-[#7a8ca1]'">
-              {{ selectedIds.includes(item.id) ? '已选' : '选择' }}
+              {{ selectedIds.includes(item.id) ? t('chat.createGroupPage.selected') : t('chat.createGroupPage.select') }}
             </span>
           </button>
         </div>
       </section>
 
       <section class="rounded-3xl border border-[#2b3b4c] bg-[#162331] p-4">
-        <h3 class="text-base font-bold">已选成员</h3>
+        <h3 class="text-base font-bold">{{ t('chat.createGroupPage.selectedMembers') }}</h3>
         <div class="mt-3 flex flex-wrap gap-2">
           <span v-for="item in selectedMembers" :key="item.id" class="rounded-full bg-[#223244] px-3 py-1 text-xs text-[#dce6f0]">
             {{ item.nickname }}
@@ -115,7 +117,7 @@ onMounted(loadCandidates)
           class="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#19c58a] px-4 py-3 text-sm font-bold text-white btn-interact"
         >
           <Users :size="18" />
-          创建群聊
+          {{ t('chat.createGroup') }}
         </button>
       </section>
 
@@ -123,12 +125,12 @@ onMounted(loadCandidates)
         <div class="flex items-center gap-3 text-[#34d399]">
           <CheckCircle2 :size="20" />
           <div>
-            <p class="font-bold">群聊创建成功</p>
-            <p class="mt-1 text-xs text-[#8e9bb0]">{{ createResult.name }} · {{ createResult.memberCount }} 位成员已加入</p>
+            <p class="font-bold">{{ t('chat.createGroupPage.created') }}</p>
+            <p class="mt-1 text-xs text-[#8e9bb0]">{{ t('chat.createGroupPage.createdDesc', { name: createResult.name, count: createResult.memberCount }) }}</p>
           </div>
         </div>
         <button @click="enterGroupChat" class="mt-4 w-full rounded-2xl bg-[#c99b18] px-4 py-3 text-sm font-bold text-white btn-interact">
-          进入群聊
+          {{ t('chat.createGroupPage.enterGroup') }}
         </button>
       </section>
     </div>

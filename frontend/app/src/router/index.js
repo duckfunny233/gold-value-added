@@ -21,6 +21,7 @@ import AccountSettings from '../views/settings/AccountSettings.vue'
 import GeneralSettings from '../views/settings/GeneralSettings.vue'
 import HelpServiceSettings from '../views/settings/HelpServiceSettings.vue'
 import AboutSettings from '../views/settings/AboutSettings.vue'
+import CancelAccountSettings from '../views/settings/CancelAccountSettings.vue'
 
 const routes = [
   {
@@ -97,6 +98,11 @@ const routes = [
     path: '/settings/about',
     name: 'AboutSettings',
     component: AboutSettings
+  },
+  {
+    path: '/settings/cancel-account',
+    name: 'CancelAccountSettings',
+    component: CancelAccountSettings
   },
   {
     path: '/',

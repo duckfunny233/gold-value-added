@@ -1,11 +1,13 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ArrowLeft, Search, UserPlus, CheckCircle2 } from 'lucide-vue-next'
 import { ChatService } from '../../services/chat'
 
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 
 const keyword = ref(route.query.keyword || '')
 const loading = ref(false)
@@ -45,7 +47,7 @@ const sendRequest = async () => {
   if (!selectedUser.value) return
   const response = await ChatService.sendFriendRequest({
     targetUserId: selectedUser.value.id,
-    message: `你好，我是黄金投资者_888，希望添加你为好友。`,
+    message: t('chat.addFriendPage.requestMessage'),
   })
   requestState.value = response.data
 }
@@ -68,7 +70,7 @@ const openChat = () => {
   if (!requestState.value?.chatId) return
   router.replace({
     path: `/chat/${requestState.value.chatId}`,
-    query: { title: requestState.value.chatName || selectedUser.value?.nickname || '新好友' },
+    query: { title: requestState.value.chatName || selectedUser.value?.nickname || t('chat.addFriendPage.newFriend') },
   })
 }
 
@@ -85,7 +87,7 @@ onMounted(async () => {
     <header class="flex items-center gap-4 border-b border-[#233242] bg-[#1a2735] px-4 py-3">
       <button @click="router.back()" class="btn-interact text-[#cfd8e3]"><ArrowLeft :size="24" /></button>
       <div>
-        <h2 class="text-lg font-bold">添加好友</h2>
+        <h2 class="text-lg font-bold">{{ t('chat.addFriend') }}</h2>
       </div>
     </header>
 
@@ -93,9 +95,9 @@ onMounted(async () => {
       <section class="rounded-3xl border border-[#2b3b4c] bg-[#162331] p-4">
         <div class="flex items-center gap-3 rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3">
           <Search :size="18" class="text-[#8e9bb0]" />
-          <input v-model="keyword" @keyup.enter="searchUsers" placeholder="输入昵称或 UID 搜索用户" class="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#6f8093]" />
+          <input v-model="keyword" @keyup.enter="searchUsers" :placeholder="t('chat.addFriendPage.searchPlaceholder')" class="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#6f8093]" />
           <button @click="searchUsers" class="rounded-xl bg-[#c99b18] px-3 py-1.5 text-xs font-bold text-white btn-interact">
-            {{ searching ? '搜索中...' : '搜索' }}
+            {{ searching ? t('chat.addFriendPage.searching') : t('common.search') }}
           </button>
         </div>
 
@@ -110,9 +112,9 @@ onMounted(async () => {
             <img :src="item.avatar" class="h-11 w-11 rounded-full bg-[#223244]" />
             <div class="min-w-0 flex-1">
               <p class="truncate text-sm font-bold">{{ item.nickname }}</p>
-              <p class="mt-1 text-xs text-[#8e9bb0]">{{ item.uid }} · 共同好友 {{ item.mutualFriends }} 位</p>
+              <p class="mt-1 text-xs text-[#8e9bb0]">{{ item.uid }} · {{ t('chat.addFriendPage.mutualFriends', { count: item.mutualFriends }) }}</p>
             </div>
-            <span class="text-xs text-[#c99b18]">查看</span>
+            <span class="text-xs text-[#c99b18]">{{ t('chat.addFriendPage.view') }}</span>
           </button>
         </div>
       </section>
@@ -125,7 +127,7 @@ onMounted(async () => {
               <h3 class="text-lg font-bold">{{ selectedUser.nickname }}</h3>
               <span class="rounded-full bg-[#223244] px-2 py-0.5 text-[10px] text-[#c99b18]">{{ selectedUser.status }}</span>
             </div>
-            <p class="mt-1 text-xs text-[#8e9bb0]">UID：{{ selectedUser.uid }} · 所在地：{{ selectedUser.city }}</p>
+            <p class="mt-1 text-xs text-[#8e9bb0]">{{ t('chat.myQr.uidLabel') }}{{ selectedUser.uid }} · {{ t('chat.addFriendPage.cityLabel') }}{{ selectedUser.city }}</p>
             <p class="mt-3 text-sm text-[#d7e0ea]">{{ selectedUser.intro }}</p>
             <div class="mt-3 flex flex-wrap gap-2">
               <span v-for="tag in selectedUser.tags" :key="tag" class="rounded-full border border-[#35506d] px-2 py-1 text-[10px] text-[#a9bbd0]">{{ tag }}</span>
@@ -139,36 +141,36 @@ onMounted(async () => {
           class="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#c99b18] px-4 py-3 text-sm font-bold text-white btn-interact"
         >
           <UserPlus :size="18" />
-          发起好友申请
+          {{ t('chat.addFriendPage.sendRequest') }}
         </button>
       </section>
 
       <section v-if="requestState" class="mt-4 rounded-3xl border border-[#2b3b4c] bg-[#162331] p-4">
-        <h3 class="text-base font-bold">申请进度</h3>
+        <h3 class="text-base font-bold">{{ t('chat.addFriendPage.progress') }}</h3>
         <div class="mt-4 space-y-3 text-sm">
           <div class="flex items-center gap-3 text-[#34d399]">
             <CheckCircle2 :size="18" />
-            <span>已向 {{ selectedUser?.nickname }} 发起好友申请</span>
+            <span>{{ t('chat.addFriendPage.requestSent', { name: selectedUser?.nickname }) }}</span>
           </div>
           <div class="rounded-2xl bg-[#101b28] p-3 text-xs text-[#8e9bb0]">
-            留言：{{ requestState.message }}
+            {{ t('chat.addFriendPage.messageLabel') }}{{ requestState.message }}
           </div>
           <div v-if="requestState.status === 'accepted'" class="rounded-2xl border border-[#245140] bg-[#123326] px-4 py-3 text-sm text-[#b7f7d5]">
-            对方已确认，好友关系已建立。
+            {{ t('chat.addFriendPage.accepted') }}
           </div>
           <button
             v-else
             @click="confirmRequest"
             class="w-full rounded-2xl border border-[#35506d] px-4 py-3 text-sm font-bold text-[#dce6f0] btn-interact"
           >
-            {{ confirmLoading ? '确认中...' : '模拟对方确认' }}
+            {{ confirmLoading ? t('chat.addFriendPage.confirming') : t('chat.addFriendPage.simulateConfirm') }}
           </button>
           <button
             v-if="requestState.status === 'accepted'"
             @click="openChat"
             class="w-full rounded-2xl bg-[#19c58a] px-4 py-3 text-sm font-bold text-white btn-interact"
           >
-            发消息
+            {{ t('chat.addFriendPage.sendMessage') }}
           </button>
         </div>
       </section>

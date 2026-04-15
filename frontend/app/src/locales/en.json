@@ -16,7 +16,114 @@
     "reload": "Reload",
     "placeholder": "Type a message...",
     "loadMore": "View history",
-    "syncing": "Syncing..."
+    "syncing": "Syncing...",
+    "detailTitle": "Chat details",
+    "systemNoTransfer": "System chats do not support transfer",
+    "myQr": {
+      "title": "My QR Code",
+      "desc": "Scan to add me as a friend",
+      "uidLabel": "UID: ",
+      "copyUid": "Copy UID",
+      "copySuccess": "UID copied",
+      "copyFailed": "Copy failed, please copy manually"
+    },
+    "transfer": {
+      "title": "Transfer",
+      "groupDesc": "Select a group member then transfer",
+      "singleDesc": "Transfer to {name}",
+      "currentFriend": "current friend",
+      "loadingTargets": "Loading transferable targets...",
+      "groupReceiver": "Group receiver",
+      "receiver": "Receiver",
+      "amount": "Amount",
+      "amountPlaceholder": "Enter transfer amount",
+      "note": "Note",
+      "notePlaceholder": "Optional note",
+      "processing": "Processing...",
+      "confirm": "Confirm transfer",
+      "sentToast": "Transfer has been sent",
+      "submitted": "Submitted",
+      "completed": "Completed",
+      "recipientLabel": "Receiver: ",
+      "noteLabel": "Note: "
+    },
+    "addFriendPage": {
+      "searchPlaceholder": "Search by nickname or UID",
+      "searching": "Searching...",
+      "mutualFriends": "{count} mutual friends",
+      "view": "View",
+      "cityLabel": "City: ",
+      "sendRequest": "Send friend request",
+      "progress": "Request progress",
+      "requestSent": "Friend request sent to {name}",
+      "messageLabel": "Message: ",
+      "accepted": "Accepted. Friendship established.",
+      "confirming": "Confirming...",
+      "simulateConfirm": "Simulate peer confirmation",
+      "sendMessage": "Send message",
+      "requestMessage": "Hi, I am GoldInvestor_888. I would like to add you as a friend.",
+      "newFriend": "New friend"
+    },
+    "createGroupPage": {
+      "defaultName": "Precious Metal Flash Group",
+      "defaultNotice": "Focus on intraday updates and exchange session rhythm.",
+      "groupName": "Group name",
+      "notice": "Group notice",
+      "selectMembers": "Select members",
+      "selectedCount": "Selected {count}",
+      "selected": "Selected",
+      "select": "Select",
+      "selectedMembers": "Selected members",
+      "created": "Group created",
+      "createdDesc": "{name} · {count} members joined",
+      "enterGroup": "Enter group",
+      "newGroup": "New group"
+    },
+    "scanPage": {
+      "cameraOpen": "Camera is on, simulating QR recognition...",
+      "parsedReady": "Parsed successfully, continue with next action",
+      "mockList": "Mock QR content",
+      "parsing": "Parsing..."
+    },
+    "timeYesterday": "Yesterday",
+    "timeJustNow": "Just now",
+    "list": {
+      "system": {
+        "name": "System Message",
+        "lastMsg": "Your real-name verification has passed"
+      },
+      "service": {
+        "name": "Service Agent",
+        "lastMsg": "Hello, how may I help you?"
+      },
+      "group": {
+        "name": "Global Gold Group",
+        "lastMsg": "Zhang: Gold price is strong today"
+      }
+    },
+    "message": {
+      "system": {
+        "verified": "Your real-name verification has passed.",
+        "permission": "You now have full trading permissions."
+      },
+      "service": {
+        "greeting": "Hello, how may I help you?",
+        "askRule": "I want to know the buy-anchor rules.",
+        "replyRule": "Sure, I will send you the latest guide."
+      },
+      "group": {
+        "msg1": "Zhang: Gold price is strong today",
+        "msg2": "Li: Night session rhythm is critical.",
+        "msg3": "Me: Watching the 485 line first.",
+        "created": "Group created: {name}"
+      },
+      "friend": {
+        "connected": "We are now friends. Let's start chatting."
+      },
+      "transfer": {
+        "summary": "Transfer ¥{amount} to {name}"
+      }
+    }
   },
   "language": "Language",
   "common": {
@@ -54,7 +161,8 @@
       "usernamePlaceholder": "Enter phone/username",
       "passwordPlaceholder": "Enter password",
       "fillAll": "Please fill in all fields",
-      "loginFailed": "Login failed, please check username or password"
+      "loginFailed": "Login failed, please check username or password",
+      "keyNotice": "The secret key is managed by the user. If lost, contact manual support for review."
     },
     "register": {
       "title": "Create account",
@@ -93,7 +201,11 @@
       "phonePlaceholder": "Enter bound phone number",
       "codePlaceholder": "Enter verification code",
       "newPasswordPlaceholder": "Enter new password",
-      "fillAll": "Please fill in all fields"
+      "fillAll": "Please fill in all fields",
+      "manualTitle": "Secret key recovery notice",
+      "manualDesc1": "The secret key is set and kept by the user. Self-service online recovery is not provided.",
+      "manualDesc2": "If you forget the key, please contact manual support and complete backend verification.",
+      "manualBackLogin": "Back to login"
     }
   },
   "home": {
@@ -102,7 +214,17 @@
     "viewMore": "View more",
     "loadingNews": "Getting latest updates...",
     "noNotice": "No announcement",
-    "connectionFailed": "Unable to connect to server"
+    "connectionFailed": "Unable to connect to server",
+    "newsLoading": "Loading news...",
+    "noNewsAutoRefresh": "No news now, auto refresh later",
+    "pyramidTitle": "Real-time Pyramid Ranking",
+    "pyramidSubtitle": "Only nickname and gold grams are shown. Top layer is the highest buyer.",
+    "updatedAt": "Updated {time}",
+    "syncing": "Syncing",
+    "noRanking": "No ranking data",
+    "goldChainEntry": "Gold Chain Entry",
+    "goldChainAria": "Open Gold Chain semi-public data page",
+    "buyerRank": "Buyer {index}"
   },
   "market": {
     "realTime": "Real-time quotes",
@@ -116,10 +238,13 @@
     "quarterlyK": "Quarter",
     "yearlyK": "Year",
     "buyAnchor": "Buy anchor",
-    "sellUnhook": "Sell unhook"
+    "sellUnhook": "Sell unhook",
+    "products": "Products",
+    "productsHint": "Scroll up/down to view more products",
+    "quoteFallback": "Real-time quote"
   },
   "trade": {
-    "quantity": "Quantity ({ assetName })",
+    "quantity": "Quantity ({assetName})",
     "currentPrice": "Current price:",
     "quantityPlaceholder": "Enter quantity (g)",
     "estimatedAmount": "Estimated amount",
@@ -129,7 +254,17 @@
     "recentOrders": "Recent orders",
     "refresh": "Refresh",
     "noOrders": "No order records",
-    "orderSuccess": "Order successful!"
+    "orderSuccess": "Order successful!",
+    "spotGold": "Spot Gold",
+    "unnamedAsset": "Unnamed Asset",
+    "arrival": "Arrival +{grams}g",
+    "arrivalAlt": "Arrival animation",
+    "dealPrice": "Deal Price",
+    "dealQuantity": "Quantity",
+    "orderType": {
+      "buy": "Buy",
+      "sell": "Sell"
+    }
   },
   "profile": {
     "idPrefix": "ID:",
@@ -156,7 +291,11 @@
       "marketValue": "Gold Market Value",
       "yesterdayProfit": "Yesterday's Profit",
       "accumulatedProfit": "Cumulative Profit"
-    }
+    },
+    "rechargeSuccess": "Recharge successful, balance updated",
+    "withdrawSubmitted": "Withdrawal submitted, status: processing",
+    "arrivalFeedback": "Arrival +{grams}g",
+    "shareUnit": "units"
   },
   "news": {
     "newsListTitle": "News",
@@ -182,5 +321,247 @@
   "errors": {
     "sessionExpired": "Session expired, please login again",
     "networkError": "Network connection error"
+  },
+  "settings": {
+    "title": "Settings",
+    "overview": {
+      "security": {
+        "title": "Account Security",
+        "desc": "Real-name, key/biometric, devices, login logs"
+      },
+      "account": {
+        "title": "Account Management",
+        "desc": "Profile, mobile rebinding, avatar/nickname"
+      },
+      "general": {
+        "title": "General",
+        "desc": "Notifications, theme, market refresh rate"
+      },
+      "help": {
+        "title": "Help Service",
+        "desc": "Online support, FAQ, feedback"
+      },
+      "about": {
+        "title": "About",
+        "desc": "Version, notices, agreement/privacy"
+      },
+      "cancel-account": {
+        "title": "Delete Account",
+        "desc": "Risk notice, verification, irreversible delete"
+      }
+    },
+    "payment": {
+      "wechat": "WeChat",
+      "alipay": "Alipay",
+      "bankcard": "Bank Card"
+    },
+    "security": {
+      "title": "Account Security",
+      "sectionRealName": "Real-name and security toggles",
+      "sectionDevices": "Device Management",
+      "sectionChangeKey": "Change Secret Key",
+      "sectionLoginLogs": "Login Logs",
+      "realNameStatus": "Real-name status",
+      "keyProtection": "Secret-key protection",
+      "biometric": "Fingerprint/Biometric",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "remove": "Remove",
+      "currentKey": "Current key",
+      "currentKeyPlaceholder": "Enter current key",
+      "newKey": "New key",
+      "newKeyPlaceholder": "Enter new key (min 6 chars)",
+      "confirmKey": "Confirm new key",
+      "confirmKeyPlaceholder": "Enter new key again",
+      "keyRule": "The secret key is set and kept by the user. It supports numbers, letters and symbols, min length 6.",
+      "confirmChangeKey": "Confirm key change",
+      "ipLabel": "IP: ",
+      "manualResetNote": "Self-service key recovery is not provided. If forgotten, contact support for manual review.",
+      "status": {
+        "verified": "Verified"
+      },
+      "log": {
+        "success": "Success",
+        "failed": "Failed"
+      },
+      "toast": {
+        "updated": "Settings updated",
+        "deviceRemoved": "Device removed",
+        "fillAll": "Please complete key form",
+        "keyTooShort": "New key must be at least 6 chars",
+        "keyMismatch": "Two new keys do not match",
+        "keyChanged": "Secret key changed successfully",
+        "keyChangeFailed": "Failed to change key",
+        "currentKeyWrong": "Current key is incorrect"
+      }
+    },
+    "account": {
+      "title": "Account Management",
+      "sectionProfile": "Profile",
+      "nickname": "Nickname",
+      "currentAvatar": "Current avatar",
+      "avatarTip": "Tap plus to replace avatar",
+      "avatarRule": "Supports JPG / PNG, max 2MB",
+      "sectionPhone": "Mobile Rebinding",
+      "currentMobile": "Current mobile: ",
+      "phoneFlow": "Flow: identity verification -> new number verification -> binding complete (mock)",
+      "save": "Save account settings",
+      "uploadTitle": "Upload Avatar",
+      "uploadDesc": "Preview first, then confirm replacement",
+      "selectImage": "Select Image",
+      "confirmReplace": "Confirm Replace",
+      "bindStatus": {
+        "bound": "Bound",
+        "unbound": "Unbound"
+      },
+      "toast": {
+        "saved": "Account info saved",
+        "uploadImageOnly": "Please upload an image file",
+        "uploadTooLarge": "Avatar must be <= 2MB",
+        "selectImageFirst": "Please select an image first",
+        "avatarReplaced": "Avatar replaced, remember to save settings"
+      }
+    },
+    "general": {
+      "title": "General Settings",
+      "sectionNotice": "Notifications",
+      "sectionTheme": "Theme",
+      "sectionRefresh": "Market refresh frequency",
+      "save": "Save General Settings",
+      "seconds": "{value} sec",
+      "notice": {
+        "system": "System notifications",
+        "trade": "Trade alerts",
+        "service": "Service messages"
+      },
+      "theme": {
+        "dark": "Dark",
+        "auto": "Follow system"
+      },
+      "toast": {
+        "saved": "General settings saved"
+      }
+    },
+    "help": {
+      "title": "Help Service",
+      "customerService": "Online Support",
+      "customerDesc": "Open support chat",
+      "customerTitle": "Service Agent",
+      "faqTitle": "FAQ",
+      "feedbackTitle": "Feedback",
+      "feedbackPlaceholder": "Please enter your suggestion",
+      "feedbackSubmit": "Submit Feedback",
+      "faq": {
+        "q1": "How long does recharge take?",
+        "a1": "Normally within 1-3 minutes. Contact support for exception handling.",
+        "q2": "Why is withdrawal marked processing?",
+        "a2": "After submission, it enters channel handling. ETA 1-24 hours.",
+        "q3": "What if it is outside trading hours?",
+        "a3": "Trading hours follow exchange sessions. Orders are disabled during market close."
+      },
+      "toast": {
+        "emptyFeedback": "Please enter feedback first",
+        "feedbackSubmitted": "Feedback submitted"
+      }
+    },
+    "about": {
+      "title": "About Us",
+      "sectionVersion": "Version",
+      "sectionNotices": "System Notices",
+      "sectionPolicies": "Agreements and Policies (view only)",
+      "currentVersion": "Current version: ",
+      "buildDate": "Build date: ",
+      "userAgreement": "User Agreement",
+      "privacyPolicy": "Privacy Policy",
+      "entryToast": "{title} (view only)",
+      "notice": {
+        "maintenance": "System maintenance notice",
+        "syncUpgrade": "Trading session sync upgrade online"
+      }
+    },
+    "cancel": {
+      "title": "Delete Account",
+      "riskTitle": "Risk Notice",
+      "riskDesc": "After deletion, sensitive data will be erased and bindings removed. The account becomes invalid and cannot be recovered.",
+      "verifyTitle": "Identity Verification",
+      "verifyKey": "Secret key verification",
+      "verifyKeyPlaceholder": "Enter secret key",
+      "smsLabel": "SMS code ({mobile})",
+      "smsPlaceholder": "Enter code",
+      "sendCode": "Send Code",
+      "apply": "Apply for deletion",
+      "confirmTitle": "Confirm account deletion",
+      "confirmDesc": "Deletion will erase data and remove bindings. The account cannot be recovered.",
+      "confirmRisk": "I understand the risks and agree to continue.",
+      "canceling": "Deleting...",
+      "confirmAction": "Confirm Delete",
+      "canceledUser": "Deleted User",
+      "toast": {
+        "codeSent": "Code sent (mock: 654321)",
+        "codeFailed": "Failed to send code",
+        "enterKey": "Please enter secret key",
+        "enterSms": "Please enter SMS code",
+        "completeVerify": "Please finish verification and acknowledge risk",
+        "canceled": "Account deleted and local sensitive data cleared",
+        "failed": "Delete failed, please retry",
+        "keyVerifyFailed": "Secret key verification failed",
+        "smsWrong": "SMS code is incorrect"
+      }
+    },
+    "recharge": {
+      "title": "Recharge",
+      "desc": "Select channel and amount, then complete payment",
+      "channel": "Channel: ",
+      "amount": "Amount: ",
+      "amountPlaceholder": "Enter recharge amount",
+      "creating": "Creating order...",
+      "payNow": "Pay Now",
+      "orderNo": "Order No: ",
+      "payHint": "Complete payment then confirm",
+      "confirming": "Confirming...",
+      "paidDone": "I have paid",
+      "toast": {
+        "orderCreated": "Payment order created",
+        "createFailed": "Failed to create payment order",
+        "confirmFailed": "Failed to confirm payment"
+      }
+    },
+    "withdraw": {
+      "title": "Withdraw",
+      "desc": "Choose channel, amount and complete SMS verification",
+      "available": "Available balance: ",
+      "channel": "Withdraw to",
+      "amount": "Withdraw amount",
+      "amountPlaceholder": "Enter withdraw amount",
+      "smsCode": "SMS code",
+      "mobilePlaceholder": "Enter mobile number",
+      "mobileInvalid": "Please enter an 11-digit mobile number",
+      "smsPlaceholder": "Enter code",
+      "getCode": "Get Code",
+      "sending": "Sending...",
+      "confirm": "Confirm Withdraw",
+      "submitting": "Submitting...",
+      "hint": "After submission, status becomes processing. ETA 1-24 hours.",
+      "toast": {
+        "codeSent": "Code sent, test code: 123456",
+        "codeFailed": "Failed to send code",
+        "submitFailed": "Withdraw failed"
+      }
+    }
+  },
+  "goldChain": {
+    "title": "Gold Chain Semi-Public Data",
+    "syncing": "Syncing",
+    "updated": "Updated",
+    "loading": "Syncing chain summary...",
+    "noData": "No data to display",
+    "userNo": "Chain User {index}",
+    "tradeInfo": "Buy {buy} / Sell {sell}",
+    "metrics": {
+      "trade": "Trade Data",
+      "gold": "Gold Grams",
+      "silver": "Silver Grams",
+      "totalAsset": "Total Assets"
+    }
   }
 }

@@ -2,7 +2,7 @@ const STORAGE_KEY = 'jyz_settings_mock_v1'
 
 const defaultState = {
   security: {
-    realNameStatus: '已实名',
+    realNameStatus: 'settings.security.status.verified',
     passwordSet: true,
     secretKey: 'Key@2026',
     biometricEnabled: false,
@@ -11,16 +11,16 @@ const defaultState = {
       { id: 'dev_2', name: 'Windows Chrome', location: '杭州', lastActive: '2026-04-11 21:03', trusted: false },
     ],
     loginLogs: [
-      { id: 'log_1', time: '2026-04-12 10:26', ip: '116.233.**.**', result: '成功' },
-      { id: 'log_2', time: '2026-04-11 21:03', ip: '183.129.**.**', result: '成功' },
-      { id: 'log_3', time: '2026-04-10 09:18', ip: '101.69.**.**', result: '密钥错误' },
+      { id: 'log_1', time: '2026-04-12 10:26', ip: '116.233.**.**', result: 'success' },
+      { id: 'log_2', time: '2026-04-11 21:03', ip: '183.129.**.**', result: 'success' },
+      { id: 'log_3', time: '2026-04-10 09:18', ip: '101.69.**.**', result: 'key_error' },
     ],
   },
   account: {
     nickname: '黄金投资者_888',
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=GoldInvestor',
     mobile: '138****1024',
-    bindStatus: '已绑定',
+    bindStatus: 'settings.account.bindStatus.bound',
   },
   general: {
     noticePush: true,
@@ -31,17 +31,17 @@ const defaultState = {
   },
   help: {
     faq: [
-      { id: 'faq_1', q: '充值后多久到账？', a: '正常情况下 1-3 分钟到账，异常时可联系客服处理。' },
-      { id: 'faq_2', q: '提现为什么显示到账中？', a: '提现提交后进入渠道处理流程，预计 1-24 小时到账。' },
-      { id: 'faq_3', q: '交易时间不在开盘时段怎么办？', a: '系统按上金所时段同步，休市期间无法提交买卖。' },
+      { id: 'faq_1', q: 'settings.help.faq.q1', a: 'settings.help.faq.a1' },
+      { id: 'faq_2', q: 'settings.help.faq.q2', a: 'settings.help.faq.a2' },
+      { id: 'faq_3', q: 'settings.help.faq.q3', a: 'settings.help.faq.a3' },
     ],
   },
   about: {
     version: 'v0.1.0',
     buildTime: '2026-04-12',
     notices: [
-      { id: 'n_1', title: '系统维护通知', time: '2026-04-10 08:00' },
-      { id: 'n_2', title: '交易时段同步优化上线', time: '2026-04-08 19:30' },
+      { id: 'n_1', title: 'settings.about.notice.maintenance', time: '2026-04-10 08:00' },
+      { id: 'n_2', title: 'settings.about.notice.syncUpgrade', time: '2026-04-08 19:30' },
     ],
   },
 }
@@ -49,6 +49,7 @@ const defaultState = {
 const wait = (ms = 160) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const clone = (value) => JSON.parse(JSON.stringify(value))
+const cancelOtpTokens = new Map()
 
 const readState = () => {
   const raw = localStorage.getItem(STORAGE_KEY)
@@ -83,6 +84,7 @@ export const SettingsService = {
         { key: 'general', title: '通用设置', desc: '消息通知、界面主题、行情刷新频率' },
         { key: 'help', title: '帮助服务', desc: '在线客服、常见问题、意见反馈' },
         { key: 'about', title: '关于我们', desc: '版本信息、系统公告、用户协议/隐私政策' },
+        { key: 'cancel-account', title: '注销账号', desc: '风险告知、身份验证、不可恢复注销流程' },
       ],
     }
   },
@@ -116,15 +118,15 @@ export const SettingsService = {
     const savedKey = state.security?.secretKey || defaultState.security.secretKey
 
     if (next.length < 6) {
-      throw new Error('新密钥长度不能少于6位')
+      throw new Error('settings.security.toast.keyTooShort')
     }
     if (current !== savedKey) {
-      throw new Error('旧密钥不正确')
+      throw new Error('settings.security.toast.currentKeyWrong')
     }
 
     state.security = { ...state.security, secretKey: next }
     writeState(state)
-    return { code: 200, message: '密钥修改成功' }
+    return { code: 200, message: 'settings.security.toast.keyChanged' }
   },
 
   async getAccountSettings() {
@@ -173,5 +175,68 @@ export const SettingsService = {
   async getAboutSettings() {
     await wait()
     return { code: 200, data: readState().about }
+  },
+
+  async sendCancelAccountOtp() {
+    await wait()
+    const state = readState()
+    const otpToken = `cancel_otp_${Date.now()}`
+    const otpCode = '654321'
+    cancelOtpTokens.set(otpToken, otpCode)
+    return {
+      code: 200,
+      data: {
+        otpToken,
+        expireSeconds: 60,
+        maskedMobile: state.account?.mobile || '138****1024',
+      },
+    }
+  },
+
+  async cancelAccount({ secretKey, smsCode, otpToken }) {
+    await wait()
+    const state = readState()
+    const expectedKey = state.security?.secretKey || defaultState.security.secretKey
+
+    if (!String(secretKey || '').trim()) {
+      throw new Error('settings.cancel.toast.enterKey')
+    }
+    if (String(secretKey).trim() !== String(expectedKey)) {
+      throw new Error('settings.cancel.toast.keyVerifyFailed')
+    }
+
+    if (!String(smsCode || '').trim()) {
+      throw new Error('settings.cancel.toast.enterSms')
+    }
+    const expectedOtp = cancelOtpTokens.get(String(otpToken || '')) || '654321'
+    if (String(smsCode).trim() !== expectedOtp) {
+      throw new Error('settings.cancel.toast.smsWrong')
+    }
+
+    state.account = {
+      nickname: 'settings.cancel.canceledUser',
+      avatar: '',
+      mobile: '',
+      bindStatus: 'settings.account.bindStatus.unbound',
+    }
+    state.security = {
+      ...state.security,
+      devices: [],
+      loginLogs: [],
+      passwordSet: false,
+      biometricEnabled: false,
+      secretKey: '',
+    }
+    writeState(state)
+    cancelOtpTokens.delete(String(otpToken || ''))
+
+    return {
+      code: 200,
+      data: {
+        canceledAt: new Date().toISOString(),
+        status: 'canceled',
+      },
+      message: 'settings.cancel.toast.canceled',
+    }
   },
 }

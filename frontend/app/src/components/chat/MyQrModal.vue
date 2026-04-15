@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { X, Copy, QrCode } from 'lucide-vue-next'
 import { ChatService } from '../../services/chat'
 import { showToast } from '../../composables/useToast'
@@ -12,6 +13,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close'])
+const { t } = useI18n()
 
 const qrData = ref(null)
 const loading = ref(false)
@@ -31,9 +33,9 @@ const copyUid = async () => {
   if (!qrData.value?.uid) return
   try {
     await navigator.clipboard.writeText(qrData.value.uid)
-    showToast('UID 已复制')
+    showToast(t('chat.myQr.copySuccess'))
   } catch (error) {
-    showToast('复制失败，请手动复制')
+    showToast(t('chat.myQr.copyFailed'))
   }
 }
 
@@ -58,26 +60,26 @@ onMounted(loadQr)
             <QrCode :size="24" />
           </div>
           <div>
-            <h3 class="text-lg font-bold">我的二维码</h3>
-            <p class="text-xs text-[#8e9bb0]">扫码即可添加好友</p>
+            <h3 class="text-lg font-bold">{{ t('chat.myQr.title') }}</h3>
+            <p class="text-xs text-[#8e9bb0]">{{ t('chat.myQr.desc') }}</p>
           </div>
         </div>
 
         <div class="mt-6 rounded-3xl bg-white p-4">
           <div v-if="loading" class="flex h-[220px] items-center justify-center text-sm text-slate-500">
-            加载中...
+            {{ t('common.loading') }}
           </div>
-          <img v-else-if="qrData?.qrCode" :src="qrData.qrCode" alt="我的二维码" class="mx-auto h-[220px] w-[220px] object-contain" />
+          <img v-else-if="qrData?.qrCode" :src="qrData.qrCode" :alt="t('chat.myQr.title')" class="mx-auto h-[220px] w-[220px] object-contain" />
         </div>
 
         <div class="mt-4 rounded-2xl bg-[#1d2c3d] p-4">
           <div class="flex items-center justify-between gap-3">
             <div>
-              <p class="text-base font-bold">{{ qrData?.nickname || '黄金投资者_888' }}</p>
-              <p class="mt-1 text-xs text-[#8e9bb0]">UID：{{ qrData?.uid || 'U0001001' }}</p>
+              <p class="text-base font-bold">{{ qrData?.nickname || 'GoldInvestor_888' }}</p>
+              <p class="mt-1 text-xs text-[#8e9bb0]">{{ t('chat.myQr.uidLabel') }}{{ qrData?.uid || 'U0001001' }}</p>
             </div>
             <button @click="copyUid" class="rounded-xl border border-[#3a4e64] px-3 py-1.5 text-xs text-[#d8e2ee] btn-interact">
-              复制 UID
+              {{ t('chat.myQr.copyUid') }}
             </button>
           </div>
           <ul class="mt-3 space-y-1 text-xs text-[#8e9bb0]">

@@ -93,8 +93,8 @@ onMounted(() => {
     <div class="px-4 pt-4">
       <div class="rounded-3xl border border-[#2b3b4c] bg-[#162331] p-4">
         <div class="mb-3 flex items-center justify-between">
-          <h4 class="text-sm font-bold">品种栏</h4>
-          <span class="text-[11px] text-[#8e9bb0]">上下滑动查看更多品种</span>
+          <h4 class="text-sm font-bold">{{ t('market.products') }}</h4>
+          <span class="text-[11px] text-[#8e9bb0]">{{ t('market.productsHint') }}</span>
         </div>
 
         <div class="max-h-[280px] overflow-y-auto no-scrollbar pr-1">
@@ -109,7 +109,7 @@ onMounted(() => {
               <p class="truncate text-sm font-bold" :class="currentAsset?.id === item.id ? 'text-[#f2c24a]' : 'text-[#e6edf6]'">
                 {{ item.name }}
               </p>
-              <p class="mt-1 text-[11px] text-[#8e9bb0]">{{ item.unit || '实时行情' }}</p>
+              <p class="mt-1 text-[11px] text-[#8e9bb0]">{{ item.unit || t('market.quoteFallback') }}</p>
             </div>
             <div class="pl-3 text-right">
               <p class="text-lg font-bold tabular-nums" :class="item.up ? 'text-[#ff5f56]' : 'text-[#19c58a]'">{{ item.price || '--.--' }}</p>

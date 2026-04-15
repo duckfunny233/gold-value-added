@@ -131,7 +131,7 @@ async function fetchRanking() {
 
     if (Array.isArray(items) && items.length > 0) {
       rankingRows.value = items.map((item, index) => ({
-        nickname: item.nickname || `买手${index + 1}`,
+        nickname: item.nickname || t('home.buyerRank', { index: index + 1 }),
         goldGrams: Number(item.goldGrams || 0),
         investedAmount: Number(item.investedAmount || item.goldGrams || 0),
         sequenceNo: Number(item.sequenceNo || index + 1)
@@ -204,24 +204,24 @@ onBeforeUnmount(() => {
       </ImageCarousel>
 
       <div v-else class="card-empty">
-        {{ newsLoading ? '新闻加载中...' : '暂无新闻，稍后自动刷新' }}
+        {{ newsLoading ? t('home.newsLoading') : t('home.noNewsAutoRefresh') }}
       </div>
     </section>
 
     <section class="ranking-panel">
       <div class="panel-head">
         <div>
-          <h2 class="section-title">实时金字塔排名</h2>
-          <p class="panel-subtitle">仅展示昵称和买入黄金克数，顶端为投入最多买手</p>
+          <h2 class="section-title">{{ t('home.pyramidTitle') }}</h2>
+          <p class="panel-subtitle">{{ t('home.pyramidSubtitle') }}</p>
         </div>
         <div class="sync-mark">
           <RefreshCw :size="14" class="sync-icon" :class="{ spinning: rankingLoading }" />
-          <span>{{ rankingSyncAt ? `更新 ${rankingSyncAt}` : '同步中' }}</span>
+          <span>{{ rankingSyncAt ? t('home.updatedAt', { time: rankingSyncAt }) : t('home.syncing') }}</span>
         </div>
       </div>
 
       <div class="pyramid-wrap">
-        <div v-if="rankList.length === 0" class="card-empty">暂无排名数据</div>
+        <div v-if="rankList.length === 0" class="card-empty">{{ t('home.noRanking') }}</div>
 
         <div v-else class="pyramid-scroll">
           <div class="trapezoid-pyramid" :style="{ '--pyramid-width': `${pyramidBaseWidth}px` }">
@@ -243,9 +243,9 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <button class="gold-chain-entry btn-interact" @click="goGoldChain" aria-label="进入金链半公开数据页">
+    <button class="gold-chain-entry btn-interact" @click="goGoldChain" :aria-label="t('home.goldChainAria')">
       <ArrowUpRight :size="20" />
-      <span>金链入口</span>
+      <span>{{ t('home.goldChainEntry') }}</span>
     </button>
   </div>
 </template>

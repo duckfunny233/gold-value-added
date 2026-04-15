@@ -1,11 +1,13 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ArrowLeft, Camera, ScanLine, CheckCircle2 } from 'lucide-vue-next'
 import { ChatService } from '../../services/chat'
 import { scanEntriesMock } from '../../services/chat-mock'
 
 const router = useRouter()
+const { t } = useI18n()
 const scanning = ref(true)
 const scanItems = ref([])
 const selectedCode = ref('')
@@ -54,7 +56,7 @@ onMounted(() => {
     <header class="flex items-center gap-4 border-b border-[#233242] bg-[#1a2735] px-4 py-3">
       <button @click="router.back()" class="btn-interact text-[#cfd8e3]"><ArrowLeft :size="24" /></button>
       <div>
-        <h2 class="text-lg font-bold">扫一扫</h2>
+        <h2 class="text-lg font-bold">{{ t('chat.scan') }}</h2>
       </div>
     </header>
 
@@ -67,13 +69,13 @@ onMounted(() => {
           <div class="pointer-events-none absolute left-8 right-8 top-1/2 h-0.5 -translate-y-1/2 bg-gradient-to-r from-transparent via-[#19c58a] to-transparent shadow-[0_0_14px_rgba(25,197,138,0.7)] animate-pulse"></div>
           <div class="mt-4 flex items-center gap-2 text-xs text-[#8e9bb0]">
             <ScanLine :size="16" class="text-[#19c58a]" />
-            {{ scanning ? '摄像头已开启，正在模拟识别二维码...' : '已完成解析，可继续处理结果' }}
+            {{ scanning ? t('chat.scanPage.cameraOpen') : t('chat.scanPage.parsedReady') }}
           </div>
         </div>
       </section>
 
       <section class="rounded-3xl border border-[#2b3b4c] bg-[#162331] p-4">
-        <h3 class="text-base font-bold">模拟二维码内容</h3>
+        <h3 class="text-base font-bold">{{ t('chat.scanPage.mockList') }}</h3>
         <div class="mt-4 space-y-3">
           <button
             v-for="item in scanItems"
@@ -97,7 +99,7 @@ onMounted(() => {
           </div>
         </div>
         <button @click="handleAction" class="mt-4 w-full rounded-2xl bg-[#c99b18] px-4 py-3 text-sm font-bold text-white btn-interact">
-          {{ parsing ? '解析中...' : result.actionLabel }}
+          {{ parsing ? t('chat.scanPage.parsing') : result.actionLabel }}
         </button>
       </section>
     </div>

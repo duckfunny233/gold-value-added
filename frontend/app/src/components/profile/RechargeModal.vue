@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { X, WalletCards } from 'lucide-vue-next'
 import { UserService } from '../../services/user'
 import { showToast } from '../../composables/useToast'
@@ -12,11 +13,12 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'success'])
+const { t, locale } = useI18n()
 
 const channels = [
-  { label: '微信', value: 'wechat' },
-  { label: '支付宝', value: 'alipay' },
-  { label: '银行卡', value: 'bankcard' },
+  { labelKey: 'settings.payment.wechat', value: 'wechat' },
+  { labelKey: 'settings.payment.alipay', value: 'alipay' },
+  { labelKey: 'settings.payment.bankcard', value: 'bankcard' },
 ]
 
 const selectedChannel = ref('wechat')
@@ -46,9 +48,9 @@ const createOrder = async () => {
   try {
     const response = await UserService.createRechargeOrder(selectedChannel.value, amountValue.value)
     order.value = response.data
-    showToast('支付单已创建，请完成付款')
+    showToast(t('settings.recharge.toast.orderCreated'))
   } catch (error) {
-    showToast(error.message || '创建支付单失败')
+    showToast(error.message ? t(error.message) : t('settings.recharge.toast.createFailed'))
   } finally {
     creating.value = false
   }
@@ -62,11 +64,26 @@ const confirmPaid = async () => {
     emit('success', response.data)
     emit('close')
   } catch (error) {
-    showToast(error.message || '确认支付失败')
+    showToast(error.message ? t(error.message) : t('settings.recharge.toast.confirmFailed'))
   } finally {
     confirming.value = false
   }
 }
+
+const numberLocale = computed(() => {
+  const localeMap = {
+    zh: 'zh-CN',
+    en: 'en-US',
+    es: 'es-ES',
+    ar: 'ar-SA',
+    hi: 'hi-IN',
+    ru: 'ru-RU',
+    ja: 'ja-JP',
+    pt: 'pt-BR',
+    bn: 'bn-BD',
+  }
+  return localeMap[String(locale.value || '').toLowerCase()] || 'en-US'
+})
 </script>
 
 <template>
@@ -83,14 +100,14 @@ const confirmPaid = async () => {
             <WalletCards :size="22" />
           </div>
           <div>
-            <h3 class="text-lg font-bold">账户充值</h3>
-            <p class="text-xs text-[#8e9bb0]">选择渠道并输入金额，完成支付后自动入账</p>
+            <h3 class="text-lg font-bold">{{ t('settings.recharge.title') }}</h3>
+            <p class="text-xs text-[#8e9bb0]">{{ t('settings.recharge.desc') }}</p>
           </div>
         </div>
 
         <div v-if="!order" class="space-y-4">
           <div>
-            <p class="mb-2 text-xs text-[#8e9bb0]">充值渠道</p>
+            <p class="mb-2 text-xs text-[#8e9bb0]">{{ t('settings.recharge.channel') }}</p>
             <div class="grid grid-cols-3 gap-2">
               <button
                 v-for="channel in channels"
@@ -99,13 +116,13 @@ const confirmPaid = async () => {
                 class="rounded-xl border px-3 py-2 text-sm font-bold btn-interact"
                 :class="selectedChannel === channel.value ? 'border-[#c99b18] bg-[#243447] text-[#f2c24a]' : 'border-[#304255] bg-[#101b28] text-[#c9d5e2]'"
               >
-                {{ channel.label }}
+                {{ t(channel.labelKey) }}
               </button>
             </div>
           </div>
 
           <div>
-            <p class="mb-2 text-xs text-[#8e9bb0]">充值金额</p>
+            <p class="mb-2 text-xs text-[#8e9bb0]">{{ t('settings.recharge.amount') }}</p>
             <div class="flex items-center rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3">
               <span class="mr-3 text-lg font-bold text-[#f2c24a]">¥</span>
               <input
@@ -113,7 +130,7 @@ const confirmPaid = async () => {
                 type="number"
                 min="0"
                 step="0.01"
-                placeholder="请输入充值金额"
+                :placeholder="t('settings.recharge.amountPlaceholder')"
                 class="w-full bg-transparent text-white outline-none placeholder:text-[#6f8093]"
               />
             </div>
@@ -125,16 +142,16 @@ const confirmPaid = async () => {
             :class="canCreate ? 'bg-[#ff5f56]' : 'bg-[#304255] text-[#72859a]'"
             :disabled="!canCreate"
           >
-            {{ creating ? '创建支付单中...' : '去支付' }}
+            {{ creating ? t('settings.recharge.creating') : t('settings.recharge.payNow') }}
           </button>
         </div>
 
         <div v-else class="space-y-4">
           <div class="rounded-2xl border border-[#304255] bg-[#101b28] p-4 text-sm">
-            <p class="text-[#8e9bb0]">订单号：{{ order.orderId }}</p>
-            <p class="mt-2 text-[#dce6f0]">渠道：{{ channels.find(item => item.value === order.channel)?.label || '未知' }}</p>
-            <p class="mt-2 font-bold text-[#f2c24a]">金额：¥{{ Number(order.amount || 0).toFixed(2) }}</p>
-            <p class="mt-2 text-[#8e9bb0]">{{ order.payHint || '请完成支付后点击确认' }}</p>
+            <p class="text-[#8e9bb0]">{{ t('settings.recharge.orderNo') }}{{ order.orderId }}</p>
+            <p class="mt-2 text-[#dce6f0]">{{ t('settings.recharge.channel') }}{{ t(channels.find(item => item.value === order.channel)?.labelKey || 'common.noData') }}</p>
+            <p class="mt-2 font-bold text-[#f2c24a]">{{ t('settings.recharge.amount') }}¥{{ Number(order.amount || 0).toLocaleString(numberLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</p>
+            <p class="mt-2 text-[#8e9bb0]">{{ order.payHint || t('settings.recharge.payHint') }}</p>
           </div>
 
           <button
@@ -142,7 +159,7 @@ const confirmPaid = async () => {
             class="w-full rounded-2xl bg-[#19c58a] px-4 py-3 text-sm font-bold text-white btn-interact"
             :disabled="confirming"
           >
-            {{ confirming ? '确认中...' : '我已完成付款' }}
+            {{ confirming ? t('settings.recharge.confirming') : t('settings.recharge.paidDone') }}
           </button>
         </div>
       </div>

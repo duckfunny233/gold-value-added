@@ -3,8 +3,10 @@ import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { TradeService } from '../services/trade'
+import { UserService } from '../services/user'
 import { Loader2 } from 'lucide-vue-next'
 import { useMarketPolling } from '../composables/useMarketPolling'
+import { showToast } from '../composables/useToast'
 
 defineOptions({ name: 'Trade' })
 
@@ -17,6 +19,7 @@ const quantity = ref('')
 const orders = ref([])
 const loading = ref(false)
 const submitting = ref(false)
+const availableBalance = ref(null)
 const assetName = ref(route.query.assetName || '')
 const assetId = ref(route.query.assetId || '')
 const BUY_ARRIVAL_STORAGE_KEY = 'jyz_last_buy_arrival'
@@ -55,6 +58,21 @@ const totalAmount = computed(() => {
   return (currentPrice.value * parseFloat(quantity.value)).toFixed(2)
 })
 
+const parseMoney = (value) => {
+  const amount = Number(String(value || '').replace(/,/g, ''))
+  return Number.isFinite(amount) ? amount : 0
+}
+
+const fetchAvailableBalance = async () => {
+  try {
+    const profile = await UserService.getProfile()
+    const balanceItem = (profile?.data?.assets || []).find((item) => item?.key === 'profile.assets.balance')
+    availableBalance.value = parseMoney(balanceItem?.value)
+  } catch (error) {
+    availableBalance.value = null
+  }
+}
+
 const fetchOrders = async () => {
   loading.value = true
   try {
@@ -89,7 +107,7 @@ const resolveBuyImage = (grams, type) => {
   if (grams >= 1000) return type === 'gold' ? '/黄金条1000g黄金.png' : '/黄金条1000g白银.png'
   if (grams >= 100) return type === 'gold' ? '/龙币100g黄金.png' : '/龙币100g白银.png'
   if (grams >= 50) return type === 'gold' ? '/金叶币50g黄金.png' : '/金叶币50g白银.png'
-  return type === '/影子金币10g黄金.png' 
+  return type === 'gold' ? '/影子金币10g黄金.png' : '/影子金币10g白银.png'
 }
 
 const runBuyCounter = (target) => {
@@ -107,6 +125,12 @@ const runBuyCounter = (target) => {
     buyFeedbackRaf = null
   }
   buyFeedbackRaf = requestAnimationFrame(tick)
+}
+
+const triggerHaptic = (pattern = 18) => {
+  if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+    navigator.vibrate(pattern)
+  }
 }
 
 const triggerBuyFeedback = (grams) => {
@@ -129,13 +153,27 @@ const submitOrder = async () => {
   if (!quantity.value || submitting.value) return
 
   const submitQuantity = Number(quantity.value)
+  if (!Number.isFinite(submitQuantity) || submitQuantity <= 0) {
+    showToast(t('trade.quantityPlaceholder'))
+    return
+  }
+
+  if (activeTab.value === 'buy' && currentPrice.value && availableBalance.value != null) {
+    const expectedAmount = currentPrice.value * submitQuantity
+    if (expectedAmount > availableBalance.value) {
+      showToast(t('trade.errors.insufficientBalance'))
+      return
+    }
+  }
+
+  triggerHaptic(16)
   submitting.value = true
   try {
     const json = await TradeService.submitOrder(
       assetId.value,
       activeTab.value,
       quantity.value,
-      assetName.value || '未命名品种',
+      assetName.value || t('trade.unnamedAsset'),
       currentPrice.value
     )
 
@@ -144,7 +182,7 @@ const submitOrder = async () => {
       const arrivalPayload = {
         id: Date.now(),
         assetId: assetId.value,
-        assetName: assetName.value || '未命名品种',
+        assetName: assetName.value || t('trade.unnamedAsset'),
         grams: Number(submitQuantity.toFixed(2)),
         createdAt: new Date().toISOString(),
         orderId: json?.data?.id || '',
@@ -153,6 +191,7 @@ const submitOrder = async () => {
       window.dispatchEvent(new CustomEvent('jyz-buy-arrival', { detail: arrivalPayload }))
     }
 
+    triggerHaptic([20, 35, 25])
     quantity.value = ''
     fetchOrders() // 刷新列表
   } catch (err) {
@@ -162,8 +201,16 @@ const submitOrder = async () => {
   }
 }
 
+const translateOrderType = (type) => {
+  const normalized = String(type || '').toLowerCase()
+  if (normalized === 'buy' || type === '买入') return t('trade.orderType.buy')
+  if (normalized === 'sell' || type === '卖出') return t('trade.orderType.sell')
+  return type || '--'
+}
+
 onMounted(() => {
   fetchOrders()
+  fetchAvailableBalance()
 })
 
 onBeforeUnmount(() => {
@@ -177,8 +224,8 @@ onBeforeUnmount(() => {
       <div class="card-base overflow-hidden relative border-none bg-[#1a2735]">
         <div v-if="buyFeedback.visible && activeTab === 'buy'" class="buy-feedback-layer">
           <div class="buy-feedback-box">
-            <img src="/黄金1.png" alt="到账" class="buy-feedback-image" />
-            <p class="buy-feedback-text">到账 +{{ buyFeedback.animatedGrams.toFixed(2) }}g</p>
+            <img src="/黄金1.png" :alt="t('trade.arrivalAlt')" class="buy-feedback-image" />
+            <p class="buy-feedback-text">{{ t('trade.arrival', { grams: buyFeedback.animatedGrams.toFixed(2) }) }}</p>
           </div>
         </div>
 
@@ -219,7 +266,7 @@ onBeforeUnmount(() => {
           <div class="space-y-4">
             <div>
               <div class="flex justify-between mb-1">
-                <label class="block text-sm font-medium text-white">数量（{{ assetName || '现货黄金' }}）</label>
+                <label class="block text-sm font-medium text-white">{{ t('trade.quantity', { assetName: assetName || t('trade.spotGold') }) }}</label>
                 <span class="text-[10px] text-[#93a3ba] tabular-nums">{{ t('trade.currentPrice') }} {{ currentPrice || '--.--' }} CNY/g</span>
               </div>
               <input  
@@ -263,16 +310,16 @@ onBeforeUnmount(() => {
         <div v-for="order in orders" :key="order.id" class="card-base p-4 animate-in slide-in-from-top-2 duration-300">
           <div class="flex justify-between items-center mb-2">
             <div class="flex items-center gap-2">
-              <span class="px-2 py-0.5 text-[10px] rounded font-bold" :class="order.type === '买入' ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'">
-                {{ order.type }}
+              <span class="px-2 py-0.5 text-[10px] rounded font-bold" :class="translateOrderType(order.type) === t('trade.orderType.buy') ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'">
+                {{ translateOrderType(order.type) }}
               </span>
               <span class="font-bold text-sm">{{ order.name }}</span>
             </div>
             <span class="text-[10px] text-gray-400">{{ order.time }}</span>
           </div>
           <div class="flex justify-between text-xs text-gray-500">
-            <span>成交价: <span class="tabular-nums font-medium">{{ order.price }}</span></span>
-            <span>数量: <span class="tabular-nums font-medium">{{ order.quantity }}g</span></span>
+            <span>{{ t('trade.dealPrice') }}: <span class="tabular-nums font-medium">{{ order.price }}</span></span>
+            <span>{{ t('trade.dealQuantity') }}: <span class="tabular-nums font-medium">{{ order.quantity }}g</span></span>
           </div>
         </div>
 

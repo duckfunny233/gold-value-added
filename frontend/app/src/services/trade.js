@@ -1,9 +1,17 @@
 import { apiFetch } from '../utils/request'
 import { cloneData, tradeOrdersFallback } from './fallback-data'
 
-const API_TRADE_ASSET_IDS = new Set(['AU9999', 'AG9999', 'USDX', 'OIL'])
 const localTradeOrders = []
 let localOrderId = 100000
+
+const resolveCurrentUser = () => {
+  try {
+    const raw = localStorage.getItem('user')
+    return raw ? JSON.parse(raw) : {}
+  } catch (error) {
+    return {}
+  }
+}
 
 const buildLocalOrder = (assetName, type, quantity, price) => ({
   id: localOrderId += 1,
@@ -16,8 +24,14 @@ const buildLocalOrder = (assetName, type, quantity, price) => ({
 
 export const TradeService = {
   async getOrders() {
+    const user = resolveCurrentUser()
+    const query = new URLSearchParams()
+    if (user?.uid) query.set('uid', user.uid)
+    if (!user?.uid && user?.username) query.set('username', user.username)
+
     try {
-      const response = await apiFetch('/api/trade/orders')
+      const path = query.size ? `/api/app/trades?${query.toString()}` : '/api/app/trades'
+      const response = await apiFetch(path)
       return {
         ...response,
         data: [...localTradeOrders, ...(Array.isArray(response?.data) ? response.data : [])],
@@ -31,6 +45,7 @@ export const TradeService = {
   },
 
   async submitOrder(assetId, type, quantity, assetName, price) {
+    const user = resolveCurrentUser()
     const createLocalSuccess = () => {
       const localOrder = buildLocalOrder(assetName, type, quantity, price)
       localTradeOrders.unshift(localOrder)
@@ -41,14 +56,17 @@ export const TradeService = {
       }
     }
 
-    if (!API_TRADE_ASSET_IDS.has(assetId)) {
-      return createLocalSuccess()
-    }
-
     try {
-      return await apiFetch('/api/trade/order', {
+      const side = String(type || '').toLowerCase() === 'sell' ? 'sell' : 'buy'
+      return await apiFetch(`/api/app/trades/${side}`, {
         method: 'POST',
-        body: JSON.stringify({ assetId, type, quantity })
+        body: JSON.stringify({
+          uid: user?.uid,
+          username: user?.username,
+          price: Number(price || 0),
+          quantityGrams: Number(quantity || 0),
+          assetCode: assetId,
+        }),
       })
     } catch (error) {
       // 调试场景：后端不可用时自动降级到本地假接口，保证页面可联调与动画可测试

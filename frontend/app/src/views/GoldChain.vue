@@ -1,9 +1,11 @@
 ﻿<script setup>
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { RefreshCw } from 'lucide-vue-next'
 import { UserService } from '../services/user'
 
 defineOptions({ name: 'GoldChain' })
+const { t, locale } = useI18n()
 
 const loading = ref(false)
 const list = ref([])
@@ -17,7 +19,19 @@ const fallbackList = [
 ]
 
 function formatCurrency(value) {
-  return `¥${Number(value || 0).toLocaleString('zh-CN', {
+  const localeMap = {
+    zh: 'zh-CN',
+    en: 'en-US',
+    es: 'es-ES',
+    ar: 'ar-SA',
+    hi: 'hi-IN',
+    ru: 'ru-RU',
+    ja: 'ja-JP',
+    pt: 'pt-BR',
+    bn: 'bn-BD',
+  }
+  const selectedLocale = localeMap[String(locale.value || '').toLowerCase()] || 'en-US'
+  return `¥${Number(value || 0).toLocaleString(selectedLocale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   })}`
@@ -32,10 +46,10 @@ async function fetchChainData() {
     if (Array.isArray(rows) && rows.length > 0) {
       list.value = rows.map((item, index) => ({
         sequenceNo: item.sequenceNo || 100000 + index + 1,
-        nickname: item.nickname || `链上用户${index + 1}`,
+        nickname: item.nickname || t('goldChain.userNo', { index: index + 1 }),
         buyInfo:
           item.buyInfo ||
-          `买入 ${Number(item.buyCount || 0)} 笔 / 卖出 ${Number(item.sellCount || 0)} 笔`,
+          t('goldChain.tradeInfo', { buy: Number(item.buyCount || 0), sell: Number(item.sellCount || 0) }),
         goldGrams: Number(item.goldGrams || 0),
         silverGrams: Number(item.silverGrams || 0),
         totalAssets: Number(item.totalAssets || 0),
@@ -46,7 +60,7 @@ async function fetchChainData() {
 
     list.value = fallbackList
   } catch (error) {
-    console.error('金链半公开数据加载失败，使用本地示例数据:', error)
+    console.error('Gold chain load failed, fallback to local samples:', error)
     list.value = fallbackList
   } finally {
     loading.value = false
@@ -61,18 +75,18 @@ onMounted(fetchChainData)
     <header class="chain-header">
       <div>
         <p class="header-kicker">CHAIN BOARD</p>
-        <h1 class="title">金链半公开数据</h1>
+        <h1 class="title">{{ t('goldChain.title') }}</h1>
       </div>
       <div class="sync-mark">
         <RefreshCw :size="14" class="sync-icon" :class="{ spinning: loading }" />
-        <span>{{ loading ? '同步中' : '已更新' }}</span>
+        <span>{{ loading ? t('goldChain.syncing') : t('goldChain.updated') }}</span>
       </div>
     </header>
 
     <section class="chain-list">
-      <div v-if="loading" class="empty">正在同步链上摘要...</div>
+      <div v-if="loading" class="empty">{{ t('goldChain.loading') }}</div>
 
-      <div v-else-if="list.length === 0" class="empty">暂无可展示数据</div>
+      <div v-else-if="list.length === 0" class="empty">{{ t('goldChain.noData') }}</div>
 
       <article v-for="row in list" v-else :key="row.sequenceNo" class="chain-card">
         <div class="card-top">
@@ -85,19 +99,19 @@ onMounted(fetchChainData)
 
         <div class="metrics-grid">
           <div class="metric">
-            <span class="metric-label">买卖数据</span>
+            <span class="metric-label">{{ t('goldChain.metrics.trade') }}</span>
             <span class="metric-value plain">{{ row.buyInfo }}</span>
           </div>
           <div class="metric">
-            <span class="metric-label">黄金克数</span>
+            <span class="metric-label">{{ t('goldChain.metrics.gold') }}</span>
             <span class="metric-value gold">{{ row.goldGrams.toFixed(2) }} g</span>
           </div>
           <div class="metric">
-            <span class="metric-label">白银克数</span>
+            <span class="metric-label">{{ t('goldChain.metrics.silver') }}</span>
             <span class="metric-value silver">{{ row.silverGrams.toFixed(2) }} g</span>
           </div>
           <div class="metric">
-            <span class="metric-label">总资产</span>
+            <span class="metric-label">{{ t('goldChain.metrics.totalAsset') }}</span>
             <span class="metric-value asset">{{ formatCurrency(row.totalAssets) }}</span>
           </div>
         </div>

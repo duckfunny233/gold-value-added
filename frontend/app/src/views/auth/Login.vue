@@ -91,7 +91,7 @@ const handleLogin = async () => {
         </div>
 
         <p class="px-1 text-xs text-gray-500 dark:text-gray-400">
-          密钥由用户自行设置并妥善保管，若遗忘请联系人工客服并走后台审核找回。
+          {{ t('auth.login.keyNotice') }}
         </p>
       </div>
     </div>

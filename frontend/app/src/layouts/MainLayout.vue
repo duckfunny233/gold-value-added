@@ -27,13 +27,15 @@ const chatMenuItems = computed(() => [
 ])
 
 const langMenuItems = computed(() => [
-  { label: 'English', action: 'en' },
   { label: '简体中文', action: 'zh' },
-  { label: '日本語', action: 'ja' },
-  { label: 'Русский', action: 'ru' },
+  { label: 'English', action: 'en' },
   { label: 'Español', action: 'es' },
+  { label: 'العربية', action: 'ar' },
   { label: 'हिन्दी', action: 'hi' },
-  { label: 'العربية', action: 'ar' }
+  { label: 'Русский', action: 'ru' },
+  { label: '日本語', action: 'ja' },
+  { label: 'Português', action: 'pt' },
+  { label: 'বাংলা', action: 'bn' }
 ])
 
 const handleChatMenu = (item) => {
@@ -85,10 +87,10 @@ const handleLangMenu = (item) => {
     </header>
 
     <main class="flex-1 overflow-y-auto pb-20 bg-[#0b1520]">
-      <router-view v-slot="{ Component }">
-        <transition name="fade" mode="out-in">
-          <keep-alive :include="['Home', 'Chat', 'Market', 'Profile']">
-            <component :is="Component" />
+      <router-view v-slot="{ Component, route: currentRoute }">
+        <transition name="fade">
+          <keep-alive :include="['Home', 'Chat', 'Market', 'Trade', 'Profile']">
+            <component :is="Component" :key="currentRoute.name || currentRoute.path" />
           </keep-alive>
         </transition>
       </router-view>

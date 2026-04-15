@@ -104,8 +104,18 @@ watch(() => props.data, (newData) => {
 }, { deep: true })
 
 onUnmounted(() => {
-  if (chart) {
-    dispose(chartContainer.value)
+  if (!chart) return
+  const container = chartContainer.value
+  if (!container) {
+    chart = null
+    return
+  }
+  try {
+    dispose(container)
+  } catch (error) {
+    console.warn('KLineChart dispose failed:', error)
+  } finally {
+    chart = null
   }
 })
 </script>

@@ -6,6 +6,8 @@ import ru from '../locales/ru.json'
 import es from '../locales/es.json'
 import hi from '../locales/hi.json'
 import ar from '../locales/ar.json'
+import pt from '../locales/pt.json'
+import bn from '../locales/bn.json'
 
 const savedLocale = localStorage.getItem('locale') || 'zh'
 
@@ -20,7 +22,9 @@ const i18n = createI18n({
     ru,
     es,
     hi,
-    ar
+    ar,
+    pt,
+    bn
   }
 })
 

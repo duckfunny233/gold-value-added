@@ -6,11 +6,7 @@ const { message, visible, duration } = useToast()
 </script>
 
 <template>
-  <router-view v-slot="{ Component }">
-    <keep-alive :include="['MainLayout', 'NewsList']">
-      <component :is="Component" />
-    </keep-alive>
-  </router-view>
+  <router-view />
   
   <Toast 
     v-model:visible="visible" 

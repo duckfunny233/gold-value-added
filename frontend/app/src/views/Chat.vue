@@ -21,11 +21,34 @@ const iconMap = {
   group: Users
 }
 
+const translateMaybe = (value) => {
+  if (typeof value !== 'string' || !value) return value
+  const translated = t(value)
+  return translated !== value ? translated : value
+}
+
+const localizeChatItem = (item) => {
+  const timeRaw = String(item?.time || '')
+  const mappedTime =
+    item?.timeKey ? t(item.timeKey)
+      : (timeRaw === '昨天' || timeRaw.toLowerCase() === 'yesterday') ? t('chat.timeYesterday')
+        : (timeRaw === '刚刚' || timeRaw.toLowerCase() === 'just now') ? t('chat.timeJustNow')
+          : item?.time
+
+  return {
+    ...item,
+    name: translateMaybe(item?.name),
+    lastMsg: translateMaybe(item?.lastMsg),
+    time: mappedTime,
+  }
+}
+
 const fetchChats = async (silent = false) => {
   if (!silent) isRefreshing.value = true
   try {
     const json = await ChatService.getChatList()
-    chats.value = json.data
+    const rows = Array.isArray(json?.data) ? json.data : []
+    chats.value = rows.map(localizeChatItem)
   } catch (err) {
     console.error('Failed to fetch chats:', err)
   } finally {

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ArrowLeft, Plus, Save, Upload, X } from 'lucide-vue-next'
 import { SettingsService } from '../../services/settings'
 import { showToast } from '../../composables/useToast'
@@ -8,11 +9,12 @@ import { showToast } from '../../composables/useToast'
 defineOptions({ name: 'AccountSettings' })
 
 const router = useRouter()
+const { t } = useI18n()
 const form = ref({
   nickname: '',
   avatar: '',
   mobile: '',
-  bindStatus: '已绑定',
+  bindStatus: '',
 })
 const showAvatarModal = ref(false)
 const pendingAvatar = ref('')
@@ -35,7 +37,7 @@ const saveAccount = async () => {
     mobile: form.value.mobile,
   })
   form.value = response.data
-  showToast('账户信息已保存')
+  showToast(t('settings.account.toast.saved'))
 }
 
 const openAvatarModal = () => {
@@ -57,11 +59,11 @@ const onAvatarFileChange = (event) => {
   const file = event.target.files?.[0]
   if (!file) return
   if (!file.type.startsWith('image/')) {
-    showToast('请上传图片文件')
+    showToast(t('settings.account.toast.uploadImageOnly'))
     return
   }
   if (file.size > 2 * 1024 * 1024) {
-    showToast('头像大小不能超过 2MB')
+    showToast(t('settings.account.toast.uploadTooLarge'))
     return
   }
 
@@ -74,12 +76,12 @@ const onAvatarFileChange = (event) => {
 
 const confirmAvatarChange = () => {
   if (!pendingAvatar.value) {
-    showToast('请先选择头像图片')
+    showToast(t('settings.account.toast.selectImageFirst'))
     return
   }
   form.value.avatar = pendingAvatar.value
   showAvatarModal.value = false
-  showToast('头像已替换，记得保存设置')
+  showToast(t('settings.account.toast.avatarReplaced'))
 }
 </script>
 
@@ -87,19 +89,19 @@ const confirmAvatarChange = () => {
   <div class="fixed inset-0 z-[100] flex flex-col bg-[#0b1520] text-white">
     <header class="flex items-center gap-4 border-b border-[#233242] bg-[#1a2735] px-4 py-3">
       <button @click="router.back()" class="btn-interact text-[#cfd8e3]"><ArrowLeft :size="24" /></button>
-      <h2 class="text-lg font-bold">账户管理</h2>
+      <h2 class="text-lg font-bold">{{ t('settings.account.title') }}</h2>
     </header>
 
     <div class="flex-1 overflow-y-auto px-4 py-4 space-y-4">
       <section class="rounded-3xl border border-[#2b3b4c] bg-[#162331] p-4">
-        <h3 class="mb-3 text-sm font-bold">个人信息</h3>
+        <h3 class="mb-3 text-sm font-bold">{{ t('settings.account.sectionProfile') }}</h3>
         <div class="space-y-3">
           <label class="block text-xs text-[#8e9bb0]">
-            昵称
+            {{ t('settings.account.nickname') }}
             <input v-model="form.nickname" class="mt-2 w-full rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3 text-white outline-none" />
           </label>
           <div class="text-xs text-[#8e9bb0]">
-            当前头像
+            {{ t('settings.account.currentAvatar') }}
             <div class="mt-2 flex items-center gap-4 rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-4">
               <div class="relative">
                 <div class="h-16 w-16 overflow-hidden rounded-full border border-[#3a4e64] bg-[#223244]">
@@ -111,8 +113,8 @@ const confirmAvatarChange = () => {
                 </button>
               </div>
               <div>
-                <p class="text-sm font-bold text-[#dce6f0]">点击加号替换头像</p>
-                <p class="mt-1 text-xs text-[#8e9bb0]">支持 JPG / PNG，大小不超过 2MB</p>
+                <p class="text-sm font-bold text-[#dce6f0]">{{ t('settings.account.avatarTip') }}</p>
+                <p class="mt-1 text-xs text-[#8e9bb0]">{{ t('settings.account.avatarRule') }}</p>
               </div>
             </div>
           </div>
@@ -120,15 +122,15 @@ const confirmAvatarChange = () => {
       </section>
 
       <section class="rounded-3xl border border-[#2b3b4c] bg-[#162331] p-4">
-        <h3 class="mb-3 text-sm font-bold">手机号换绑</h3>
+        <h3 class="mb-3 text-sm font-bold">{{ t('settings.account.sectionPhone') }}</h3>
         <div class="rounded-2xl bg-[#101b28] px-4 py-3 text-sm text-[#dce6f0]">
-          当前手机号：{{ form.mobile }}
+          {{ t('settings.account.currentMobile') }}{{ form.mobile }}
         </div>
-        <p class="mt-2 text-xs text-[#8e9bb0]">换绑流程：身份验证 → 新号验证 → 绑定完成（本版为 mock）</p>
+        <p class="mt-2 text-xs text-[#8e9bb0]">{{ t('settings.account.phoneFlow') }}</p>
       </section>
 
       <button @click="saveAccount" class="w-full rounded-2xl bg-[#19c58a] px-4 py-3 text-sm font-bold text-white btn-interact flex items-center justify-center gap-2">
-        <Save :size="16" />保存账户设置
+        <Save :size="16" />{{ t('settings.account.save') }}
       </button>
     </div>
 
@@ -140,8 +142,8 @@ const confirmAvatarChange = () => {
             <X :size="20" />
           </button>
 
-          <h3 class="text-lg font-bold">上传头像</h3>
-          <p class="mt-1 text-xs text-[#8e9bb0]">选择图片后可先预览，再确认替换</p>
+          <h3 class="text-lg font-bold">{{ t('settings.account.uploadTitle') }}</h3>
+          <p class="mt-1 text-xs text-[#8e9bb0]">{{ t('settings.account.uploadDesc') }}</p>
 
           <div class="mt-5 flex justify-center">
             <div class="h-24 w-24 overflow-hidden rounded-full border border-[#3a4e64] bg-[#223244]">
@@ -153,11 +155,11 @@ const confirmAvatarChange = () => {
           <input ref="fileInputRef" type="file" accept="image/*" class="hidden" @change="onAvatarFileChange" />
 
           <button @click="pickAvatarFile" class="mt-5 w-full rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3 text-sm font-bold text-[#dce6f0] btn-interact flex items-center justify-center gap-2">
-            <Upload :size="16" />选择图片
+            <Upload :size="16" />{{ t('settings.account.selectImage') }}
           </button>
 
           <button @click="confirmAvatarChange" class="mt-3 w-full rounded-2xl bg-[#19c58a] px-4 py-3 text-sm font-bold text-white btn-interact">
-            确认替换
+            {{ t('settings.account.confirmReplace') }}
           </button>
         </div>
       </div>

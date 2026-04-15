@@ -842,7 +842,7 @@ This section contains the contents of the repository's files.
     "sellUnhook": "売りアン-hook"
   },
   "trade": {
-    "quantity": "数量（{ assetName }）",
+    "quantity": "数量",
     "currentPrice": "現在価格:",
     "quantityPlaceholder": "数量を入力（グラム）",
     "estimatedAmount": "概算金額",

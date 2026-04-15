@@ -1,4 +1,5 @@
 import { apiFetch } from '../utils/request'
+import i18n from '../i18n'
 import {
   buildFriendSearchResult,
   chatListMock,
@@ -19,6 +20,24 @@ const localFriendRequests = new Map()
 const localInjectedMessages = {}
 const nextLocalChatId = () => (localChatList.length ? Math.max(...localChatList.map((item) => Number(item.id) || 0)) + 1 : 1)
 const currentTimeLabel = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+const tt = (key, params = {}) => i18n.global.t(key, params)
+const localizeTime = (item) => {
+  if (item?.timeKey) return tt(item.timeKey)
+  if (item?.time === '昨天' || String(item?.time || '').toLowerCase() === 'yesterday') return tt('chat.timeYesterday')
+  if (item?.time === '刚刚' || String(item?.time || '').toLowerCase() === 'just now') return tt('chat.timeJustNow')
+  return item?.time || ''
+}
+const localizeChatItem = (item) => ({
+  ...item,
+  name: item?.nameKey ? tt(item.nameKey) : item?.name,
+  lastMsg: item?.lastMsgKey ? tt(item.lastMsgKey) : item?.lastMsg,
+  time: localizeTime(item),
+})
+const localizeMessage = (item) => ({
+  ...item,
+  text: item?.textKey ? tt(item.textKey) : item?.text,
+  time: localizeTime(item),
+})
 const getMergedMessages = (chatId, items = []) => {
   const serverItems = Array.isArray(items) ? items : []
   const injectedItems = localInjectedMessages[chatId] || []
@@ -38,21 +57,27 @@ const withFallback = async (request, fallback) => {
 }
 
 export const ChatService = {
-  getChatList() {
-    return withFallback(() => apiFetch('/api/chat/list'), localChatList)
+  async getChatList() {
+    try {
+      const response = await apiFetch('/api/chat/list')
+      const list = Array.isArray(response?.data) ? response.data : []
+      return wrapData(list.map(localizeChatItem))
+    } catch (error) {
+      return wrapData(localChatList.map(localizeChatItem))
+    }
   },
 
   async getMessages(chatId, page = 1, limit = 20) {
     try {
       const response = await apiFetch(`/api/chat/messages/${chatId}?page=${page}&limit=${limit}`)
-      const mergedItems = getMergedMessages(chatId, response.data?.items || [])
+      const mergedItems = getMergedMessages(chatId, response.data?.items || []).map(localizeMessage)
       return wrapData({
         ...response.data,
         items: mergedItems,
         total: Math.max(Number(response.data?.total || 0), mergedItems.length),
       })
     } catch (error) {
-      const items = getMergedMessages(chatId, localChatMessages[chatId] || [])
+      const items = getMergedMessages(chatId, localChatMessages[chatId] || []).map(localizeMessage)
       return wrapData({
         items,
         total: items.length,
@@ -111,7 +136,7 @@ export const ChatService = {
           requestId: `fr_${Date.now()}`,
           status: 'pending',
           targetUserId: payload.targetUserId,
-          message: payload.message || '你好，我想添加你为好友',
+          message: payload.message || tt('chat.addFriendPage.requestMessage'),
         }
         localFriendRequests.set(request.requestId, request)
         return request
@@ -130,20 +155,20 @@ export const ChatService = {
         ...(() => {
           const request = localFriendRequests.get(requestId)
           const friend = friendDirectoryMock.find((item) => String(item.id) === String(request?.targetUserId)) || friendDirectoryMock[0]
-          const chatName = friend?.nickname || '新好友'
+          const chatName = friend?.nickname || tt('chat.addFriendPage.newFriend')
           let chat = localChatList.find((item) => item.name === chatName)
           if (!chat) {
             const chatId = nextLocalChatId()
             chat = {
               id: chatId,
               name: chatName,
-              lastMsg: '我们已经成为好友，开始聊天吧',
-              time: '刚刚',
+              lastMsg: tt('chat.message.friend.connected'),
+              time: tt('chat.timeJustNow'),
               type: 'user',
             }
             localChatList.unshift(chat)
             localChatMessages[chatId] = [
-              { id: Date.now(), text: '我们已经成为好友，开始聊天吧', self: false, time: currentTimeLabel() },
+              { id: Date.now(), text: tt('chat.message.friend.connected'), self: false, time: currentTimeLabel() },
             ]
           }
           return {
@@ -169,15 +194,15 @@ export const ChatService = {
         const chatId = nextLocalChatId()
         localChatList.unshift({
           id: chatId,
-          name: payload.name || '新建群聊',
-          lastMsg: `${payload.memberIds?.length || 0} 位成员已加入群聊`,
-          time: '刚刚',
+          name: payload.name || tt('chat.createGroupPage.newGroup'),
+          lastMsg: tt('chat.createGroupPage.createdDesc', { name: payload.name || tt('chat.createGroupPage.newGroup'), count: payload.memberIds?.length || 0 }),
+          time: tt('chat.timeJustNow'),
           type: 'group',
         })
         localChatMessages[chatId] = [
           {
             id: Date.now(),
-            text: `群聊创建成功：${payload.name || '新建群聊'}${payload.notice ? `，群公告：${payload.notice}` : ''}`,
+            text: tt('chat.message.group.created', { name: payload.name || tt('chat.createGroupPage.newGroup') }) + `${payload.notice ? ` ${tt('chat.createGroupPage.notice')}: ${payload.notice}` : ''}`,
             self: false,
             time: currentTimeLabel(),
           },
@@ -226,7 +251,7 @@ export const ChatService = {
         appendInjectedMessage(chatId, message)
         const chat = localChatList.find((item) => String(item.id) === String(chatId))
         if (chat) {
-          chat.lastMsg = `转账 ¥${Number(payload.amount).toFixed(2)} 给 ${payload.recipientName}`
+          chat.lastMsg = tt('chat.message.transfer.summary', { amount: Number(payload.amount).toFixed(2), name: payload.recipientName })
           chat.time = message.time
         }
         return message

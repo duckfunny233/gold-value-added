@@ -35,10 +35,29 @@ export const AuthService = {
     } catch (error) {
       console.error('Logout request failed:', error)
     } finally {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      localStorage.removeItem('isAuthenticated')
+      this.clearSensitiveLocalData()
     }
+  },
+
+  clearSensitiveLocalData() {
+    const removeExactKeys = [
+      'token',
+      'user',
+      'isAuthenticated',
+      'jyz_settings_mock_v1',
+      'jyz_last_buy_arrival',
+      'admin_token',
+      'admin_user',
+      'admin_roles',
+    ]
+    removeExactKeys.forEach((key) => localStorage.removeItem(key))
+
+    const prefixedKeys = ['jyz_', 'chat_', 'session_']
+    Object.keys(localStorage).forEach((key) => {
+      if (prefixedKeys.some((prefix) => key.startsWith(prefix))) {
+        localStorage.removeItem(key)
+      }
+    })
   },
 
   isAuthenticated() {

@@ -17,7 +17,7 @@ const chatContainer = ref(null)
 const showEmoji = ref(false)
 const showTransferModal = ref(false)
 const chatList = ref([])
-const chatTitle = ref(route.query.title || '聊天详情')
+const chatTitle = ref(route.query.title || t('chat.detailTitle'))
 const chatType = ref('user')
 const page = ref(1)
 const hasMore = ref(true)
@@ -31,6 +31,26 @@ let pollTimer = null
 
 const emojis = ['😀', '😁', '😄', '❤️', '👏', '🙏', '🔥', '💰', '🚀', '🙂', '😎', '🤝', '✅', '🎉', '👍', '📈']
 
+const translateMaybe = (value) => {
+  if (typeof value !== 'string' || !value) return value
+  const translated = t(value)
+  return translated !== value ? translated : value
+}
+
+const normalizeTime = (value, timeKey = '') => {
+  if (timeKey) return t(timeKey)
+  const raw = String(value || '')
+  if (raw === '昨天' || raw.toLowerCase() === 'yesterday') return t('chat.timeYesterday')
+  if (raw === '刚刚' || raw.toLowerCase() === 'just now') return t('chat.timeJustNow')
+  return value
+}
+
+const localizeMessage = (item) => ({
+  ...item,
+  text: translateMaybe(item?.text),
+  time: normalizeTime(item?.time, item?.timeKey),
+})
+
 const fetchMessages = async (isLoadMore = false, isSilent = false) => {
   if (loading.value && !isSilent) return
   if (!isSilent) loading.value = true
@@ -41,14 +61,16 @@ const fetchMessages = async (isLoadMore = false, isSilent = false) => {
     const json = await ChatService.getMessages(chatId.value, isLoadMore ? page.value : 1, 20)
 
     if (isLoadMore) {
-      chatList.value = [...json.data.items, ...chatList.value]
+      const pageItems = Array.isArray(json?.data?.items) ? json.data.items : []
+      chatList.value = [...pageItems.map(localizeMessage), ...chatList.value]
       handleLoadMoreScroll(oldHeight)
     } else {
-      const hasNew = json.data.items.length > 0 &&
-        (chatList.value.length === 0 || json.data.items[json.data.items.length - 1].id !== chatList.value[chatList.value.length - 1]?.id)
+      const pageItems = Array.isArray(json?.data?.items) ? json.data.items : []
+      const hasNew = pageItems.length > 0 &&
+        (chatList.value.length === 0 || pageItems[pageItems.length - 1].id !== chatList.value[chatList.value.length - 1]?.id)
 
       if (hasNew || chatList.value.length === 0) {
-        chatList.value = json.data.items
+        chatList.value = pageItems.map(localizeMessage)
         const isNearBottom = chatContainer.value &&
           (chatContainer.value.scrollHeight - chatContainer.value.scrollTop - chatContainer.value.clientHeight < 100)
 
@@ -77,7 +99,7 @@ const fetchChatInfo = async () => {
     const json = await ChatService.getChatList()
     const chat = json.data.find((item) => String(item.id) === String(chatId.value))
     if (chat?.name) {
-      chatTitle.value = chat.name
+      chatTitle.value = translateMaybe(chat.nameKey ? t(chat.nameKey) : chat.name)
       chatType.value = chat.type || 'user'
       return
     }
@@ -113,10 +135,17 @@ const selectEmoji = (emoji) => {
 
 const openTransferModal = () => {
   if (!canOpenTransfer.value) {
-    showToast('系统消息不支持转账交易')
+    showToast(t('chat.systemNoTransfer'))
     return
   }
   showTransferModal.value = true
+}
+
+const translateTransferStatus = (status) => {
+  const normalized = String(status || '').toLowerCase()
+  if (normalized === 'submitted' || status === '已提交') return t('chat.transfer.submitted')
+  if (normalized === 'completed' || status === '已完成') return t('chat.transfer.completed')
+  return status || t('chat.transfer.submitted')
 }
 
 const handleTransferSuccess = (transferMessage) => {
@@ -183,12 +212,12 @@ onUnmounted(() => {
         <template v-if="msg.type === 'transfer'">
           <div class="w-[240px] rounded-3xl border border-[#2b4254] bg-[#132331] px-4 py-4 shadow-sm" :class="msg.self ? 'rounded-tr-none' : 'rounded-tl-none'">
             <div class="flex items-center justify-between text-xs text-[#8e9bb0]">
-              <span>转账交易</span>
-              <span class="text-[#19c58a]">{{ msg.status || '已提交' }}</span>
+              <span>{{ t('chat.transfer.title') }}</span>
+              <span class="text-[#19c58a]">{{ translateTransferStatus(msg.status) }}</span>
             </div>
             <p class="mt-3 text-3xl font-bold text-[#f6c23e]">¥{{ Number(msg.amount || 0).toFixed(2) }}</p>
-            <p class="mt-3 text-sm text-[#dbe5ef]">收款人：{{ msg.recipientName }}</p>
-            <p v-if="msg.note" class="mt-1 text-xs text-[#8e9bb0]">备注：{{ msg.note }}</p>
+            <p class="mt-3 text-sm text-[#dbe5ef]">{{ t('chat.transfer.recipientLabel') }}{{ msg.recipientName }}</p>
+            <p v-if="msg.note" class="mt-1 text-xs text-[#8e9bb0]">{{ t('chat.transfer.noteLabel') }}{{ msg.note }}</p>
           </div>
         </template>
         <template v-else>

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { X, Wallet, ChevronRight } from 'lucide-vue-next'
 import { ChatService } from '../../services/chat'
 import { showToast } from '../../composables/useToast'
@@ -24,6 +25,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'success'])
+const { t } = useI18n()
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -70,7 +72,7 @@ const submitTransfer = async () => {
       note: note.value.trim(),
       chatType: props.chatType,
     })
-    showToast('转账交易已发送')
+    showToast(t('chat.transfer.sentToast'))
     emit('success', response.data)
     emit('close')
     resetForm()
@@ -102,18 +104,18 @@ watch(() => props.visible, (value) => {
             <Wallet :size="22" />
           </div>
           <div>
-            <h3 class="text-lg font-bold">转账交易</h3>
-            <p class="text-xs text-[#8e9bb0]">{{ isGroupChat ? '选择群友后发起转账' : `向 ${chatTitle || '当前好友'} 发起转账` }}</p>
+            <h3 class="text-lg font-bold">{{ t('chat.transfer.title') }}</h3>
+            <p class="text-xs text-[#8e9bb0]">{{ isGroupChat ? t('chat.transfer.groupDesc') : t('chat.transfer.singleDesc', { name: chatTitle || t('chat.transfer.currentFriend') }) }}</p>
           </div>
         </div>
 
         <div class="mt-5 space-y-4">
           <div v-if="loading" class="rounded-2xl bg-[#101b28] px-4 py-5 text-sm text-[#8e9bb0]">
-            正在加载可转账对象...
+            {{ t('chat.transfer.loadingTargets') }}
           </div>
 
           <div v-else>
-            <label class="mb-2 block text-xs text-[#8e9bb0]">{{ isGroupChat ? '收款群友' : '收款对象' }}</label>
+            <label class="mb-2 block text-xs text-[#8e9bb0]">{{ isGroupChat ? t('chat.transfer.groupReceiver') : t('chat.transfer.receiver') }}</label>
             <div v-if="isGroupChat" class="space-y-3">
               <button
                 v-for="item in targets"
@@ -143,16 +145,16 @@ watch(() => props.visible, (value) => {
           </div>
 
           <label class="block">
-            <span class="mb-2 block text-xs text-[#8e9bb0]">转账金额</span>
+            <span class="mb-2 block text-xs text-[#8e9bb0]">{{ t('chat.transfer.amount') }}</span>
             <div class="flex items-center rounded-2xl border border-[#273647] bg-[#101b28] px-4 py-3">
               <span class="mr-3 text-lg font-bold text-[#c99b18]">¥</span>
-              <input v-model="amount" type="number" min="0" step="0.01" placeholder="输入转账金额" class="flex-1 bg-transparent text-white outline-none placeholder:text-[#66778b]" />
+              <input v-model="amount" type="number" min="0" step="0.01" :placeholder="t('chat.transfer.amountPlaceholder')" class="flex-1 bg-transparent text-white outline-none placeholder:text-[#66778b]" />
             </div>
           </label>
 
           <label class="block">
-            <span class="mb-2 block text-xs text-[#8e9bb0]">备注信息</span>
-            <input v-model="note" type="text" placeholder="选填，方便对方识别" class="w-full rounded-2xl border border-[#273647] bg-[#101b28] px-4 py-3 text-white outline-none placeholder:text-[#66778b]" />
+            <span class="mb-2 block text-xs text-[#8e9bb0]">{{ t('chat.transfer.note') }}</span>
+            <input v-model="note" type="text" :placeholder="t('chat.transfer.notePlaceholder')" class="w-full rounded-2xl border border-[#273647] bg-[#101b28] px-4 py-3 text-white outline-none placeholder:text-[#66778b]" />
           </label>
         </div>
 
@@ -162,7 +164,7 @@ watch(() => props.visible, (value) => {
           :class="canSubmit ? 'bg-[#19c58a]' : 'bg-[#27445a] text-[#6d8399]'"
           :disabled="!canSubmit"
         >
-          {{ submitting ? '处理中...' : '确认转账' }}
+          {{ submitting ? t('chat.transfer.processing') : t('chat.transfer.confirm') }}
         </button>
       </div>
     </div>

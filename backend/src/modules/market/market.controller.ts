@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common'
+import { Controller, Get, Query } from '@nestjs/common'
 import { ApiTags } from '@nestjs/swagger'
 import { MarketService } from './market.service'
 
@@ -25,5 +25,10 @@ export class MarketController {
   @Get('market/periods')
   getPeriods() {
     return this.marketService.getTradingPeriods()
+  }
+
+  @Get('market/kline')
+  getKLine(@Query('asset') asset?: string, @Query('period') period?: string) {
+    return this.marketService.getKLine(asset, period)
   }
 }

@@ -12,7 +12,7 @@ import WithdrawModal from '../components/profile/WithdrawModal.vue'
 
 defineOptions({ name: 'Profile' })
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const { showToast } = useToast()
 const assetType = ref('gold') // 'gold' | 'silver'
@@ -68,12 +68,12 @@ const parseAmount = (value) => {
 const availableBalance = computed(() => parseAmount(getAssetByIndex(1).value))
 
 const handleRechargeSuccess = () => {
-  showToast('充值成功，余额已更新')
+  showToast(t('profile.rechargeSuccess'))
   fetchProfile(true)
 }
 
 const handleWithdrawSuccess = () => {
-  showToast('提现申请已提交，状态：到账中')
+  showToast(t('profile.withdrawSubmitted'))
   fetchProfile(true)
 }
 
@@ -85,7 +85,23 @@ const logout = async () => {
 const formatCurrency = (value) => {
   const num = parseFloat(String(value).replace(/,/g, ''))
   if (isNaN(num)) return '¥0.00'
-  return '¥' + num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const selectedLocale = getNumberLocale()
+  return '¥' + num.toLocaleString(selectedLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+const getNumberLocale = () => {
+  const localeMap = {
+    zh: 'zh-CN',
+    en: 'en-US',
+    es: 'es-ES',
+    ar: 'ar-SA',
+    hi: 'hi-IN',
+    ru: 'ru-RU',
+    ja: 'ja-JP',
+    pt: 'pt-BR',
+    bn: 'bn-BD',
+  }
+  return localeMap[String(locale.value || '').toLowerCase()] || 'en-US'
 }
 
 const goldSummary = computed(() => {
@@ -213,10 +229,10 @@ const buildDisplayPositionsByType = (type) => {
     const unitPrice = parseAmount(src?.price || 0)
     const totalPrice = unitPrice * count
     return {
-      level: src?.level || (type === 'gold' ? `黄金${gram}g` : `白银${gram}g`),
+      level: `${type === 'gold' ? t('profile.gold') : t('profile.silver')}${gram}g`,
       weight: String(gram),
       count,
-      price: totalPrice.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      price: totalPrice.toLocaleString(getNumberLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       bgImage: src?.bgImage || getDefaultImageByGram(type, gram),
       gram,
     }
@@ -235,7 +251,7 @@ const triggerBuyAnimation = (itemKey, weight, count) => {
   animateNumber(itemKey, numericWeight)
   
   // 显示到账反馈
-  arrivalFeedbackText.value = `到账 +${Number(weight || 0).toFixed(2)}g`
+  arrivalFeedbackText.value = t('profile.arrivalFeedback', { grams: Number(weight || 0).toFixed(2) })
   showArrivalFeedback.value = true
   
   // 清除飞入动画状态
@@ -268,7 +284,8 @@ const isFlyingIn = (item) => {
 // 获取金币显示数量（用于v-for循环）
 const getCoinCount = (count) => {
   const num = parseInt(count) || 0
-  return Math.max(num, 0)
+  // 业务规则：持有数为 0 也必须展示 1 张图，保证界面始终有图示
+  return Math.max(num, 1)
 }
 
 const handleBuyArrival = (payload) => {
@@ -505,7 +522,7 @@ onBeforeUnmount(() => {
                   </span>
                   <h4 class="font-bold drop-shadow-md text-sm">{{ item.level }}</h4>
                 </div>
-                <p class="text-[10px] text-white/80 font-medium">{{ t('profile.currentHold') }} <span class="text-white font-bold">{{ item.count }} 份</span></p>
+                <p class="text-[10px] text-white/80 font-medium">{{ t('profile.currentHold') }} <span class="text-white font-bold">{{ item.count }} {{ t('profile.shareUnit') }}</span></p>
               </div>
 
               <div class="space-y-2">
