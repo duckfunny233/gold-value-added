@@ -71,6 +71,7 @@ export const profileFallback = {
   nickname: '黄金投资者_888',
   avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=GoldInvestor',
   fee: '--',
+  realNameVerified: true,
   assets: [
     { key: 'profile.assets.total', value: '1,250,000.00', unit: 'CNY' },
     { key: 'profile.assets.balance', value: '85,400.00', unit: 'CNY' },

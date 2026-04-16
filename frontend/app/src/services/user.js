@@ -9,6 +9,7 @@ import {
 let fallbackBalanceDelta = 0
 const fallbackRechargeOrders = new Map()
 const fallbackSmsTokens = new Map()
+let fallbackPaymentMethod = null
 
 const normalizeBgImage = (value) => {
   if (!value) return value
@@ -114,7 +115,7 @@ export const UserService = {
           channel,
           amount,
           status: 'pending',
-          payHint: '请完成支付后点击“我已完成付款”',
+          payHint: '请完成支付后点击"我已完成付款"',
         }
         fallbackRechargeOrders.set(order.orderId, order)
         return order
@@ -193,5 +194,64 @@ export const UserService = {
         }
       }
     )
-  }
+  },
+
+  // 获取收款方式
+  getPaymentMethod() {
+    return requestJsonOrFallback(
+      '/api/user/payment-method',
+      {},
+      () => {
+        // 返回本地缓存的收款方式
+        return fallbackPaymentMethod
+      }
+    )
+  },
+
+  // 绑定收款方式
+  bindPaymentMethod(data) {
+    return requestJsonOrFallback(
+      '/api/user/payment-method',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+      () => {
+        // 保存到本地缓存
+        fallbackPaymentMethod = {
+          ...data,
+          id: `pm_${Date.now()}`,
+          createdAt: new Date().toISOString(),
+        }
+        return fallbackPaymentMethod
+      }
+    )
+  },
+
+  // 解绑收款方式
+  unbindPaymentMethod() {
+    return requestJsonOrFallback(
+      '/api/user/payment-method',
+      {
+        method: 'DELETE',
+      },
+      () => {
+        // 清除本地缓存
+        fallbackPaymentMethod = null
+        return { success: true }
+      }
+    )
+  },
+
+  // 检查用户是否有充值记录
+  hasRechargeHistory() {
+    return requestJsonOrFallback(
+      '/api/user/recharge-history/check',
+      {},
+      () => {
+        // 根据是否有充值订单判断
+        return fallbackBalanceDelta > 0 || fallbackRechargeOrders.size > 0
+      }
+    )
+  },
 }

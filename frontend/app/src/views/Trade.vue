@@ -4,7 +4,8 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { TradeService } from '../services/trade'
 import { UserService } from '../services/user'
-import { Loader2 } from 'lucide-vue-next'
+import { MarketService } from '../services/market'
+import { Loader2, ChevronDown, ChevronUp } from 'lucide-vue-next'
 import { useMarketPolling } from '../composables/useMarketPolling'
 import { showToast } from '../composables/useToast'
 
@@ -31,6 +32,19 @@ const buyFeedback = ref({
 })
 let buyFeedbackRaf = null
 let buyFeedbackTimer = null
+
+// 五档盘口相关
+const showOrderBook = ref(false)
+const orderBookAssetId = ref('')
+const orderBookData = ref({
+  buy: [],
+  sell: []
+})
+const orderBookLoading = ref(false)
+const orderBookTimer = null
+
+// 品种列表（与 markets 顺序一致）
+const assetList = computed(() => markets.value)
 
 // 如果是通过导航栏直接点进来的（没有 query 参数），则默认选中列表第一个
 watch(markets, (newMarkets) => {
@@ -215,6 +229,75 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   clearBuyFeedback()
+  if (orderBookTimer) clearInterval(orderBookTimer)
+})
+
+// 五档盘口相关方法
+const toggleOrderBook = () => {
+  showOrderBook.value = !showOrderBook.value
+  if (showOrderBook.value) {
+    // 默认选中当前交易品种
+    orderBookAssetId.value = assetId.value || (markets.value[0]?.id || '')
+    fetchOrderBook()
+  }
+}
+
+const selectOrderBookAsset = (asset) => {
+  orderBookAssetId.value = asset.id
+  fetchOrderBook()
+}
+
+const fetchOrderBook = async () => {
+  if (!orderBookAssetId.value) return
+  orderBookLoading.value = true
+  try {
+    const data = await MarketService.getOrderBook(orderBookAssetId.value)
+    orderBookData.value = data
+  } catch (err) {
+    // 如果接口不存在，使用模拟数据
+    generateMockOrderBook()
+  } finally {
+    orderBookLoading.value = false
+  }
+}
+
+// 模拟五档数据
+const generateMockOrderBook = () => {
+  const currentAsset = markets.value.find(m => m.id === orderBookAssetId.value)
+  const basePrice = currentAsset ? parseFloat(currentAsset.price) : 500
+  
+  // 卖五到卖一（价格从高到低）
+  const sellOrders = []
+  for (let i = 5; i >= 1; i--) {
+    sellOrders.push({
+      level: i,
+      price: (basePrice + i * 0.02 + Math.random() * 0.01).toFixed(2),
+      quantity: Math.floor(Math.random() * 50) + 5
+    })
+  }
+  
+  // 买一到买五（价格从低到高）
+  const buyOrders = []
+  for (let i = 1; i <= 5; i++) {
+    buyOrders.push({
+      level: i,
+      price: (basePrice - i * 0.02 - Math.random() * 0.01).toFixed(2),
+      quantity: Math.floor(Math.random() * 50) + 5
+    })
+  }
+  
+  orderBookData.value = {
+    sell: sellOrders,
+    buy: buyOrders,
+    updatedAt: new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  }
+}
+
+// 监听盘口展开状态，定时刷新数据
+watch(showOrderBook, (visible) => {
+  if (visible) {
+    generateMockOrderBook()
+  }
 })
 </script>
 
@@ -291,6 +374,82 @@ onBeforeUnmount(() => {
             <Loader2 v-if="submitting" class="animate-spin" :size="20" />
             {{ submitting ? t('trade.submitting') : (activeTab === 'buy' ? t('trade.confirmBuy') : t('trade.confirmSell')) }}
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 五档盘口 -->
+    <div class="px-4 pb-4">
+      <div class="bg-[#1a2735] rounded-xl overflow-hidden">
+        <!-- 盘口标题栏 -->
+        <button 
+          @click="toggleOrderBook"
+          class="w-full px-4 py-3 flex items-center justify-between bg-[#1a2735] hover:bg-[#223244] transition-colors"
+        >
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-medium text-white">{{ t('trade.orderBook.title') }}</span>
+            <span v-if="orderBookData.updatedAt" class="text-[10px] text-[#7d8da2]">{{ orderBookData.updatedAt }}</span>
+          </div>
+          <component :is="showOrderBook ? ChevronUp : ChevronDown" class="text-[#7d8da2]" :size="18" />
+        </button>
+        
+        <!-- 盘口内容 -->
+        <div v-show="showOrderBook" class="border-t border-[#2a3a4b]">
+          <!-- 品种 Tab -->
+          <div class="px-3 py-2 border-b border-[#2a3a4b] bg-[#1f2d3b]">
+            <div class="flex gap-2 overflow-x-auto no-scrollbar">
+              <button 
+                v-for="asset in assetList" 
+                :key="asset.id"
+                @click="selectOrderBookAsset(asset)"
+                :class="orderBookAssetId === asset.id ? 'bg-[#c99b18] text-white' : 'bg-[#223244] text-[#a6b0c3] border border-[#304255]'"
+                class="px-3 py-1 rounded-full text-[10px] font-medium whitespace-nowrap transition-colors"
+              >
+                {{ asset.name }}
+              </button>
+            </div>
+          </div>
+          
+          <!-- 盘口表格 -->
+          <div class="p-3">
+            <div v-if="orderBookLoading" class="py-6 flex justify-center">
+              <Loader2 class="animate-spin text-[#7d8da2]" :size="20" />
+            </div>
+            
+            <div v-else class="space-y-1">
+              <!-- 表头 -->
+              <div class="flex text-[10px] text-[#7d8da2] px-1 mb-1">
+                <span class="w-12">{{ t('trade.orderBook.level') }}</span>
+                <span class="flex-1 text-center">{{ t('trade.orderBook.price') }}</span>
+                <span class="w-14 text-right">{{ t('trade.orderBook.quantity') }}</span>
+              </div>
+              
+              <!-- 卖五到卖一 -->
+              <div 
+                v-for="item in orderBookData.sell" 
+                :key="'sell-'+item.level"
+                class="flex items-center py-1 px-1 rounded text-xs"
+              >
+                <span class="w-12 text-[#19c58a]">{{ t('trade.orderBook.sell') }}{{ item.level }}</span>
+                <span class="flex-1 text-center text-[#19c58a] tabular-nums">{{ item.price }}</span>
+                <span class="w-14 text-right text-white tabular-nums">{{ item.quantity }}</span>
+              </div>
+              
+              <!-- 分隔线 -->
+              <div class="border-t border-[#2a3a4b] my-2"></div>
+              
+              <!-- 买一到买五 -->
+              <div 
+                v-for="item in orderBookData.buy" 
+                :key="'buy-'+item.level"
+                class="flex items-center py-1 px-1 rounded text-xs"
+              >
+                <span class="w-12 text-[#ff5f56]">{{ t('trade.orderBook.buy') }}{{ item.level }}</span>
+                <span class="flex-1 text-center text-[#ff5f56] tabular-nums">{{ item.price }}</span>
+                <span class="w-14 text-right text-white tabular-nums">{{ item.quantity }}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

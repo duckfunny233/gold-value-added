@@ -13,9 +13,20 @@ export function createApiFetch(config = {}) {
 
   return async function apiFetch(url, options = {}) {
     const fullUrl = url.startsWith('http') ? url : `${apiBase}${url}`
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
+    
+    // 检查是否为 FormData，如果是则不设置 Content-Type
+    const isFormData = options.body instanceof FormData
+    
+    const headers = {}
+    
+    // 只有非 FormData 请求才设置默认 Content-Type
+    if (!isFormData) {
+      headers['Content-Type'] = 'application/json'
+    }
+    
+    // 合并用户自定义 headers
+    if (options.headers) {
+      Object.assign(headers, options.headers)
     }
 
     const token = getToken ? getToken() : ''

@@ -1,5 +1,5 @@
 <script setup>
-import { Wallet, ArrowUpCircle, ArrowDownCircle, RefreshCw, Shield, ChevronRight, Settings, LogOut, Eye, EyeOff, Repeat } from 'lucide-vue-next'
+import { Wallet, ArrowUpCircle, ArrowDownCircle, RefreshCw, Shield, ChevronRight, Settings, LogOut, Eye, EyeOff, Repeat, UserCheck, ShieldAlert } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ref, onMounted, onActivated, onBeforeUnmount, computed } from 'vue'
@@ -26,14 +26,30 @@ const SPEC_GRAMS = [10, 50, 100, 1000, 5000]
 const holdDeltaGrams = ref({ gold: 0, silver: 0 })
 const processedEventIds = ref(new Set())
 
+// 用户充值状态和收款方式
+const hasRecharged = ref(false)
+const paymentMethod = ref(null)
+
 const userProfile = ref({
   username: t('profile.loading'),
   id: '-------',
   avatar: '',
   assets: [],
   goldPositions: [],
-  silverPositions: []
+  silverPositions: [],
+  realNameVerified: false
 })
+
+// 头像加载失败状态
+const avatarError = ref(false)
+
+// 处理头像加载失败
+const handleAvatarError = () => {
+  avatarError.value = true
+}
+
+// 实名认证状态
+const isRealNameVerified = computed(() => userProfile.value.realNameVerified || false)
 
 // 使用计算属性匹配资产字段，防止索引错位
 const getAssetByIndex = (index) => {
@@ -45,10 +61,27 @@ const fetchProfile = async (silent = false) => {
   try {
     const json = await UserService.getProfile()
     userProfile.value = json.data
+    // 重置头像错误状态
+    avatarError.value = false
   } catch (err) {
     console.error('Failed to fetch profile:', err)
   } finally {
     isRefreshing.value = false
+  }
+}
+
+// 获取用户充值状态和收款方式
+const fetchUserPaymentInfo = async () => {
+  try {
+    // 检查是否有充值记录
+    const rechargeResponse = await UserService.hasRechargeHistory()
+    hasRecharged.value = rechargeResponse.data || false
+    
+    // 获取已绑定的收款方式
+    const methodResponse = await UserService.getPaymentMethod()
+    paymentMethod.value = methodResponse.data || null
+  } catch (err) {
+    console.error('Failed to fetch payment info:', err)
   }
 }
 
@@ -70,11 +103,17 @@ const availableBalance = computed(() => parseAmount(getAssetByIndex(1).value))
 const handleRechargeSuccess = () => {
   showToast(t('profile.rechargeSuccess'))
   fetchProfile(true)
+  // 充值成功后更新充值状态
+  hasRecharged.value = true
 }
 
 const handleWithdrawSuccess = () => {
   showToast(t('profile.withdrawSubmitted'))
   fetchProfile(true)
+}
+
+const handleBindPaymentMethod = (method) => {
+  paymentMethod.value = method
 }
 
 const logout = async () => {
@@ -325,12 +364,14 @@ const consumeStoredBuyEvent = () => {
 
 onMounted(() => {
   fetchProfile()
+  fetchUserPaymentInfo()
   consumeStoredBuyEvent()
   window.addEventListener(BUY_EVENT_NAME, buyEventHandler)
 })
 
 onActivated(() => {
   fetchProfile(true)
+  fetchUserPaymentInfo()
   consumeStoredBuyEvent()
 })
 
@@ -345,11 +386,28 @@ onBeforeUnmount(() => {
     <!-- User Info -->
     <div class="bg-white dark:bg-gray-800 px-4 py-8 flex items-center gap-4">
       <div class="w-16 h-16 bg-primary/10 rounded-full overflow-hidden flex items-center justify-center text-primary text-2xl font-bold border-2 border-primary/20">
-        <img v-if="userProfile.avatar" :src="userProfile.avatar" class="w-full h-full object-cover" />
+        <img v-if="userProfile.avatar && !avatarError" :src="userProfile.avatar" class="w-full h-full object-cover" @error="handleAvatarError" />
         <span v-else>{{ userProfile.nickname?.charAt(0) || 'U' }}</span>
       </div>
-      <div>
-        <h3 class="text-xl font-bold">{{ userProfile.nickname }}</h3>
+      <div class="flex-1">
+        <div class="flex items-center gap-2">
+          <h3 class="text-xl font-bold">{{ userProfile.nickname }}</h3>
+          <!-- 实名认证状态标识 -->
+          <div 
+            v-if="isRealNameVerified" 
+            class="flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full text-[10px] font-medium"
+          >
+            <UserCheck :size="12" />
+            <span>{{ t('profile.verified') }}</span>
+          </div>
+          <div 
+            v-else 
+            class="flex items-center gap-1 px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-full text-[10px] font-medium"
+          >
+            <ShieldAlert :size="12" />
+            <span>{{ t('profile.unverified') }}</span>
+          </div>
+        </div>
         <p class="text-xs text-gray-400">{{ t('profile.idPrefix') }} {{ userProfile.id }}</p>
       </div>
       <button @click="router.push('/settings')" class="ml-auto text-gray-400 btn-interact p-2"><Settings :size="20" /></button>
@@ -588,8 +646,11 @@ onBeforeUnmount(() => {
   <WithdrawModal
     :visible="showWithdrawModal"
     :available-balance="availableBalance"
+    :has-recharged="hasRecharged"
+    :payment-method="paymentMethod"
     @close="showWithdrawModal = false"
     @success="handleWithdrawSuccess"
+    @bind-payment-method="handleBindPaymentMethod"
   />
 </template>
 

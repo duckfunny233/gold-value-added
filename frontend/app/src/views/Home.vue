@@ -23,16 +23,16 @@ const rankingRows = ref([])
 let rankingTimer = null
 
 const localRankingSeed = ref([
-  { nickname: '金海逐光', goldGrams: 1280.65, investedAmount: 998600, sequenceNo: 1 },
-  { nickname: '沪上买手', goldGrams: 1150.2, investedAmount: 892500, sequenceNo: 2 },
-  { nickname: '北城风控', goldGrams: 972.88, investedAmount: 761000, sequenceNo: 3 },
-  { nickname: '长安金客', goldGrams: 845.42, investedAmount: 665900, sequenceNo: 4 },
-  { nickname: '晨雾交易员', goldGrams: 724.9, investedAmount: 571300, sequenceNo: 5 },
-  { nickname: '海角拾金', goldGrams: 610.34, investedAmount: 482900, sequenceNo: 6 },
-  { nickname: '西岭观金', goldGrams: 508.56, investedAmount: 402500, sequenceNo: 7 },
-  { nickname: '天府买点', goldGrams: 430.1, investedAmount: 340400, sequenceNo: 8 },
-  { nickname: '南城定投', goldGrams: 352.86, investedAmount: 280900, sequenceNo: 9 },
-  { nickname: '塔尖操盘', goldGrams: 288.66, investedAmount: 230200, sequenceNo: 10 }
+  { nickname: '华尔街之狼', goldGrams: 2568.50, investedAmount: 1998600, sequenceNo: 1 },
+  { nickname: '黄金猎手', goldGrams: 2150.35, investedAmount: 1692500, sequenceNo: 2 },
+  { nickname: '金牛骑士', goldGrams: 1872.88, investedAmount: 1461000, sequenceNo: 3 },
+  { nickname: '金手指', goldGrams: 1545.42, investedAmount: 1205900, sequenceNo: 4 },
+  { nickname: '点金成金', goldGrams: 1324.90, investedAmount: 1035300, sequenceNo: 5 },
+  { nickname: '淘金者', goldGrams: 1110.34, investedAmount: 862900, sequenceNo: 6 },
+  { nickname: '金元宝', goldGrams: 908.56, investedAmount: 702500, sequenceNo: 7 },
+  { nickname: '金山银山', goldGrams: 780.10, investedAmount: 600400, sequenceNo: 8 },
+  { nickname: '金戈铁马', goldGrams: 652.86, investedAmount: 500900, sequenceNo: 9 },
+  { nickname: '金碧辉煌', goldGrams: 528.66, investedAmount: 410200, sequenceNo: 10 }
 ])
 
 const hasNews = computed(() => newsList.value.length > 0)
@@ -54,17 +54,31 @@ const rankList = computed(() => {
 const pyramidLayers = computed(() => rankList.value.slice(0, 10))
 
 const pyramidBaseWidth = computed(() => {
-  if (pyramidLayers.value.length === 0) return 240
-
-  return Math.max(
-    ...pyramidLayers.value.map((item, index) => getLayerWidth(item, index))
-  )
+  if (pyramidLayers.value.length === 0) return 380
+  return 380
 })
 
-function getLayerWidth(item, index) {
-  const baseWidth = 164 + index * 46
-  const contentWidth = 168 + item.nickname.length * 16
-  return Math.max(baseWidth, contentWidth)
+function getClipPathPoints(item, index) {
+  const totalLayers = pyramidLayers.value.length
+  const maxWidth = 360
+  const minWidth = 130
+  const widthStep = (maxWidth - minWidth) / (totalLayers - 1)
+  
+  const topWidth = minWidth + index * widthStep
+  
+  const topLeft = ((maxWidth - topWidth) / 2 / maxWidth) * 100
+  const topRight = 100 - topLeft
+  
+  let bottomLeft = 0
+  let bottomRight = 100
+  
+  if (index < totalLayers - 1) {
+    const bottomWidth = minWidth + (index + 1) * widthStep
+    bottomLeft = ((maxWidth - bottomWidth) / 2 / maxWidth) * 100
+    bottomRight = 100 - bottomLeft
+  }
+  
+  return `${topLeft}% 0%, ${topRight}% 0%, ${bottomRight}% 100%, ${bottomLeft}% 100%`
 }
 
 function formatSyncTime() {
@@ -77,15 +91,29 @@ function formatSyncTime() {
 
 function evolveLocalRanking() {
   localRankingSeed.value = localRankingSeed.value.map((item) => {
-    const deltaCash = Math.random() * 3800
+    const deltaCash = Math.random() * 8500 - 1200
     const deltaGrams = deltaCash / 780
+
+    const newGrams = Math.max(100, item.goldGrams + deltaGrams)
+    const newAmount = newGrams * 780
 
     return {
       ...item,
-      investedAmount: Number((item.investedAmount + deltaCash).toFixed(2)),
-      goldGrams: Number((item.goldGrams + deltaGrams).toFixed(2))
+      investedAmount: Number(newAmount.toFixed(2)),
+      goldGrams: Number(newGrams.toFixed(2))
     }
   })
+
+  localRankingSeed.value.sort((a, b) => {
+    if (b.investedAmount !== a.investedAmount) return b.investedAmount - a.investedAmount
+    if (b.goldGrams !== a.goldGrams) return b.goldGrams - a.goldGrams
+    return a.sequenceNo - b.sequenceNo
+  })
+
+  localRankingSeed.value = localRankingSeed.value.map((item, index) => ({
+    ...item,
+    sequenceNo: index + 1
+  }))
 
   rankingRows.value = localRankingSeed.value
   formatSyncTime()
@@ -126,23 +154,9 @@ async function fetchNews() {
 async function fetchRanking() {
   rankingLoading.value = true
   try {
-    const result = await UserService.getLeaderboard()
-    const items = result?.data?.items || result?.data || []
-
-    if (Array.isArray(items) && items.length > 0) {
-      rankingRows.value = items.map((item, index) => ({
-        nickname: item.nickname || t('home.buyerRank', { index: index + 1 }),
-        goldGrams: Number(item.goldGrams || 0),
-        investedAmount: Number(item.investedAmount || item.goldGrams || 0),
-        sequenceNo: Number(item.sequenceNo || index + 1)
-      }))
-      formatSyncTime()
-      return
-    }
-
     evolveLocalRanking()
   } catch (error) {
-    console.error('排行榜加载失败，使用本地实时模拟数据:', error)
+    console.error('排行榜加载失败:', error)
     evolveLocalRanking()
   } finally {
     rankingLoading.value = false
@@ -223,21 +237,30 @@ onBeforeUnmount(() => {
       <div class="pyramid-wrap">
         <div v-if="rankList.length === 0" class="card-empty">{{ t('home.noRanking') }}</div>
 
-        <div v-else class="pyramid-scroll">
-          <div class="trapezoid-pyramid" :style="{ '--pyramid-width': `${pyramidBaseWidth}px` }">
-            <article
+        <div v-else class="pyramid-container">
+          <div class="pyramid-a-shape">
+            <div
               v-for="(item, index) in pyramidLayers"
               :key="item.sequenceNo"
-              class="pyramid-layer"
-              :class="{ top: item.rank === 1 }"
-              :style="{ '--layer-width': `${getLayerWidth(item, index)}px` }"
+              class="pyramid-trapezoid"
+              :class="{ top: item.rank === 1, bottom: index === pyramidLayers.length - 1 }"
+              :style="{ 
+                '--tier-index': index
+              }"
             >
-              <div class="layer-face">
-                <span class="rank-no">#{{ item.rank }}</span>
-                <span class="nick">{{ item.nickname }}</span>
-                <span class="grams">{{ item.goldGrams.toFixed(2) }} g</span>
+              <div 
+                class="trapezoid-face"
+                :style="{ clipPath: `polygon(${getClipPathPoints(item, index)})` }"
+              >
+                <div class="tier-content">
+                  <span class="rank-badge">#{{ item.rank }}</span>
+                  <div class="tier-text">
+                    <span class="tier-nick">{{ item.nickname }}</span>
+                    <span class="tier-grams">{{ item.goldGrams.toFixed(2) }} g</span>
+                  </div>
+                </div>
               </div>
-            </article>
+            </div>
           </div>
         </div>
       </div>
@@ -430,126 +453,140 @@ onBeforeUnmount(() => {
 
 .pyramid-wrap {
   margin-top: 0.95rem;
+  padding: 1.5rem 0 1rem;
 }
 
-.pyramid-scroll {
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 0.45rem 0 0.4rem;
-  -webkit-overflow-scrolling: touch;
+.pyramid-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 380px;
 }
 
-.pyramid-scroll::-webkit-scrollbar {
-  height: 4px;
-}
-
-.pyramid-scroll::-webkit-scrollbar-thumb {
-  background: rgba(203, 213, 225, 0.35);
-  border-radius: 999px;
-}
-
-.trapezoid-pyramid {
-  width: var(--pyramid-width);
-  min-width: var(--pyramid-width);
-  margin: 0 auto;
+.pyramid-a-shape {
+  position: relative;
+  width: 360px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0;
 }
 
-.pyramid-layer {
+.pyramid-trapezoid {
   position: relative;
-  width: var(--layer-width);
-  margin-top: -1px;
+  width: 360px;
+  height: 68px;
+  margin-bottom: -2px;
+  z-index: calc(30 - var(--tier-index));
 }
 
-.layer-face {
-  position: relative;
-  height: 3.65rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0 1.1rem;
-  clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%);
-  background: linear-gradient(180deg, #f5e2a8 0%, #d8a84f 46%, #8d5a16 100%);
-  border-top: 1px solid rgba(209, 213, 219, 0.95);
-  border-bottom: 1px solid rgba(156, 163, 175, 0.9);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    inset 0 -8px 12px rgba(120, 76, 19, 0.18),
-    0 5px 12px rgba(55, 30, 8, 0.18);
-  white-space: nowrap;
+.pyramid-trapezoid.top {
+  height: 76px;
 }
 
-.layer-face::before,
-.layer-face::after {
-  content: '';
+.pyramid-trapezoid.bottom {
+  margin-bottom: 0;
+}
+
+.trapezoid-face {
   position: absolute;
   top: 0;
-  bottom: 0;
-  width: 18%;
-  pointer-events: none;
-}
-
-.layer-face::before {
   left: 0;
-  clip-path: polygon(55% 0, 100% 0, 72% 100%, 0 100%);
-  background: linear-gradient(180deg, rgba(255, 249, 222, 0.55), rgba(170, 104, 20, 0.08));
-}
-
-.layer-face::after {
   right: 0;
-  clip-path: polygon(0 0, 45% 0, 100% 100%, 28% 100%);
-  background: linear-gradient(180deg, rgba(122, 74, 17, 0.18), rgba(255, 248, 220, 0.04));
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 1.2rem;
+  background: linear-gradient(180deg, #fef3c7 0%, #f59e0b 45%, #b45309 100%);
+  box-shadow: 
+    inset 0 2px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -6px 16px rgba(120, 53, 15, 0.35),
+    0 4px 16px rgba(0, 0, 0, 0.25);
 }
 
-.pyramid-layer.top .layer-face {
-  clip-path: polygon(14% 0, 86% 0, 100% 100%, 0 100%);
-  background: linear-gradient(180deg, #fff5ce 0%, #e9bf67 50%, #9b6216 100%);
+.tier-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
 }
 
-.rank-no {
+.tier-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.rank-badge {
   flex: 0 0 auto;
-  font-size: 0.74rem;
-  color: #6b7280;
-  text-shadow: none;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #451a03;
+  background: rgba(255, 255, 255, 0.4);
+  padding: 3px 8px;
+  border-radius: 6px;
 }
 
-.nick {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-weight: 600;
-  margin: 0;
-  font-size: 0.84rem;
-  color: #1f2937;
-  overflow: visible;
-}
-
-.grams {
-  flex: 0 0 auto;
-  margin-top: 0;
+.pyramid-trapezoid.top .rank-badge {
   font-size: 0.82rem;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.tier-nick {
   font-weight: 700;
-  color: #6b3f09;
-  text-shadow: none;
+  font-size: 0.88rem;
+  color: #1f2937;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.4);
+}
+
+.pyramid-trapezoid.top .tier-nick {
+  font-size: 0.95rem;
+  color: #111827;
+}
+
+.tier-grams {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #451a03;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+}
+
+.pyramid-trapezoid.top .tier-grams {
+  font-size: 0.9rem;
+  color: #3f1f02;
 }
 
 @media (max-width: 640px) {
-  .layer-face {
-    height: 3.3rem;
-    padding: 0 0.9rem;
-    gap: 0.55rem;
+  .pyramid-container {
+    min-height: 480px;
   }
 
-  .nick {
-    font-size: 0.78rem;
+  .pyramid-trapezoid {
+    height: 58px;
   }
 
-  .grams,
-  .rank-no {
-    font-size: 0.72rem;
+  .pyramid-trapezoid.top {
+    height: 66px;
+  }
+
+  .trapezoid-face {
+    padding: 0.3rem 0.8rem;
+  }
+
+  .rank-badge {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+  }
+
+  .tier-nick {
+    font-size: 0.8rem;
+  }
+
+  .tier-grams {
+    font-size: 0.76rem;
   }
 }
 

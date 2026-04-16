@@ -1,9 +1,10 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { X, BadgeDollarSign } from 'lucide-vue-next'
+import { X, BadgeDollarSign, AlertCircle } from 'lucide-vue-next'
 import { UserService } from '../../services/user'
 import { showToast } from '../../composables/useToast'
+import PaymentMethodModal from './PaymentMethodModal.vue'
 
 const props = defineProps({
   visible: {
@@ -14,9 +15,18 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  hasRecharged: {
+    type: Boolean,
+    default: false,
+  },
+  paymentMethod: {
+    type: Object,
+    default: null,
+  },
 })
 
-const emit = defineEmits(['close', 'success'])
+const emit = defineEmits(['close', 'success', 'bindPaymentMethod'])
+
 const { t, locale } = useI18n()
 
 const channels = [
@@ -33,13 +43,25 @@ const smsToken = ref('')
 const sendingSms = ref(false)
 const submiting = ref(false)
 const smsCountdown = ref(0)
+const showPaymentMethodModal = ref(false)
 let smsTimer = null
 
 const amountValue = computed(() => Number(amount.value))
 const mobileValid = computed(() => /^1\d{10}$/.test(mobile.value.trim()))
 const canSendSms = computed(() => amountValue.value > 0 && mobileValid.value && smsCountdown.value === 0 && !sendingSms.value)
+
+// 检查是否可以提现
+const canWithdraw = computed(() => {
+  // 未充值用户不能提现
+  if (!props.hasRecharged) return false
+  // 未绑定收款方式不能提现
+  if (!props.paymentMethod) return false
+  return true
+})
+
 const canSubmit = computed(() => {
-  return amountValue.value > 0
+  return canWithdraw.value &&
+    amountValue.value > 0
     && amountValue.value <= props.availableBalance
     && mobileValid.value
     && smsCode.value.trim().length >= 4
@@ -69,6 +91,13 @@ const reset = () => {
 watch(() => props.visible, (value) => {
   if (!value) reset()
 })
+
+// 监听已绑定的收款方式，同步选择对应的渠道
+watch(() => props.paymentMethod, (method) => {
+  if (method?.type) {
+    selectedChannel.value = method.type
+  }
+}, { immediate: true })
 
 const sendSms = async () => {
   if (!canSendSms.value) return
@@ -112,6 +141,14 @@ const submitWithdraw = async () => {
   }
 }
 
+const handleBindPaymentMethod = () => {
+  showPaymentMethodModal.value = true
+}
+
+const handlePaymentMethodSuccess = (method) => {
+  emit('bindPaymentMethod', method)
+}
+
 const numberLocale = computed(() => {
   const localeMap = {
     zh: 'zh-CN',
@@ -147,9 +184,54 @@ const numberLocale = computed(() => {
           </div>
         </div>
 
-        <div class="space-y-4">
+        <!-- 未充值提示 -->
+        <div v-if="!hasRecharged" class="mb-4 p-4 rounded-2xl bg-[#ff7d75]/10 border border-[#ff7d75]/30">
+          <div class="flex items-start gap-3">
+            <AlertCircle class="text-[#ff7d75] flex-shrink-0 mt-0.5" :size="20" />
+            <div>
+              <p class="font-bold text-[#ff7d75] mb-1">{{ t('settings.withdraw.noRechargeTitle') }}</p>
+              <p class="text-sm text-[#8e9bb0]">{{ t('settings.withdraw.noRechargeDesc') }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 未绑定收款方式提示 -->
+        <div v-else-if="!paymentMethod" class="mb-4 p-4 rounded-2xl bg-[#f2c24a]/10 border border-[#f2c24a]/30">
+          <div class="flex items-start gap-3">
+            <AlertCircle class="text-[#f2c24a] flex-shrink-0 mt-0.5" :size="20" />
+            <div class="flex-1">
+              <p class="font-bold text-[#f2c24a] mb-1">{{ t('settings.withdraw.noPaymentMethodTitle') }}</p>
+              <p class="text-sm text-[#8e9bb0] mb-3">{{ t('settings.withdraw.noPaymentMethodDesc') }}</p>
+              <button
+                @click="handleBindPaymentMethod"
+                class="px-4 py-2 rounded-xl bg-[#f2c24a] text-[#162331] text-sm font-bold btn-interact"
+              >
+                {{ t('settings.withdraw.bindPaymentMethod') }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-4" :class="{ 'opacity-50 pointer-events-none': !canWithdraw }">
           <div class="rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3 text-sm text-[#8e9bb0]">
             {{ t('settings.withdraw.available') }}<span class="font-bold text-[#f2c24a]">¥{{ availableBalance.toLocaleString(numberLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
+          </div>
+
+          <!-- 已绑定的收款方式展示 -->
+          <div v-if="paymentMethod" class="rounded-2xl border border-[#19c58a]/30 bg-[#19c58a]/10 px-4 py-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="text-[#19c58a] font-bold">{{ t('settings.withdraw.boundMethod') }}：</span>
+                <span class="text-white">{{ t(`settings.payment.${paymentMethod.type}`) }}</span>
+                <span class="text-[#8e9bb0] text-sm">({{ paymentMethod.name }})</span>
+              </div>
+              <button
+                @click="handleBindPaymentMethod"
+                class="text-xs text-[#f2c24a] btn-interact"
+              >
+                {{ t('settings.withdraw.changeMethod') }}
+              </button>
+            </div>
           </div>
 
           <div>
@@ -161,6 +243,7 @@ const numberLocale = computed(() => {
                 @click="selectedChannel = channel.value"
                 class="rounded-xl border px-3 py-2 text-sm font-bold btn-interact"
                 :class="selectedChannel === channel.value ? 'border-[#c99b18] bg-[#243447] text-[#f2c24a]' : 'border-[#304255] bg-[#101b28] text-[#c9d5e2]'"
+                :disabled="!canWithdraw"
               >
                 {{ t(channel.labelKey) }}
               </button>
@@ -178,6 +261,7 @@ const numberLocale = computed(() => {
                 step="0.01"
                 :placeholder="t('settings.withdraw.amountPlaceholder')"
                 class="w-full bg-transparent text-white outline-none placeholder:text-[#6f8093]"
+                :disabled="!canWithdraw"
               />
             </div>
           </div>
@@ -191,6 +275,7 @@ const numberLocale = computed(() => {
                 maxlength="11"
                 :placeholder="t('settings.withdraw.mobilePlaceholder')"
                 class="w-full rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3 text-white outline-none placeholder:text-[#6f8093]"
+                :disabled="!canWithdraw"
               />
               <p v-if="mobile && !mobileValid" class="mt-1 text-[11px] text-[#ff7d75]">{{ t('settings.withdraw.mobileInvalid') }}</p>
             </div>
@@ -200,6 +285,7 @@ const numberLocale = computed(() => {
                 type="text"
                 :placeholder="t('settings.withdraw.smsPlaceholder')"
                 class="flex-1 rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3 text-white outline-none placeholder:text-[#6f8093]"
+                :disabled="!canWithdraw"
               />
               <button
                 @click="sendSms"
@@ -226,4 +312,11 @@ const numberLocale = computed(() => {
       </div>
     </div>
   </teleport>
+
+  <PaymentMethodModal
+    :visible="showPaymentMethodModal"
+    :existing-method="paymentMethod"
+    @close="showPaymentMethodModal = false"
+    @success="handlePaymentMethodSuccess"
+  />
 </template>

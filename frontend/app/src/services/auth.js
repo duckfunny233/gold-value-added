@@ -7,11 +7,22 @@ export const AuthService = {
       body: JSON.stringify({ username, password })
     })
   },
-  
+
   register(userData) {
     return apiFetch('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(userData)
+    })
+  },
+
+  // 支持文件上传的注册接口
+  registerWithFiles(formData) {
+    return apiFetch('/api/auth/register-with-files', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        // 不设置 Content-Type，让浏览器自动设置 multipart/form-data
+      }
     })
   },
   
@@ -62,5 +73,24 @@ export const AuthService = {
 
   isAuthenticated() {
     return !!localStorage.getItem('token')
+  },
+
+  // 获取实名认证状态
+  getRealNameStatus() {
+    const user = localStorage.getItem('user')
+    if (user) {
+      try {
+        const userData = JSON.parse(user)
+        return userData.realNameVerified || false
+      } catch (e) {
+        return false
+      }
+    }
+    return false
+  },
+
+  // 检查用户是否已完成实名认证
+  isRealNameVerified() {
+    return this.getRealNameStatus()
   }
 }
