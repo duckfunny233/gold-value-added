@@ -21,6 +21,10 @@ import {
   ManualFundActionDto,
   RechargeDto,
   WithdrawDto,
+  WalletRechargeConfirmDto,
+  WalletRechargeDto,
+  WalletWithdrawSmsDto,
+  WalletWithdrawSubmitDto,
 } from './fund.dto'
 import { AdminActor, LedgerRow, RechargeRow, WithdrawRow } from './fund.types'
 
@@ -86,13 +90,227 @@ const WITHDRAW_FILTER_STATUSES = new Set<string>([
   WITHDRAW_STATUS.COMPLETED,
   WITHDRAW_STATUS.REJECTED,
 ])
+const WITHDRAW_FEE_RATE = 0.001
+const SMS_EXPIRE_SECONDS = 60
 
 @Injectable()
 export class FundService {
+  private readonly withdrawSmsMap = new Map<
+    string,
+    { code: string; expiresAt: number; mobile: string; userId: string }
+  >()
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly operationIdempotencyService: OperationIdempotencyService,
   ) {}
+
+  async createWalletRecharge(body: WalletRechargeDto) {
+    const user = await this.resolveWalletUser(body)
+    const amount = new Prisma.Decimal(body.amount)
+    const traceId = randomUUID()
+    const autoSettleAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    const channel = this.normalizeWalletChannel(body.channel)
+
+    const order = await this.prisma.$transaction(async (tx) => {
+      const rechargeOrder = await tx.rechargeOrder.create({
+        data: {
+          userId: user.id,
+          channel,
+          amount,
+          status: RechargeStatus.PENDING,
+          traceId,
+          autoSettleAt,
+        },
+      })
+
+      await this.createHashRecord(tx, {
+        referenceType: 'RECHARGE_ORDER_CREATE',
+        referenceId: rechargeOrder.id,
+        traceId,
+        raw: `wallet_recharge_create:${rechargeOrder.id}:${traceId}:${body.amount}:${channel}`,
+        rechargeOrderId: rechargeOrder.id,
+      })
+
+      await this.createAuditLog(tx, {
+        userId: user.id,
+        actorType: 'USER',
+        actorId: user.id,
+        module: 'fund',
+        action: 'wallet.recharge.create',
+        traceId,
+        payload: {
+          orderId: rechargeOrder.id,
+          channel,
+          amount: body.amount,
+          username: user.username,
+        } as Prisma.InputJsonValue,
+      })
+
+      return rechargeOrder
+    })
+
+    return {
+      message: '充值订单已创建',
+      data: {
+        orderId: order.id,
+        traceId,
+        channel: order.channel,
+        amount: Number(order.amount),
+        status: 'pending',
+        payHint: '请完成支付后点击“我已完成付款”',
+      },
+    }
+  }
+
+  async confirmWalletRecharge(orderId: string, body: WalletRechargeConfirmDto) {
+    const user = await this.resolveWalletUser(body)
+    const traceId = randomUUID()
+
+    const order = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.rechargeOrder.findFirst({
+        where: {
+          id: orderId,
+          userId: user.id,
+        },
+      })
+      if (!current) {
+        throw new NotFoundException('充值订单不存在')
+      }
+
+      if (current.status === RechargeStatus.COMPLETED) {
+        return current
+      }
+
+      const updated = await tx.rechargeOrder.update({
+        where: {
+          id: current.id,
+        },
+        data: {
+          status: RechargeStatus.PROCESSING,
+          channelReference: `USER_CONFIRMED_${Date.now()}`,
+        },
+      })
+
+      await this.createHashRecord(tx, {
+        referenceType: 'RECHARGE_ORDER_CONFIRM',
+        referenceId: updated.id,
+        traceId,
+        raw: `wallet_recharge_confirm:${updated.id}:${traceId}`,
+        rechargeOrderId: updated.id,
+      })
+
+      await this.createAuditLog(tx, {
+        userId: user.id,
+        actorType: 'USER',
+        actorId: user.id,
+        module: 'fund',
+        action: 'wallet.recharge.confirm',
+        traceId,
+        payload: {
+          orderId: updated.id,
+          username: user.username,
+        } as Prisma.InputJsonValue,
+      })
+
+      return updated
+    })
+
+    return {
+      message: '充值确认已提交，等待系统入账',
+      data: {
+        orderId: order.id,
+        traceId,
+        amount: Number(order.amount),
+        status: order.status === RechargeStatus.COMPLETED ? 'completed' : 'reviewing',
+      },
+    }
+  }
+
+  async sendWalletWithdrawSms(body: WalletWithdrawSmsDto) {
+    const user = await this.resolveWalletUser(body)
+    const mobile = String(body.mobile || '').trim()
+    if (!/^1\d{10}$/.test(mobile)) {
+      throw new BadRequestException('参数错误，请检查金额或手机号')
+    }
+
+    const smsToken = `sms_${randomUUID()}`
+    this.withdrawSmsMap.set(smsToken, {
+      code: '123456',
+      expiresAt: Date.now() + SMS_EXPIRE_SECONDS * 1000,
+      mobile,
+      userId: user.id,
+    })
+
+    return {
+      message: '短信验证码已发送',
+      data: {
+        smsToken,
+        maskedMobile: this.maskMobile(mobile),
+        expireSeconds: SMS_EXPIRE_SECONDS,
+      },
+    }
+  }
+
+  async createWalletWithdraw(body: WalletWithdrawSubmitDto) {
+    const user = await this.resolveWalletUser(body)
+    const amount = Number(body.amount || 0)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('参数错误，请检查金额或手机号')
+    }
+
+    const sms = this.withdrawSmsMap.get(body.smsToken)
+    if (
+      !sms ||
+      sms.userId !== user.id ||
+      sms.mobile !== String(body.mobile || '').trim() ||
+      sms.expiresAt < Date.now() ||
+      String(body.smsCode || '').trim() !== sms.code
+    ) {
+      throw new BadRequestException('短信验证码错误')
+    }
+    this.withdrawSmsMap.delete(body.smsToken)
+
+    if (!user.asset || Number(user.asset.tentativeAsset) < amount) {
+      throw new BadRequestException('余额不足或可提现本金不足')
+    }
+
+    const paymentMethod = await this.getUserPaymentMethod(user.id)
+    const channel = this.normalizeWalletChannel(body.channel)
+    const withdrawPayload: WithdrawDto = {
+      username: user.username,
+      amount,
+      payeeName: paymentMethod?.name || user.nickname || user.username,
+    }
+    if (channel === 'wechat') {
+      withdrawPayload.wechatReceiptUrl = paymentMethod?.qrCode || 'bound'
+    } else if (channel === 'alipay') {
+      withdrawPayload.alipayReceiptUrl =
+        paymentMethod?.account || paymentMethod?.qrCode || 'bound'
+    } else {
+      withdrawPayload.bankName = paymentMethod?.bankName || '银行卡'
+      withdrawPayload.bankAccountNo = paymentMethod?.account || ''
+      withdrawPayload.bankAccountHolder =
+        paymentMethod?.name || user.nickname || user.username
+    }
+
+    const submitted = await this.createWithdrawal(withdrawPayload)
+    const feeAmount = Number((amount * WITHDRAW_FEE_RATE).toFixed(2))
+    const netAmount = Number((amount - feeAmount).toFixed(2))
+
+    return {
+      message: '提现申请已提交',
+      data: {
+        withdrawId: submitted.data.orderId,
+        traceId: submitted.data.traceId,
+        status: submitted.data.status,
+        amount,
+        feeRate: WITHDRAW_FEE_RATE,
+        feeAmount,
+        netAmount,
+      },
+    }
+  }
 
   async createRecharge(body: RechargeDto) {
     const user = await this.requireUser(body.username)
@@ -1352,6 +1570,61 @@ export class FundService {
     start.setHours(0, 0, 0, 0)
     return {
       gte: start,
+    }
+  }
+
+  private normalizeWalletChannel(channel: string) {
+    return channel === 'bankcard' ? 'bank' : channel
+  }
+
+  private maskMobile(mobile: string) {
+    if (mobile.length !== 11) {
+      return mobile
+    }
+    return `${mobile.slice(0, 3)}****${mobile.slice(-4)}`
+  }
+
+  private async resolveWalletUser(query: {
+    uid?: string
+    username?: string
+  }): Promise<UserWithAsset> {
+    if (query.uid) {
+      return this.requireUserByUid(query.uid)
+    }
+    if (query.username) {
+      return this.requireUser(query.username)
+    }
+
+    const user = await this.prisma.user.findFirst({
+      include: {
+        asset: true,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    })
+    if (!user) {
+      throw new NotFoundException('用户不存在')
+    }
+    return user
+  }
+
+  private async getUserPaymentMethod(userId: string) {
+    const config = await this.prisma.systemConfig.findUnique({
+      where: {
+        configKey: `user_payment_method:${userId}`,
+      },
+    })
+    if (!config?.configValue || typeof config.configValue !== 'object' || Array.isArray(config.configValue)) {
+      return null
+    }
+    const record = config.configValue as Record<string, unknown>
+    return {
+      type: String(record.type || ''),
+      name: String(record.name || ''),
+      account: String(record.account || ''),
+      bankName: String(record.bankName || ''),
+      qrCode: String(record.qrCode || ''),
     }
   }
 

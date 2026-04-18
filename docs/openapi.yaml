@@ -8,6 +8,8 @@ info:
     - UID 是业务主标识
     - 充值创建后自动到账，无人工审核
     - 提现仅交易时间可发起，提交即冻结并扣减暂定资产/总资产，确认完成不得二次扣款
+    - 买入、卖出、提现统一手续费 0.1%
+    - 点对点支付按“先增值后本金”扣款，收款方按 1‰ 收费（amount < 100 不收）
     - 后台支持手工转账/补款，实时改账并保留 ledger/audit/hash 留痕
     - 交易支持买入和卖出，自动撮合
     - 交易时段自动同步上金所官方开休盘，无需人工配置固定时段
@@ -95,7 +97,9 @@ paths:
     post:
       tags: [AppWithdraw]
       summary: 发起提现申请
-      description: 仅交易时间可发起，提交后立即冻结金额并扣减暂定资产/总资产，进入按提交时间排序的提现队列
+      description: |
+        仅交易时间可发起，提交后立即冻结金额并扣减暂定资产/总资产，进入按提交时间排序的提现队列。
+        提现手续费统一为 0.1%，响应返回 `feeRate`、`feeAmount`、`netAmount`。
       responses:
         '200':
           description: OK
@@ -120,6 +124,7 @@ paths:
       description: |
         买单真实落库并在事务内执行撮合。
         撮合规则为价格优先、时间优先；用户被冻结或当前非交易时段/停盘时会直接拦截。
+        手续费统一为 0.1%，响应返回 `feeRate`、`feeAmount`、`netAmount`。
         支持通过请求头 `Idempotency-Key` 或请求体 `clientRequestId` 实现幂等提交；相同键重复请求会返回同一业务结果，处理中重复请求返回 409。
       parameters:
         - in: header
@@ -144,6 +149,7 @@ paths:
       description: |
         卖单真实落库并在事务内执行撮合。
         撮合规则为价格优先、时间优先；用户被冻结或当前非交易时段/停盘时会直接拦截。
+        手续费统一为 0.1%，响应返回 `feeRate`、`feeAmount`、`netAmount`。
         支持通过请求头 `Idempotency-Key` 或请求体 `clientRequestId` 实现幂等提交；相同键重复请求会返回同一业务结果，处理中重复请求返回 409。
       parameters:
         - in: header
@@ -187,10 +193,11 @@ paths:
   /app/payments/transfer:
     post:
       tags: [AppPayment]
-      summary: 发起增值收益支付
+      summary: 发起点对点支付
       description: |
-        仅允许使用 appreciationIncome 支付，不允许动用 cashAsset 或 tentativeAsset。
-        支付成功后付款方 appreciationIncome/totalAsset 下降，收款方 appreciationIncome/totalAsset 上升。
+        扣款顺序强制为“先增值后本金”：先扣 `appreciationIncome`，不足时再扣 `principalBalance`，禁止先扣本金。
+        若动用本金，必须同步减少 `withdrawablePrincipal`。
+        收款方按 `1‰` 收费，阈值规则为 `amount < 100` 不收；返回 `receiverFeeRate`、`receiverFeeAmount`、`receiverNetAmount`。
         支持通过请求头 `Idempotency-Key` 或请求体 `clientRequestId` 幂等提交。
       parameters:
         - in: header
@@ -780,6 +787,12 @@ components:
           type: number
         cashAsset:
           type: number
+        appreciationIncome:
+          type: number
+        principalBalance:
+          type: number
+        withdrawablePrincipal:
+          type: number
         totalAsset:
           type: number
     RechargeOrder:
@@ -813,6 +826,13 @@ components:
         uid:
           type: integer
         amount:
+          type: number
+        feeRate:
+          type: number
+          example: 0.001
+        feeAmount:
+          type: number
+        netAmount:
           type: number
         frozenAmount:
           type: number
@@ -882,6 +902,13 @@ components:
           type: integer
         amount:
           type: number
+        feeRate:
+          type: number
+          example: 0.001
+        feeAmount:
+          type: number
+        netAmount:
+          type: number
         grams:
           type: number
         status:
@@ -945,6 +972,17 @@ components:
         payeeUid:
           type: string
         amount:
+          type: number
+        appreciationUsed:
+          type: number
+        principalUsed:
+          type: number
+        receiverFeeRate:
+          type: number
+          example: 0.001
+        receiverFeeAmount:
+          type: number
+        receiverNetAmount:
           type: number
         scene:
           type: string

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import {
   Asset,
   AssetChangeType,
@@ -35,6 +35,7 @@ type TradeUser = User & {
 }
 
 const ACTIVE_ORDER_STATUSES: TradeStatus[] = [TradeStatus.OPEN, TradeStatus.PARTIALLY_FILLED]
+const TRADE_FEE_RATE = 0.001
 
 type AdminActor = {
   adminUserId: string
@@ -49,7 +50,7 @@ export class TradeService {
     private readonly operationIdempotencyService: OperationIdempotencyService,
   ) {}
 
-  async submit(side: 'BUY' | 'SELL', body: TradeDto, idempotencyKey?: string) {
+  async submit(side: TradeSide, body: TradeDto, idempotencyKey?: string) {
     const resolvedIdempotencyKey = idempotencyKey || body.clientRequestId
     const requestPayload = {
       side,
@@ -104,19 +105,19 @@ export class TradeService {
     return this.executeSubmit(side, body, randomUUID())
   }
 
-  private async executeSubmit(side: 'BUY' | 'SELL', body: TradeDto, requestTraceId: string) {
+  private async executeSubmit(side: TradeSide, body: TradeDto, requestTraceId: string) {
     const runtime = await this.tradeRuntimeService.getRuntimeStatus()
     if (runtime.status === 'PAUSED') {
-      throw new BadRequestException('当前处于停盘状态，暂不支持提交买卖订单')
+      throw new ForbiddenException('当前处于停盘状态，暂不支持提交买卖订单')
     }
     if (!runtime.isOpen) {
-      throw new BadRequestException('当前不在交易时段，暂不支持提交买卖订单')
+      throw new ForbiddenException('当前不在交易时段，暂不支持提交买卖订单')
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
       const user = await this.requireTradeUser(tx, body)
       if (user.status === UserStatus.FROZEN) {
-        throw new BadRequestException('当前用户已被冻结，无法发起交易')
+        throw new ForbiddenException('当前用户已被冻结，无法发起交易')
       }
       if (!user.asset) {
         throw new NotFoundException('用户资产不存在')
@@ -189,9 +190,19 @@ export class TradeService {
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
     })
 
+    const amountDecimal = new Prisma.Decimal(body.price).mul(body.quantityGrams)
+    const feeAmount = this.calculateFeeAmount(amountDecimal)
+
     return {
       message: side === 'BUY' ? '买单提交成功' : '卖单提交成功',
       data: {
+        id: result.order.id,
+        tradeNo: result.order.id,
+        tradeType: side === 'BUY' ? 'buy' : 'sell',
+        amount: this.toMoney(amountDecimal),
+        feeRate: TRADE_FEE_RATE,
+        feeAmount,
+        netAmount: this.calculateNetAmount(side, amountDecimal),
         orderId: result.order.id,
         traceId: result.order.traceId,
         side,
@@ -213,15 +224,58 @@ export class TradeService {
       orderBy: [{ submittedAt: 'desc' }, { createdAt: 'desc' }],
       take: 20,
     })
+    const orderIds = orders.map((item) => item.id)
+    const hashRecords =
+      orderIds.length > 0
+        ? await this.prisma.hashRecord.findMany({
+            where: {
+              tradeOrderId: {
+                in: orderIds,
+              },
+            },
+            orderBy: {
+              createdAt: 'desc',
+            },
+          })
+        : []
+
+    const hashByTradeId = new Map<
+      string,
+      {
+        syncStatus: string
+        syncLagMs: number
+      }
+    >()
+    for (const item of hashRecords) {
+      if (!item.tradeOrderId || hashByTradeId.has(item.tradeOrderId)) {
+        continue
+      }
+      const syncLagMs =
+        item.syncedAt?.getTime() && item.createdAt?.getTime()
+          ? Math.max(item.syncedAt.getTime() - item.createdAt.getTime(), 0)
+          : Math.max(Date.now() - item.createdAt.getTime(), 0)
+      hashByTradeId.set(item.tradeOrderId, {
+        syncStatus: item.syncStatus || 'PENDING',
+        syncLagMs,
+      })
+    }
 
     return orders.map((item) => ({
       id: item.id,
+      tradeNo: item.id,
       orderId: item.id,
+      tradeType: item.side === TradeSide.BUY ? 'buy' : 'sell',
+      amount: this.toMoney(new Prisma.Decimal(item.price).mul(item.quantityGrams)),
+      feeRate: TRADE_FEE_RATE,
+      feeAmount: this.calculateFeeAmount(new Prisma.Decimal(item.price).mul(item.quantityGrams)),
+      netAmount: this.calculateNetAmount(item.side, new Prisma.Decimal(item.price).mul(item.quantityGrams)),
       type: item.side === TradeSide.BUY ? '买入' : '卖出',
       side: item.side,
       name: item.assetCode,
       assetCode: item.assetCode,
       status: item.status,
+      syncStatus: hashByTradeId.get(item.id)?.syncStatus || 'PENDING',
+      syncLagMs: hashByTradeId.get(item.id)?.syncLagMs || 0,
       time: formatDateTime(item.submittedAt),
       submittedAt: item.submittedAt,
       price: Number(item.price).toFixed(2),
@@ -780,6 +834,24 @@ export class TradeService {
 
   private calculateOrderAmount(price: Prisma.Decimal | number, grams: Prisma.Decimal | number) {
     return toNumber(price) * toNumber(grams)
+  }
+
+  private calculateFeeAmount(amount: Prisma.Decimal | number) {
+    const amountDecimal = new Prisma.Decimal(amount)
+    return this.toMoney(amountDecimal.mul(TRADE_FEE_RATE))
+  }
+
+  private calculateNetAmount(side: TradeSide, amount: Prisma.Decimal | number) {
+    const amountDecimal = new Prisma.Decimal(amount)
+    const feeAmount = new Prisma.Decimal(this.calculateFeeAmount(amountDecimal))
+    if (side === TradeSide.BUY) {
+      return this.toMoney(amountDecimal.plus(feeAmount))
+    }
+    return this.toMoney(amountDecimal.minus(feeAmount))
+  }
+
+  private toMoney(value: Prisma.Decimal | number) {
+    return Number(new Prisma.Decimal(value).toFixed(2))
   }
 
   private resolveOrderStatus(filledGrams: Prisma.Decimal, quantityGrams: Prisma.Decimal) {

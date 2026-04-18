@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common'
+import { TradeSide, TradeStatus } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 import { TradeRuntimeService } from '../trade/trade-runtime.service'
 
 const OUNCE_TO_GRAM = 31.1035
 const CHART_PERIODS = ['1m', 'hourly', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly'] as const
+const ORDER_BOOK_DEPTH = 5
 const MS_IN_MINUTE = 60 * 1000
 
 type ChartPeriod = (typeof CHART_PERIODS)[number]
@@ -27,6 +29,11 @@ type TradeTick = {
   timestamp: number
   price: number
   volume: number
+}
+type MarketPeriodOption = {
+  label: string
+  value: ChartPeriod
+  type: 'area' | 'candle'
 }
 
 const MARKET_PRICE_CONFIG: Record<string, MarketAssetConfig> = {
@@ -199,6 +206,15 @@ const PERIOD_LOOKBACK: Record<ChartPeriod, number> = {
   quarterly: 20,
   yearly: 10,
 }
+const MARKET_PERIOD_OPTIONS: MarketPeriodOption[] = [
+  { label: 'market.timeShare', value: '1m', type: 'area' },
+  { label: 'market.hourlyK', value: 'hourly', type: 'candle' },
+  { label: 'market.dailyK', value: 'daily', type: 'candle' },
+  { label: 'market.weeklyK', value: 'weekly', type: 'candle' },
+  { label: 'market.monthlyK', value: 'monthly', type: 'candle' },
+  { label: 'market.quarterlyK', value: 'quarterly', type: 'candle' },
+  { label: 'market.yearlyK', value: 'yearly', type: 'candle' },
+]
 
 @Injectable()
 export class MarketService {
@@ -215,19 +231,28 @@ export class MarketService {
   }
 
   async getPrices() {
-    return Promise.all([this.fetchMetalQuote('AU9999'), this.fetchMetalQuote('AG9999')])
+    const assets = Object.keys(MARKET_PRICE_CONFIG) as MarketAssetCode[]
+    const quotes = await Promise.all(
+      assets.map(async (assetCode) => {
+        const config = MARKET_PRICE_CONFIG[assetCode]
+        if (config.url) {
+          try {
+            return await this.fetchMetalQuote(assetCode)
+          } catch (error) {
+            this.logger.warn(
+              `[MARKET_FALLBACK] ${assetCode} 使用本地兜底行情: ${this.toErrorMessage(error)}`,
+            )
+          }
+        }
+        return this.buildLocalQuote(assetCode)
+      }),
+    )
+
+    return quotes
   }
 
   async getTradingPeriods() {
-    const windows = await this.tradeRuntimeService.getTradingWindows()
-    return windows.map((item) => ({
-      label: item.label,
-      dayIndexes: item.dayIndexes,
-      startMinutes: item.startMinutes,
-      endMinutes: item.endMinutes,
-      session: item.session,
-      status: item.status,
-    }))
+    return MARKET_PERIOD_OPTIONS
   }
 
   async getKLine(assetCode = 'AU9999', period = '1m') {
@@ -239,11 +264,62 @@ export class MarketService {
     const anchorPrice = await this.resolveAnchorPrice(resolvedAssetCode)
     const tradeTicks = await this.loadTradeTicks(resolvedAssetCode, bucketStarts[0], now)
 
-    if (tradeTicks.length === 0) {
-      return this.buildSyntheticCandles(resolvedAssetCode, resolvedPeriod, bucketStarts, anchorPrice)
+    const rows =
+      tradeTicks.length === 0
+        ? this.buildSyntheticCandles(
+            resolvedAssetCode,
+            resolvedPeriod,
+            bucketStarts,
+            anchorPrice,
+          )
+        : this.aggregateCandles(
+            resolvedAssetCode,
+            resolvedPeriod,
+            bucketStarts,
+            tradeTicks,
+            anchorPrice,
+          )
+
+    return rows.map((item) => ({
+      ...item,
+      // 兼容文档字段，前端图表仍使用 timestamp
+      time: item.timestamp,
+    }))
+  }
+
+  async getOrderBook(assetCode = 'AU9999') {
+    const resolvedAssetCode = this.normalizeAssetCode(assetCode)
+    const orders = await this.prisma.tradeOrder.findMany({
+      where: {
+        assetCode: resolvedAssetCode,
+        status: {
+          in: [TradeStatus.OPEN, TradeStatus.PARTIALLY_FILLED],
+        },
+      },
+      select: {
+        side: true,
+        price: true,
+        quantityGrams: true,
+        filledGrams: true,
+      },
+      orderBy: [{ submittedAt: 'asc' }],
+      take: 2000,
+    })
+
+    if (!orders.length) {
+      const anchorPrice = await this.resolveOrderBookAnchorPrice(resolvedAssetCode)
+      return this.buildSyntheticOrderBook(anchorPrice)
     }
 
-    return this.aggregateCandles(resolvedAssetCode, resolvedPeriod, bucketStarts, tradeTicks, anchorPrice)
+    const buy = this.buildOrderBookLevels(orders, TradeSide.BUY)
+    const sell = this.buildOrderBookLevels(orders, TradeSide.SELL)
+
+    return {
+      asset: resolvedAssetCode,
+      buy,
+      sell,
+      updatedAt: this.formatOrderBookUpdatedAt(new Date()),
+    }
   }
 
   private async fetchMetalQuote(assetCode: MarketAssetCode) {
@@ -544,5 +620,150 @@ export class MarketService {
 
   private toPrice(value: number, decimals = 2) {
     return Number(value.toFixed(decimals))
+  }
+
+  private toErrorMessage(error: unknown) {
+    if (error instanceof Error && error.message) {
+      return error.message
+    }
+    return 'unknown_error'
+  }
+
+  private buildLocalQuote(assetCode: MarketAssetCode) {
+    const config = MARKET_PRICE_CONFIG[assetCode]
+    const previousPrice = this.latestPrices.get(assetCode) ?? config.basePrice
+    const randomDrift = (Math.random() - 0.5) * config.basePrice * 0.003
+    const nextPrice = Math.max(config.basePrice * 0.35, previousPrice + randomDrift)
+    const normalizedPrice = this.toPrice(nextPrice, config.decimals)
+    const percentChange =
+      previousPrice === 0 ? 0 : ((normalizedPrice - previousPrice) / previousPrice) * 100
+
+    this.latestPrices.set(assetCode, normalizedPrice)
+
+    return {
+      id: assetCode,
+      assetCode,
+      symbol: config.symbol,
+      name: config.name,
+      currency: 'CNY',
+      currencySymbol: '¥',
+      price: normalizedPrice,
+      change: `${percentChange >= 0 ? '+' : ''}${percentChange.toFixed(2)}%`,
+      up: percentChange >= 0,
+      precision: 0.01,
+      refreshSeconds: 4,
+      timestamp: new Date().toISOString(),
+      updatedAtReadable: 'just now',
+      source: 'local-fallback',
+      status: 'degraded' as const,
+    }
+  }
+
+  private buildOrderBookLevels(
+    orders: Array<{
+      side: TradeSide
+      price: unknown
+      quantityGrams: unknown
+      filledGrams: unknown
+    }>,
+    side: TradeSide,
+  ) {
+    const levelMap = new Map<number, number>()
+
+    for (const item of orders) {
+      if (item.side !== side) {
+        continue
+      }
+      const price = Number(item.price)
+      const quantity = Number(item.quantityGrams)
+      const filled = Number(item.filledGrams)
+      const remaining = quantity - filled
+      if (!Number.isFinite(price) || !Number.isFinite(remaining) || remaining <= 0) {
+        continue
+      }
+      levelMap.set(price, (levelMap.get(price) || 0) + remaining)
+    }
+
+    const levels = Array.from(levelMap.entries())
+      .map(([price, quantity]) => ({
+        price: this.toPrice(price, 2),
+        quantity: Number(quantity.toFixed(4)),
+      }))
+      .sort((left, right) => {
+        return side === TradeSide.BUY
+          ? right.price - left.price
+          : left.price - right.price
+      })
+      .slice(0, ORDER_BOOK_DEPTH)
+
+    if (side === TradeSide.SELL) {
+      return levels
+        .slice()
+        .reverse()
+        .map((item, index) => ({
+          level: levels.length - index,
+          price: item.price.toFixed(2),
+          quantity: Number(item.quantity.toFixed(4)),
+        }))
+    }
+
+    return levels.map((item, index) => ({
+      level: index + 1,
+      price: item.price.toFixed(2),
+      quantity: Number(item.quantity.toFixed(4)),
+    }))
+  }
+
+  private async resolveOrderBookAnchorPrice(assetCode: MarketAssetCode) {
+    const latestMatch = await this.prisma.tradeMatch.findFirst({
+      where: {
+        OR: [{ buyOrder: { assetCode } }, { sellOrder: { assetCode } }],
+      },
+      orderBy: {
+        matchedAt: 'desc',
+      },
+      select: {
+        matchedPrice: true,
+      },
+    })
+    if (latestMatch) {
+      return Number(latestMatch.matchedPrice)
+    }
+    return this.latestPrices.get(assetCode) || MARKET_PRICE_CONFIG[assetCode].basePrice
+  }
+
+  private buildSyntheticOrderBook(anchorPrice: number) {
+    const sell = Array.from({ length: ORDER_BOOK_DEPTH }, (_, index) => {
+      const level = ORDER_BOOK_DEPTH - index
+      const spread = level * 0.02
+      return {
+        level,
+        price: this.toPrice(anchorPrice + spread, 2).toFixed(2),
+        quantity: Number((12 + level * 3).toFixed(4)),
+      }
+    })
+
+    const buy = Array.from({ length: ORDER_BOOK_DEPTH }, (_, index) => {
+      const level = index + 1
+      const spread = level * 0.02
+      return {
+        level,
+        price: this.toPrice(anchorPrice - spread, 2).toFixed(2),
+        quantity: Number((10 + level * 4).toFixed(4)),
+      }
+    })
+
+    return {
+      buy,
+      sell,
+      updatedAt: this.formatOrderBookUpdatedAt(new Date()),
+    }
+  }
+
+  private formatOrderBookUpdatedAt(date: Date) {
+    const hour = String(date.getHours()).padStart(2, '0')
+    const minute = String(date.getMinutes()).padStart(2, '0')
+    const second = String(date.getSeconds()).padStart(2, '0')
+    return `${hour}:${minute}:${second}`
   }
 }

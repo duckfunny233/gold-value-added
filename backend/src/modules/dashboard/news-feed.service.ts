@@ -13,8 +13,10 @@ type AppNewsListItem = {
   id: string
   title: string
   date: string
+  createdAt: string
   summary: string
   thumbnail: string
+  cover: string
   views?: string
 }
 
@@ -22,9 +24,11 @@ type AppNewsDetail = {
   id: string
   title: string
   date: string
+  createdAt: string
   views: string
   author: string
   image: string
+  cover: string
   content: string
   summary: string
   linkUrl?: string
@@ -217,16 +221,20 @@ export class NewsFeedService {
         id: newsId,
         title,
         date: pickFirstString(item.ctime) || formatDateTime(publishedAt),
+        createdAt: publishedAtIso || '',
         summary,
         thumbnail: imageUrl,
+        cover: imageUrl,
       },
       detail: {
         id: newsId,
         title,
         date: pickFirstString(item.ctime) || formatDateTime(publishedAt),
+        createdAt: publishedAtIso || '',
         views: '-',
         author,
         image: imageUrl,
+        cover: imageUrl,
         summary,
         linkUrl: linkUrl || undefined,
         content: this.buildDetailContent({

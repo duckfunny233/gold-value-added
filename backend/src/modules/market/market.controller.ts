@@ -31,4 +31,9 @@ export class MarketController {
   getKLine(@Query('asset') asset?: string, @Query('period') period?: string) {
     return this.marketService.getKLine(asset, period)
   }
+
+  @Get('market/order-book')
+  getOrderBook(@Query('asset') asset?: string) {
+    return this.marketService.getOrderBook(asset)
+  }
 }

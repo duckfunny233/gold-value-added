@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Logo from '../../components/Logo.vue'
-import { ArrowLeft, Loader2, Upload, X, Image, FileText, CreditCard, Building2, Briefcase } from 'lucide-vue-next'
+import { ArrowLeft, Loader2, Upload, X, Image, FileText, CreditCard, Building2, Briefcase, Eye, EyeOff } from 'lucide-vue-next'
 import { AuthService } from '../../services/auth'
 import { useToast } from '../../composables/useToast'
 
@@ -113,6 +113,7 @@ const clearProof = () => {
 
 const countdown = ref(0)
 const isLoading = ref(false)
+const showPassword = ref(false)
 let timer = null
 
 const startCountdown = async () => {
@@ -331,12 +332,22 @@ const handleRegister = async () => {
           <!-- Password -->
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{{ t('auth.register.password') }}</label>
-            <input 
-              v-model="password"
-              type="password" 
-              :placeholder="t('auth.register.passwordPlaceholder')"
-              class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-gray-900 outline-none transition-all"
-            />
+            <div class="relative">
+              <input 
+                v-model="password"
+                :type="showPassword ? 'text' : 'password'" 
+                :placeholder="t('auth.register.passwordPlaceholder')"
+                class="w-full px-4 py-3 pr-12 rounded-xl border border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-gray-900 outline-none transition-all"
+              />
+              <button
+                type="button"
+                @click="showPassword = !showPassword"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-1"
+              >
+                <Eye v-if="!showPassword" :size="20" />
+                <EyeOff v-else :size="20" />
+              </button>
+            </div>
           </div>
 
           <!-- 实名认证区域 -->

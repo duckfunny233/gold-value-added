@@ -508,12 +508,12 @@ onBeforeUnmount(() => {
 .tier-content {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.75rem;
   width: 100%;
 }
 
 .tier-text {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -614,6 +614,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   box-shadow: 0 8px 22px rgba(245, 158, 11, 0.35);
+  z-index: 9999;
 }
 
 .gold-chain-entry span {

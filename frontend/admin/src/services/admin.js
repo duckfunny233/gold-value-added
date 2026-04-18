@@ -2,7 +2,7 @@ import { apiFetch } from '../utils/request'
 import { toQueryString } from '../../../shared/utils/query'
 
 const DEFAULT_SYNC_SESSIONS = [
-  { day: '周一至周五', session: '09:00 - 11:30 / 13:30 - 21:00', status: '自动同步中' },
+  { day: '周一至周五', session: '09:00 - 11:30 / 13:30 - 15:30 / 20:00 - 次日02:30', status: '自动同步中' },
 ]
 
 const pad = (value) => String(value).padStart(2, '0')

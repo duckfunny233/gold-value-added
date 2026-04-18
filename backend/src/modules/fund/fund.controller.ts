@@ -10,6 +10,10 @@ import {
   ManualFundActionDto,
   RechargeDto,
   WithdrawDto,
+  WalletRechargeConfirmDto,
+  WalletRechargeDto,
+  WalletWithdrawSmsDto,
+  WalletWithdrawSubmitDto,
 } from './fund.dto'
 import { FundService } from './fund.service'
 
@@ -24,6 +28,30 @@ type AdminRequest = Request & {
 @Controller()
 export class FundController {
   constructor(private readonly fundService: FundService) {}
+
+  @Post('wallet/recharge')
+  @HttpCode(200)
+  createWalletRecharge(@Body() body: WalletRechargeDto) {
+    return this.fundService.createWalletRecharge(body)
+  }
+
+  @Post('wallet/recharge/:orderId/confirm')
+  @HttpCode(200)
+  confirmWalletRecharge(@Param('orderId') orderId: string, @Body() body: WalletRechargeConfirmDto) {
+    return this.fundService.confirmWalletRecharge(orderId, body)
+  }
+
+  @Post('wallet/withdraw/send-sms')
+  @HttpCode(200)
+  sendWithdrawSms(@Body() body: WalletWithdrawSmsDto) {
+    return this.fundService.sendWalletWithdrawSms(body)
+  }
+
+  @Post('wallet/withdraw')
+  @HttpCode(200)
+  createWalletWithdraw(@Body() body: WalletWithdrawSubmitDto) {
+    return this.fundService.createWalletWithdraw(body)
+  }
 
   @Post('app/recharges')
   @HttpCode(200)

@@ -3,6 +3,8 @@ import {
   Prisma,
   RealNameStatus,
   RechargeStatus,
+  TradeSide,
+  TradeStatus,
   TradeOrder,
   UserStatus,
   WithdrawalOrder,
@@ -20,12 +22,34 @@ import {
 } from '../../common/utils/admin-view.util'
 import { sha256 } from '../../common/utils/hash.util'
 import { PrismaService } from '../../prisma/prisma.service'
-import { AdminUserManualCheckDto, AdminUsersQueryDto, UserQueryDto } from './user.dto'
+import {
+  AdminUserManualCheckDto,
+  AdminUsersQueryDto,
+  PaymentMethodDto,
+  UserQueryDto,
+} from './user.dto'
 
 type AdminActor = {
   adminUserId: string
   username: string
 }
+
+type AppPaymentMethod = {
+  type: 'wechat' | 'alipay' | 'bankcard'
+  name: string
+  account?: string
+  bankName?: string
+  qrCode?: string
+  id: string
+  createdAt: string
+  updatedAt: string
+}
+
+const METAL_SPECS = [10, 50, 100, 1000, 5000] as const
+const GOLD_UNIT_PRICE = 1046.2
+const SILVER_UNIT_PRICE = 18.83
+const STANDARD_FEE_RATE = 0.001
+const P2P_FEE_FREE_THRESHOLD = 100
 
 @Injectable()
 export class UserService {
@@ -39,74 +63,303 @@ export class UserService {
             uid: true,
             nickname: true,
             username: true,
+            createdAt: true,
           },
         },
       },
-      orderBy: [{ totalAsset: 'desc' }, { goldHoldingGrams: 'desc' }, { updatedAt: 'desc' }],
-      take: 10,
     })
 
-    return {
-      items: assets.map((item, index) => ({
-        sequenceNo: index + 1,
+    const leaderboardItems = assets
+      .map((item) => ({
         uid: item.user.uid,
         nickname: item.user.nickname || item.user.username,
         goldGrams: toNumber(item.goldHoldingGrams),
-        investedAmount: toNumber(item.totalAsset),
+        totalAsset: toNumber(item.totalAsset),
+        // UID 形如 UID00000001，和注册先后序号一一对应
+        sequenceNo: Number(String(item.user.uid).replace(/^UID/i, '')) || Number.MAX_SAFE_INTEGER,
+        updatedAt: item.updatedAt,
+      }))
+      .sort((left, right) => {
+        if (right.goldGrams !== left.goldGrams) {
+          return right.goldGrams - left.goldGrams
+        }
+        if (right.totalAsset !== left.totalAsset) {
+          return right.totalAsset - left.totalAsset
+        }
+        return left.sequenceNo - right.sequenceNo
+      })
+      .slice(0, 10)
+
+    return {
+      items: leaderboardItems.map((item, index) => ({
+        rank: index + 1,
+        sequenceNo: item.sequenceNo,
+        uid: item.uid,
+        nickname: item.nickname,
+        goldGrams: item.goldGrams,
+        totalAsset: item.totalAsset,
+        // 兼容旧前端字段，后续可删除
+        investedAmount: item.totalAsset,
         updatedAt: formatDateTime(item.updatedAt),
       })),
     }
   }
 
   async getPublicGoldChain() {
-    const assets = await this.prisma.asset.findMany({
+    const hashRecords: any[] = await this.prisma.hashRecord.findMany({
+      where: {
+        referenceType: {
+          in: [
+            'TRADE_ORDER',
+            'TRADE_MATCH',
+            'WITHDRAWAL_ORDER',
+            'RECHARGE_ORDER',
+            'RECHARGE_ORDER_CREATE',
+            'RECHARGE_ORDER_CONFIRM',
+            'PAYMENT_ORDER',
+          ],
+        },
+      },
       include: {
-        user: {
+        tradeOrder: {
           select: {
-            uid: true,
-            nickname: true,
-            username: true,
-            tradeOrders: {
+            id: true,
+            userId: true,
+            side: true,
+            assetCode: true,
+            price: true,
+            quantityGrams: true,
+            filledGrams: true,
+            submittedAt: true,
+            user: {
               select: {
-                side: true,
-                assetCode: true,
-                quantityGrams: true,
-                filledGrams: true,
-                submittedAt: true,
+                id: true,
+                uid: true,
+                nickname: true,
+                username: true,
               },
-              orderBy: {
-                submittedAt: 'desc',
+            },
+          },
+        },
+        withdrawalOrder: {
+          select: {
+            id: true,
+            userId: true,
+            amount: true,
+            submittedAt: true,
+            user: {
+              select: {
+                id: true,
+                uid: true,
+                nickname: true,
+                username: true,
+              },
+            },
+          },
+        },
+        rechargeOrder: {
+          select: {
+            id: true,
+            userId: true,
+            amount: true,
+            createdAt: true,
+            user: {
+              select: {
+                id: true,
+                uid: true,
+                nickname: true,
+                username: true,
+              },
+            },
+          },
+        },
+        paymentOrder: {
+          select: {
+            id: true,
+            amount: true,
+            scene: true,
+            createdAt: true,
+            payer: {
+              select: {
+                id: true,
+                uid: true,
+                nickname: true,
+                username: true,
+              },
+            },
+            payee: {
+              select: {
+                id: true,
+                uid: true,
+                nickname: true,
+                username: true,
               },
             },
           },
         },
       },
       orderBy: {
-        updatedAt: 'desc',
+        createdAt: 'desc',
       },
-      take: 12,
+      take: 50,
+    })
+
+    if (!hashRecords.length) {
+      return {
+        items: [],
+      }
+    }
+
+    const relatedUserIds = unique(
+      hashRecords
+        .flatMap((record) => [
+          record.tradeOrder?.user?.id,
+          record.withdrawalOrder?.user?.id,
+          record.rechargeOrder?.user?.id,
+          record.paymentOrder?.payer?.id,
+          record.paymentOrder?.payee?.id,
+        ])
+        .filter((item): item is string => !!item),
+    )
+
+    const [users, userOrders] = await Promise.all([
+      relatedUserIds.length
+        ? this.prisma.user.findMany({
+            where: {
+              id: {
+                in: relatedUserIds,
+              },
+            },
+            include: {
+              asset: true,
+            },
+          })
+        : [],
+      relatedUserIds.length
+        ? this.prisma.tradeOrder.findMany({
+            where: {
+              userId: {
+                in: relatedUserIds,
+              },
+            },
+            select: {
+              userId: true,
+              side: true,
+              assetCode: true,
+              quantityGrams: true,
+              filledGrams: true,
+              status: true,
+            },
+          })
+        : [],
+    ])
+
+    const userById = new Map(users.map((item) => [item.id, item]))
+    const tradeStatsByUser = new Map<string, { buyCount: number; sellCount: number; silverGrams: number }>()
+    userOrders.forEach((order) => {
+      const current = tradeStatsByUser.get(order.userId) || {
+        buyCount: 0,
+        sellCount: 0,
+        silverGrams: 0,
+      }
+
+      if (order.side === TradeSide.BUY) {
+        current.buyCount += 1
+      } else {
+        current.sellCount += 1
+      }
+
+      if (
+        order.assetCode?.startsWith('AG') &&
+        order.status !== TradeStatus.CANCELLED &&
+        order.status !== TradeStatus.REJECTED
+      ) {
+        const baseGrams = toNumber(order.filledGrams || order.quantityGrams)
+        current.silverGrams += order.side === TradeSide.BUY ? baseGrams : -baseGrams
+      }
+
+      tradeStatsByUser.set(order.userId, current)
     })
 
     return {
-      items: assets.map((item, index) => {
-        const buyCount = item.user.tradeOrders.filter((order) => order.side === 'BUY').length
-        const sellCount = item.user.tradeOrders.filter((order) => order.side === 'SELL').length
-        const silverGrams = item.user.tradeOrders
-          .filter((order) => order.assetCode === 'AG9999')
-          .reduce((sum, order) => sum + toNumber(order.filledGrams || order.quantityGrams), 0)
-        const lastTradeAt = item.user.tradeOrders[0]?.submittedAt || item.updatedAt
+      items: hashRecords.map((record, index) => {
+        const primaryUserId = this.resolveGoldChainPrimaryUserId(record)
+        const primaryUser = primaryUserId ? userById.get(primaryUserId) : null
+        const stats = primaryUserId
+          ? tradeStatsByUser.get(primaryUserId) || { buyCount: 0, sellCount: 0, silverGrams: 0 }
+          : { buyCount: 0, sellCount: 0, silverGrams: 0 }
+
+        let amount = 0
+        let feeRate: number | null = null
+        let feeAmount: number | null = null
+        let netAmount: number | null = null
+        let receiverFeeRate: number | null = null
+        let receiverFeeAmount: number | null = null
+        let receiverNetAmount: number | null = null
+        let appreciationUsed: number | null = null
+        let principalUsed: number | null = null
+
+        if (record.tradeOrder) {
+          amount = Number(
+            (toNumber(record.tradeOrder.price) * toNumber(record.tradeOrder.quantityGrams)).toFixed(2),
+          )
+          feeRate = STANDARD_FEE_RATE
+          feeAmount = this.calculateStandardFeeAmount(amount)
+          netAmount =
+            record.tradeOrder.side === TradeSide.BUY
+              ? Number((amount + feeAmount).toFixed(2))
+              : Number((amount - feeAmount).toFixed(2))
+        } else if (record.withdrawalOrder) {
+          amount = Number(toNumber(record.withdrawalOrder.amount).toFixed(2))
+          feeRate = STANDARD_FEE_RATE
+          feeAmount = this.calculateStandardFeeAmount(amount)
+          netAmount = Number((amount - feeAmount).toFixed(2))
+        } else if (record.paymentOrder) {
+          amount = Number(toNumber(record.paymentOrder.amount).toFixed(2))
+          receiverFeeRate = STANDARD_FEE_RATE
+          receiverFeeAmount = this.calculateP2pReceiverFeeAmount(amount)
+          receiverNetAmount = Number((amount - receiverFeeAmount).toFixed(2))
+          appreciationUsed = amount
+          principalUsed = 0
+        } else if (record.rechargeOrder) {
+          amount = Number(toNumber(record.rechargeOrder.amount).toFixed(2))
+        }
+
+        const createdAt = formatDateTime(record.createdAt)
+        const syncLagMs = record.syncedAt
+          ? Math.max(record.syncedAt.getTime() - record.createdAt.getTime(), 0)
+          : Math.max(Date.now() - record.createdAt.getTime(), 0)
 
         return {
           sequenceNo: 100001 + index,
-          uid: item.user.uid,
-          nickname: item.user.nickname || item.user.username,
-          buyInfo: `买入 ${buyCount} 笔 / 卖出 ${sellCount} 笔`,
-          buyCount,
-          sellCount,
-          goldGrams: toNumber(item.goldHoldingGrams),
-          silverGrams: Number(silverGrams.toFixed(2)),
-          totalAssets: toNumber(item.totalAsset),
-          updatedAt: formatDateTime(lastTradeAt),
+          uid: primaryUser?.uid || '',
+          nickname: primaryUser?.nickname || primaryUser?.username || '系统记录',
+          buyInfo: `买入 ${stats.buyCount} 笔 / 卖出 ${stats.sellCount} 笔`,
+          buyCount: stats.buyCount,
+          sellCount: stats.sellCount,
+          goldGrams: toNumber(primaryUser?.asset?.goldHoldingGrams),
+          silverGrams: Number(Math.max(stats.silverGrams, 0).toFixed(2)),
+          totalAssets: toNumber(primaryUser?.asset?.totalAsset),
+          updatedAt: createdAt,
+
+          traceId: record.traceId,
+          hashValue: record.sha256,
+          chainSyncStatus: this.mapGoldChainSyncStatus(record.syncStatus),
+          syncStatus: record.syncStatus,
+          syncLagMs,
+          createdAt,
+          eventType: this.mapGoldChainEventType(record.referenceType),
+          referenceType: record.referenceType,
+          referenceId: record.referenceId,
+          amount,
+          feeRate,
+          feeAmount,
+          netAmount,
+          receiverFeeRate,
+          receiverFeeAmount,
+          receiverNetAmount,
+          appreciationUsed,
+          principalUsed,
         }
       }),
     }
@@ -129,6 +382,149 @@ export class UserService {
       totalAsset: toNumber(user.asset.totalAsset),
       updatedAt: user.asset.updatedAt,
     }
+  }
+
+  async getAppProfile(query: UserQueryDto = {}) {
+    const user = await this.resolveAppUser(query)
+    const asset = user.asset
+    const goldGrams = toNumber(asset?.goldHoldingGrams)
+    const silverGrams = await this.getUserSilverHoldingGrams(user.id)
+    const marketValue = goldGrams * GOLD_UNIT_PRICE + silverGrams * SILVER_UNIT_PRICE
+
+    const cashBalance = toNumber(asset?.cashAsset)
+    const tentativeAsset = toNumber(asset?.tentativeAsset)
+    const appreciationIncome = toNumber(asset?.appreciationIncome)
+    const withdrawFrozenAmount = toNumber(asset?.withdrawFrozenAmount)
+    const totalAssetFromLedger = toNumber(asset?.totalAsset)
+    const totalAsset =
+      totalAssetFromLedger > 0 ? totalAssetFromLedger : cashBalance + marketValue
+    const principalBalance = Math.max(totalAsset - appreciationIncome, 0)
+    const withdrawablePrincipal = Math.max(
+      principalBalance - withdrawFrozenAmount,
+      0,
+    )
+    const yesterdayProfit = appreciationIncome * 0.08
+
+    return {
+      id: user.uid,
+      uid: user.uid,
+      username: user.username,
+      nickname: user.nickname || user.username,
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.uid)}`,
+      fee: '--',
+      realNameVerified: user.realNameStatus === RealNameStatus.VERIFIED,
+      principalBalance,
+      withdrawablePrincipal,
+      appreciationIncome,
+      tentativeAsset,
+      assets: [
+        { key: 'profile.assets.total', value: this.formatMoney(totalAsset), unit: 'CNY' },
+        {
+          key: 'profile.assets.balance',
+          value: this.formatMoney(cashBalance),
+          unit: 'CNY',
+        },
+        {
+          key: 'profile.assets.marketValue',
+          value: this.formatMoney(marketValue),
+          unit: 'CNY',
+        },
+        {
+          key: 'profile.assets.yesterdayProfit',
+          value: this.formatSignedMoney(yesterdayProfit),
+          unit: 'CNY',
+          trend: yesterdayProfit >= 0 ? 'up' : 'down',
+        },
+        {
+          key: 'profile.assets.accumulatedProfit',
+          value: this.formatSignedMoney(appreciationIncome),
+          unit: 'CNY',
+          trend: appreciationIncome >= 0 ? 'up' : 'down',
+        },
+      ],
+      goldPositions: this.buildMetalPositions('gold', goldGrams, GOLD_UNIT_PRICE),
+      silverPositions: this.buildMetalPositions(
+        'silver',
+        silverGrams,
+        SILVER_UNIT_PRICE,
+      ),
+    }
+  }
+
+  async hasRechargeHistory(query: UserQueryDto = {}) {
+    const user = await this.resolveAppUser(query)
+    const count = await this.prisma.rechargeOrder.count({
+      where: {
+        userId: user.id,
+        status: {
+          in: [
+            RechargeStatus.PENDING,
+            RechargeStatus.PROCESSING,
+            RechargeStatus.COMPLETED,
+          ],
+        },
+      },
+    })
+    return count > 0
+  }
+
+  async getPaymentMethod(query: UserQueryDto = {}) {
+    const user = await this.resolveAppUser(query)
+    const config = await this.prisma.systemConfig.findUnique({
+      where: {
+        configKey: this.paymentMethodConfigKey(user.id),
+      },
+    })
+    return this.parsePaymentMethodConfig(config?.configValue)
+  }
+
+  async bindPaymentMethod(body: PaymentMethodDto) {
+    const user = await this.resolveAppUser({
+      uid: body.uid,
+      username: body.username,
+    })
+
+    const normalizedType = this.normalizePaymentType(body.type)
+    const name = String(body.name || '').trim()
+    if (!normalizedType || !name) {
+      throw new NotFoundException('收款方式参数不完整')
+    }
+
+    const payload: AppPaymentMethod = {
+      id: `pm_${Date.now()}`,
+      type: normalizedType,
+      name,
+      account: body.account?.trim() || '',
+      bankName: body.bankName?.trim() || '',
+      qrCode: body.qrCode || '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    await this.prisma.systemConfig.upsert({
+      where: {
+        configKey: this.paymentMethodConfigKey(user.id),
+      },
+      create: {
+        configKey: this.paymentMethodConfigKey(user.id),
+        configValue: payload as unknown as Prisma.InputJsonValue,
+      },
+      update: {
+        configValue: payload as unknown as Prisma.InputJsonValue,
+      },
+    })
+
+    return payload
+  }
+
+  async unbindPaymentMethod(query: UserQueryDto = {}) {
+    const user = await this.resolveAppUser(query)
+    await this.prisma.systemConfig.deleteMany({
+      where: {
+        configKey: this.paymentMethodConfigKey(user.id),
+      },
+    })
+    return { success: true }
   }
 
   async getProfile(query: UserQueryDto) {
@@ -376,6 +772,203 @@ export class UserService {
         note: body.note?.trim() || '已通过后台人工核查入口发起复核',
       },
     }
+  }
+
+  private async resolveAppUser(query: UserQueryDto = {}) {
+    const user = await this.findUser(query)
+    if (!user) {
+      throw new NotFoundException('用户不存在')
+    }
+    return user
+  }
+
+  private paymentMethodConfigKey(userId: string) {
+    return `user_payment_method:${userId}`
+  }
+
+  private parsePaymentMethodConfig(value: Prisma.JsonValue | null | undefined) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null
+    }
+    const record = value as Record<string, unknown>
+    const type = this.normalizePaymentType(record.type)
+    const name = String(record.name || '').trim()
+    if (!type || !name) {
+      return null
+    }
+    return {
+      id: String(record.id || ''),
+      type,
+      name,
+      account: String(record.account || ''),
+      bankName: String(record.bankName || ''),
+      qrCode: String(record.qrCode || ''),
+      createdAt: String(record.createdAt || ''),
+      updatedAt: String(record.updatedAt || ''),
+    }
+  }
+
+  private normalizePaymentType(input: unknown) {
+    const raw = String(input || '').toLowerCase()
+    if (raw === 'wechat') {
+      return 'wechat' as const
+    }
+    if (raw === 'alipay') {
+      return 'alipay' as const
+    }
+    if (raw === 'bankcard' || raw === 'bank') {
+      return 'bankcard' as const
+    }
+    return null
+  }
+
+  private buildMetalPositions(
+    type: 'gold' | 'silver',
+    totalGrams: number,
+    unitPrice: number,
+  ) {
+    let remaining = Math.max(0, Number(totalGrams.toFixed(4)))
+    return METAL_SPECS.slice().sort((a, b) => a - b).map((grams) => {
+      const count = Math.floor(remaining / grams)
+      remaining = Number((remaining - count * grams).toFixed(4))
+      return {
+        level: this.getMetalLevel(type, grams),
+        weight: `${grams}g`,
+        price: this.formatMoney(grams * unitPrice),
+        count,
+        bgImage: this.getMetalImage(type, grams),
+      }
+    })
+  }
+
+  private getMetalLevel(type: 'gold' | 'silver', grams: number) {
+    if (type === 'gold') {
+      const map: Record<number, string> = {
+        10: '影子金币',
+        50: '金叶币',
+        100: '龙金币',
+        1000: '黄金条',
+        5000: '黄金砖',
+      }
+      return map[grams] || `黄金${grams}g`
+    }
+
+    const map: Record<number, string> = {
+      10: '影子银币',
+      50: '银叶币',
+      100: '龙银币',
+      1000: '白银条',
+      5000: '白银砖',
+    }
+    return map[grams] || `白银${grams}g`
+  }
+
+  private getMetalImage(type: 'gold' | 'silver', grams: number) {
+    const goldMap: Record<number, string> = {
+      10: '/影子金币10g黄金.png',
+      50: '/金叶币50g黄金.png',
+      100: '/龙币100g黄金.png',
+      1000: '/黄金条1000g黄金.png',
+      5000: '/黄金砖5000g黄金.png',
+    }
+    const silverMap: Record<number, string> = {
+      10: '/影子金币_银.jpg',
+      50: '/金叶币50g白银.png',
+      100: '/龙币100g白银.png',
+      1000: '/黄金条1000g白银.jpg',
+      5000: '/黄金砖5000g白银.png',
+    }
+    const map = type === 'gold' ? goldMap : silverMap
+    return map[grams] || map[10]
+  }
+
+  private async getUserSilverHoldingGrams(userId: string) {
+    const orders = await this.prisma.tradeOrder.findMany({
+      where: {
+        userId,
+        assetCode: {
+          startsWith: 'AG',
+        },
+        status: {
+          notIn: [TradeStatus.CANCELLED, TradeStatus.REJECTED],
+        },
+      },
+      select: {
+        side: true,
+        quantityGrams: true,
+        filledGrams: true,
+      },
+    })
+
+    let grams = 0
+    orders.forEach((item) => {
+      const base = toNumber(item.filledGrams) > 0 ? toNumber(item.filledGrams) : toNumber(item.quantityGrams)
+      grams += item.side === 'BUY' ? base : -base
+    })
+    return Math.max(0, Number(grams.toFixed(4)))
+  }
+
+  private formatMoney(value: number) {
+    return Number(value || 0).toLocaleString('zh-CN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  }
+
+  private formatSignedMoney(value: number) {
+    const normalized = Number(value || 0)
+    const prefix = normalized > 0 ? '+' : normalized < 0 ? '-' : ''
+    return `${prefix}${this.formatMoney(Math.abs(normalized))}`
+  }
+
+  private calculateStandardFeeAmount(amount: number) {
+    return Number((Number(amount || 0) * STANDARD_FEE_RATE).toFixed(2))
+  }
+
+  private calculateP2pReceiverFeeAmount(amount: number) {
+    const normalized = Number(amount || 0)
+    if (normalized < P2P_FEE_FREE_THRESHOLD) {
+      return 0
+    }
+    return Number((normalized * STANDARD_FEE_RATE).toFixed(2))
+  }
+
+  private mapGoldChainSyncStatus(syncStatus?: string) {
+    if (syncStatus === 'SYNCED') {
+      return 'synced'
+    }
+    if ((syncStatus || '').includes('FAIL')) {
+      return 'failed'
+    }
+    return 'pending'
+  }
+
+  private mapGoldChainEventType(referenceType?: string) {
+    const value = String(referenceType || '').toUpperCase()
+    if (value.includes('TRADE')) {
+      return 'trade'
+    }
+    if (value.includes('WITHDRAW')) {
+      return 'withdrawal'
+    }
+    if (value.includes('RECHARGE')) {
+      return 'recharge'
+    }
+    if (value.includes('PAYMENT')) {
+      return 'payment'
+    }
+    return 'audit'
+  }
+
+  private resolveGoldChainPrimaryUserId(record: any) {
+    return (
+      record.tradeOrder?.user?.id ||
+      record.withdrawalOrder?.user?.id ||
+      record.rechargeOrder?.user?.id ||
+      record.paymentOrder?.payee?.id ||
+      record.paymentOrder?.payer?.id ||
+      ''
+    )
   }
 
   private async findUser(query: UserQueryDto) {

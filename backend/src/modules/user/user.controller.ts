@@ -1,8 +1,13 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common'
 import { ApiTags } from '@nestjs/swagger'
 import { Request } from 'express'
 import { AdminProtected } from '../admin-auth/admin-protected.decorator'
-import { AdminUserManualCheckDto, AdminUsersQueryDto, UserQueryDto } from './user.dto'
+import {
+  AdminUserManualCheckDto,
+  AdminUsersQueryDto,
+  PaymentMethodDto,
+  UserQueryDto,
+} from './user.dto'
 import { UserService } from './user.service'
 
 type AdminRequest = Request & {
@@ -16,6 +21,33 @@ type AdminRequest = Request & {
 @Controller()
 export class UserController {
   constructor(private readonly userService: UserService) {}
+
+  @Get('user/profile')
+  getAppProfile(@Query() query: UserQueryDto) {
+    return this.userService.getAppProfile(query)
+  }
+
+  @Get('user/recharge-history/check')
+  hasRechargeHistory(@Query() query: UserQueryDto) {
+    return this.userService.hasRechargeHistory(query)
+  }
+
+  @Get('user/payment-method')
+  getPaymentMethod(@Query() query: UserQueryDto) {
+    return this.userService.getPaymentMethod(query)
+  }
+
+  @Post('user/payment-method')
+  @HttpCode(200)
+  bindPaymentMethod(@Body() body: PaymentMethodDto) {
+    return this.userService.bindPaymentMethod(body)
+  }
+
+  @Delete('user/payment-method')
+  @HttpCode(200)
+  unbindPaymentMethod(@Query() query: UserQueryDto) {
+    return this.userService.unbindPaymentMethod(query)
+  }
 
   @Get('app/assets/overview')
   getAssetOverview(@Query() query: UserQueryDto) {

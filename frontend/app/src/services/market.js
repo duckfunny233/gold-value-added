@@ -15,9 +15,21 @@ const DEFAULT_TRADING_WINDOWS = [
   },
   {
     dayIndexes: [1, 2, 3, 4, 5],
-    label: '下午盘 13:30 - 21:00',
+    label: '下午盘 13:30 - 15:30',
     startMinutes: 13 * 60 + 30,
-    endMinutes: 21 * 60,
+    endMinutes: 15 * 60 + 30,
+  },
+  {
+    dayIndexes: [1, 2, 3, 4, 5],
+    label: '夜盘 20:00 - 23:59',
+    startMinutes: 20 * 60,
+    endMinutes: 24 * 60,
+  },
+  {
+    dayIndexes: [2, 3, 4, 5, 6],
+    label: '夜盘 00:00 - 02:30',
+    startMinutes: 0,
+    endMinutes: 2 * 60 + 30,
   },
 ]
 

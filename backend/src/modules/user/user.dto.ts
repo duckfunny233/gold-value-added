@@ -58,3 +58,40 @@ export class AdminUserManualCheckDto {
   @IsString()
   note?: string
 }
+
+export class PaymentMethodDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  uid?: string
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  username?: string
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsIn(['wechat', 'alipay', 'bankcard', 'bank'])
+  type?: 'wechat' | 'alipay' | 'bankcard' | 'bank'
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  name?: string
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  account?: string
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bankName?: string
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  qrCode?: string
+}
