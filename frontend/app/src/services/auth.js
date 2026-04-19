@@ -9,9 +9,13 @@ export const AuthService = {
   },
 
   register(userData) {
+    const normalizedPayload = {
+      ...userData,
+      otpCode: userData?.otpCode || userData?.otp || '',
+    }
     return apiFetch('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify(userData)
+      body: JSON.stringify(normalizedPayload)
     })
   },
 

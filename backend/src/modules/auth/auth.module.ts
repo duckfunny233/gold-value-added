@@ -119,10 +119,15 @@ class RegisterWithFilesDto {
   @Matches(/^1[3-9]\d{9}$/)
   phone!: string
 
-  @ApiProperty()
+  @ApiProperty({ required: false })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  otp!: string
+  otp?: string
+
+  @ApiProperty({ required: false, description: '兼容客户端文档字段，优先使用 otp' })
+  @IsOptional()
+  @IsString()
+  otpCode?: string
 
   @ApiProperty()
   @IsString()
@@ -222,7 +227,7 @@ class AuthService {
     }
 
     const phone = payload.phone.trim()
-    const otp = payload.otp.trim()
+    const otp = (payload.otp || payload.otpCode || '').trim()
     this.assertOtp(phone, otp)
 
     return this.createUser({

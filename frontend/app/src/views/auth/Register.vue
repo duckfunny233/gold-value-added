@@ -249,6 +249,7 @@ const handleRegister = async () => {
     formData.append('username', username.value)
     formData.append('phone', phone.value)
     formData.append('otp', otp.value)
+    formData.append('otpCode', otp.value)
     formData.append('password', password.value)
     formData.append('realName', realName.value)
     formData.append('idNumber', idNumber.value)
