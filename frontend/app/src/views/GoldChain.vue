@@ -88,34 +88,29 @@ onMounted(fetchChainData)
 
       <div v-else-if="list.length === 0" class="empty">{{ t('goldChain.noData') }}</div>
 
-      <article v-for="row in list" v-else :key="row.sequenceNo" class="chain-card">
-        <div class="card-top">
-          <div>
-            <p class="sequence-no">#{{ row.sequenceNo }}</p>
-            <h3 class="nickname">{{ row.nickname }}</h3>
+      <div v-else class="chain-table-wrap no-scrollbar">
+        <div class="chain-table">
+          <div class="chain-row chain-head">
+            <span class="col-seq">{{ t('goldChain.columns.sequence') }}</span>
+            <span class="col-name">{{ t('goldChain.columns.nickname') }}</span>
+            <span class="col-trade">{{ t('goldChain.metrics.trade') }}</span>
+            <span class="col-gold">{{ t('goldChain.metrics.gold') }}</span>
+            <span class="col-silver">{{ t('goldChain.metrics.silver') }}</span>
+            <span class="col-asset">{{ t('goldChain.metrics.totalAsset') }}</span>
+            <span class="col-time">{{ t('goldChain.columns.time') }}</span>
           </div>
-          <p class="time">{{ row.updatedAt }}</p>
-        </div>
 
-        <div class="metrics-grid">
-          <div class="metric">
-            <span class="metric-label">{{ t('goldChain.metrics.trade') }}</span>
-            <span class="metric-value plain">{{ row.buyInfo }}</span>
-          </div>
-          <div class="metric">
-            <span class="metric-label">{{ t('goldChain.metrics.gold') }}</span>
-            <span class="metric-value gold">{{ row.goldGrams.toFixed(2) }} g</span>
-          </div>
-          <div class="metric">
-            <span class="metric-label">{{ t('goldChain.metrics.silver') }}</span>
-            <span class="metric-value silver">{{ row.silverGrams.toFixed(2) }} g</span>
-          </div>
-          <div class="metric">
-            <span class="metric-label">{{ t('goldChain.metrics.totalAsset') }}</span>
-            <span class="metric-value asset">{{ formatCurrency(row.totalAssets) }}</span>
-          </div>
+          <article v-for="row in list" :key="row.sequenceNo" class="chain-row">
+            <span class="col-seq sequence-no">#{{ row.sequenceNo }}</span>
+            <span class="col-name nickname">{{ row.nickname }}</span>
+            <span class="col-trade metric-plain">{{ row.buyInfo }}</span>
+            <span class="col-gold metric-gold">{{ row.goldGrams.toFixed(2) }} g</span>
+            <span class="col-silver metric-silver">{{ row.silverGrams.toFixed(2) }} g</span>
+            <span class="col-asset metric-asset">{{ formatCurrency(row.totalAssets) }}</span>
+            <span class="col-time time">{{ row.updatedAt }}</span>
+          </article>
         </div>
-      </article>
+      </div>
     </section>
   </div>
 </template>
@@ -175,86 +170,82 @@ onMounted(fetchChainData)
 }
 
 .chain-list {
+  display: block;
+}
+
+.chain-table-wrap {
+  overflow-x: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(11, 24, 36, 0.55);
+}
+
+.chain-table {
+  min-width: 980px;
+}
+
+.chain-row {
   display: grid;
-  gap: 0.85rem;
+  grid-template-columns: 120px 160px 180px 130px 130px 160px 170px;
+  align-items: center;
+  gap: 0;
+  min-height: 52px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.83rem;
+  color: #e7edf5;
 }
 
-.chain-card {
-  border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
-    linear-gradient(180deg, #102031 0%, #0d1a28 100%);
-  padding: 0.95rem;
-  box-shadow: 0 16px 32px rgba(3, 9, 18, 0.42);
+.chain-row > span {
+  padding: 0 0.65rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-.card-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.85rem;
+.chain-row > span:last-child {
+  border-right: none;
+}
+
+.chain-head {
+  min-height: 44px;
+  font-size: 0.74rem;
+  color: rgba(149, 167, 188, 0.95);
+  background: rgba(16, 27, 40, 0.94);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .sequence-no {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: rgba(191, 148, 63, 0.8);
 }
 
 .nickname {
-  margin-top: 0.2rem;
-  font-size: 1rem;
   font-weight: 700;
   color: #f8fbff;
 }
 
 .time {
-  font-size: 0.72rem;
   color: rgba(208, 217, 227, 0.68);
-  text-align: right;
 }
 
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.7rem;
-}
-
-.metric {
-  border-radius: 0.9rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 0.75rem;
-}
-
-.metric-label {
-  display: block;
-  font-size: 0.68rem;
-  color: rgba(208, 217, 227, 0.62);
-}
-
-.metric-value {
-  display: block;
-  margin-top: 0.35rem;
-  font-size: 0.84rem;
-  font-weight: 700;
-}
-
-.metric-value.plain {
+.metric-plain {
   color: #f3f4f6;
 }
 
-.metric-value.gold {
+.metric-gold {
   color: #f3d27f;
+  font-weight: 700;
 }
 
-.metric-value.silver {
+.metric-silver {
   color: #d7e1ec;
+  font-weight: 700;
 }
 
-.metric-value.asset {
+.metric-asset {
   color: rgba(191, 148, 63, 0.92);
+  font-weight: 700;
 }
 
 .empty {
@@ -269,18 +260,6 @@ onMounted(fetchChainData)
 @media (max-width: 640px) {
   .chain-page {
     padding: 0.7rem 0.9rem 6.6rem;
-  }
-
-  .metrics-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .card-top {
-    flex-direction: column;
-  }
-
-  .time {
-    text-align: left;
   }
 }
 </style>

@@ -1,7 +1,7 @@
 {
   "nav": {
     "home": "首页",
-    "chat": "消息",
+    "chat": "通讯",
     "market": "行情",
     "trade": "交易",
     "profile": "我的"
@@ -250,6 +250,11 @@
     "realTime": "实时行情",
     "connecting": "正在连接行情服务...",
     "selectAsset": "请选择交易品种",
+    "table": {
+      "name": "名称",
+      "lastPrice": "最新价",
+      "change": "涨跌"
+    },
     "timeShare": "分时",
     "hourlyK": "小时线",
     "dailyK": "日K",
@@ -667,6 +672,11 @@
     "noData": "暂无可展示数据",
     "userNo": "链上用户{index}",
     "tradeInfo": "买入 {buy} 笔 / 卖出 {sell} 笔",
+    "columns": {
+      "sequence": "序号",
+      "nickname": "昵称",
+      "time": "时间"
+    },
     "metrics": {
       "trade": "买卖数据",
       "gold": "黄金克数",

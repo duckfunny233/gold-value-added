@@ -230,6 +230,11 @@
     "realTime": "Real-time quotes",
     "connecting": "Connecting to market server...",
     "selectAsset": "Please select an asset",
+    "table": {
+      "name": "Name",
+      "lastPrice": "Last Price",
+      "change": "Change"
+    },
     "timeShare": "1D",
     "hourlyK": "1H",
     "dailyK": "1W",
@@ -576,6 +581,11 @@
     "noData": "No data to display",
     "userNo": "Chain User {index}",
     "tradeInfo": "Buy {buy} / Sell {sell}",
+    "columns": {
+      "sequence": "Sequence",
+      "nickname": "Nickname",
+      "time": "Time"
+    },
     "metrics": {
       "trade": "Trade Data",
       "gold": "Gold Grams",

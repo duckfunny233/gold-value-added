@@ -138,3 +138,12 @@ export const buildNewsDetailFallback = (id) => {
 }
 
 export const tradeOrdersFallback = []
+
+export const leaderboardFallback = [
+  { rank: 1, sequenceNo: 1, nickname: '黄金大佬', goldGrams: 2500.00, totalAsset: 1250000 },
+  { rank: 2, sequenceNo: 2, nickname: '白银猎手', goldGrams: 1800.00, totalAsset: 900000 },
+  { rank: 3, sequenceNo: 3, nickname: '稳健投资者', goldGrams: 1200.00, totalAsset: 600000 },
+  { rank: 4, sequenceNo: 4, nickname: '金市观察者', goldGrams: 800.00, totalAsset: 400000 },
+  { rank: 5, sequenceNo: 5, nickname: '财富积累者', goldGrams: 500.00, totalAsset: 250000 },
+  { rank: 6, sequenceNo: 6, nickname: '理财新手', goldGrams: 200.00, totalAsset: 100000 }
+]

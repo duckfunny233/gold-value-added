@@ -20,13 +20,16 @@ const idNumber = ref('')
 // 身份证正反面
 const idCardFront = ref(null)
 const idCardFrontPreview = ref('')
+const idCardFrontInput = ref(null)
 const idCardBack = ref(null)
 const idCardBackPreview = ref('')
+const idCardBackInput = ref(null)
 
 // 证明材料
 const proofType = ref('') // workCert, bizLicense, workProof, incomeProof, other
 const proofFile = ref(null)
 const proofPreview = ref('')
+const proofFileInput = ref(null)
 
 const proofTypes = [
   { value: 'workCert', label: t('auth.register.workCert'), icon: Briefcase },
@@ -79,11 +82,17 @@ const handleIdCardBackUpload = (event) => {
 const clearIdCardFront = () => {
   idCardFront.value = null
   idCardFrontPreview.value = ''
+  if (idCardFrontInput.value) {
+    idCardFrontInput.value.value = ''
+  }
 }
 
 const clearIdCardBack = () => {
   idCardBack.value = null
   idCardBackPreview.value = ''
+  if (idCardBackInput.value) {
+    idCardBackInput.value.value = ''
+  }
 }
 
 const handleProofUpload = (event) => {
@@ -109,6 +118,9 @@ const handleProofUpload = (event) => {
 const clearProof = () => {
   proofFile.value = null
   proofPreview.value = ''
+  if (proofFileInput.value) {
+    proofFileInput.value.value = ''
+  }
 }
 
 const countdown = ref(0)
@@ -385,6 +397,7 @@ const handleRegister = async () => {
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{{ t('auth.register.idCardFront') }}</label>
                 <div class="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-4 transition-colors hover:border-primary/50">
                   <input 
+                    ref="idCardFrontInput"
                     type="file" 
                     accept="image/*" 
                     @change="handleIdCardFrontUpload"
@@ -426,6 +439,7 @@ const handleRegister = async () => {
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{{ t('auth.register.idCardBack') }}</label>
                 <div class="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-4 transition-colors hover:border-primary/50">
                   <input 
+                    ref="idCardBackInput"
                     type="file" 
                     accept="image/*" 
                     @change="handleIdCardBackUpload"
@@ -495,6 +509,7 @@ const handleRegister = async () => {
               <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{{ t('auth.register.uploadProof') }}</label>
               <div class="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-4 transition-colors hover:border-primary/50">
                 <input 
+                  ref="proofFileInput"
                   type="file" 
                   accept="image/*" 
                   @change="handleProofUpload"

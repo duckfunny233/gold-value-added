@@ -4,6 +4,7 @@ import {
   buildActivityDetailFallback,
   cloneData,
   profileFallback,
+  leaderboardFallback,
 } from './fallback-data'
 
 let fallbackBalanceDelta = 0
@@ -95,7 +96,7 @@ export const UserService = {
   },
 
   getLeaderboard() {
-    return fetchJsonOrFallback('/api/public/leaderboard', [])
+    return fetchJsonOrFallback('/api/public/leaderboard', { items: leaderboardFallback })
   },
 
   getGoldChainRecords() {

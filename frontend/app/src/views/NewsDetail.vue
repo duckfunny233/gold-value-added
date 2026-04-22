@@ -22,8 +22,13 @@ const fetchNewsDetail = async () => {
     const result = isActivity 
       ? await UserService.getActivityDetail(newsId)
       : await NewsService.getNewsDetail(newsId)
-    newsDetail.value = result.data
-} catch (err) {
+    const data = result?.data || {}
+    newsDetail.value = {
+      ...data,
+      date: data.date || data.createdAt || '',
+      image: data.image || data.cover || '',
+    }
+  } catch (err) {
     console.error('Failed to fetch detail:', err)
     error.value = err.message || t('news.loadFailed')
   } finally {

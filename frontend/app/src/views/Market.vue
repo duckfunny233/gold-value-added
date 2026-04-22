@@ -90,31 +90,50 @@ onMounted(() => {
 
 <template>
   <div class="space-y-4 bg-[#0b1520] min-h-full text-white pb-10">
-    <div class="px-4 pt-4">
-      <div class="rounded-3xl border border-[#2b3b4c] bg-[#162331] p-4">
-        <div class="mb-3 flex items-center justify-between">
-          <h4 class="text-sm font-bold">{{ t('market.products') }}</h4>
-          <span class="text-[11px] text-[#8e9bb0]">{{ t('market.productsHint') }}</span>
+    <div class="pt-2">
+      <div class="border-y border-[#223242] bg-[#101b28]">
+        <div class="flex items-center justify-between border-b border-[#1c2a3b] px-4 py-2 text-[11px] text-[#7f90a4]">
+          <span>{{ t('market.productsHint') }}</span>
+          <span>{{ markets.length }}</span>
         </div>
 
-        <div class="max-h-[280px] overflow-y-auto no-scrollbar pr-1">
+        <div class="grid grid-cols-[1.6fr_1fr_0.9fr] items-center gap-2 border-b border-[#223242] bg-[#0f1a2a] px-4 py-2 text-[12px] font-medium text-[#8ea0b5]">
+          <span>{{ t('market.table.name') }}</span>
+          <span class="text-right">{{ t('market.table.lastPrice') }}</span>
+          <span class="text-right">{{ t('market.table.change') }}</span>
+        </div>
+
+        <div class="max-h-[310px] overflow-y-auto no-scrollbar">
           <button
             v-for="item in markets"
             :key="item.id"
             @click="selectAsset(item)"
-            class="mb-2 flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition-all btn-interact"
-            :class="currentAsset?.id === item.id ? 'border-[#c99b18] bg-[#1f2d3b]' : 'border-[#2b3b4c] bg-[#13202c]'"
+            class="grid w-full grid-cols-[1.6fr_1fr_0.9fr] items-center gap-2 border-b border-[#1a2738] px-4 py-3 text-left transition-colors btn-interact"
+            :class="currentAsset?.id === item.id ? 'bg-[#1a2a3d]' : 'bg-transparent'"
           >
-            <div class="min-w-0 flex-1">
-              <p class="truncate text-sm font-bold" :class="currentAsset?.id === item.id ? 'text-[#f2c24a]' : 'text-[#e6edf6]'">
+            <div class="min-w-0">
+              <p
+                class="truncate text-[15px] font-bold"
+                :class="currentAsset?.id === item.id ? 'text-[#f2c24a]' : 'text-[#e6edf6]'"
+              >
                 {{ item.name }}
               </p>
-              <p class="mt-1 text-[11px] text-[#8e9bb0]">{{ item.unit || t('market.quoteFallback') }}</p>
+              <p class="mt-0.5 text-[11px] text-[#7d8da2]">{{ item.id }}</p>
             </div>
-            <div class="pl-3 text-right">
-              <p class="text-lg font-bold tabular-nums" :class="item.up ? 'text-[#ff5f56]' : 'text-[#19c58a]'">{{ item.price || '--.--' }}</p>
-              <p class="mt-1 text-xs" :class="item.up ? 'text-[#ff5f56]' : 'text-[#19c58a]'">{{ item.change || '0.00%' }}</p>
-            </div>
+
+            <p
+              class="text-right text-[22px] font-semibold leading-none tabular-nums"
+              :class="item.up ? 'text-[#ff5f56]' : 'text-[#19c58a]'"
+            >
+              {{ item.price || '--.--' }}
+            </p>
+
+            <p
+              class="text-right text-[18px] font-medium leading-none tabular-nums"
+              :class="item.up ? 'text-[#ff5f56]' : 'text-[#19c58a]'"
+            >
+              {{ item.change || '0.00%' }}
+            </p>
           </button>
         </div>
       </div>
