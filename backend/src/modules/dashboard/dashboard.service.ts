@@ -49,7 +49,7 @@ export class DashboardService {
       this.buildEvents(query),
       this.buildMonitors(query),
       this.getAdminLocalNotices(),
-      this.newsFeedService.getFeed(),
+      this.safeGetRemoteFeed(),
     ])
 
     const notices = this.resolveAdminNotices(remoteFeed, localAdminNotices)
@@ -70,7 +70,7 @@ export class DashboardService {
 
   async getAppNoticeFeed(): Promise<NoticeFeedResult> {
     const [remoteFeed, localNotices] = await Promise.all([
-      this.newsFeedService.getFeed(),
+      this.safeGetRemoteFeed(),
       this.getPublishedLocalNotices(),
     ])
 
@@ -583,6 +583,21 @@ export class DashboardService {
         code: remoteFeed.meta.code,
         cachedAt: remoteFeed.meta.cachedAt,
       },
+    }
+  }
+
+  private async safeGetRemoteFeed(): Promise<NoticeFeedResult> {
+    try {
+      return await this.newsFeedService.getFeed()
+    } catch (error) {
+      return {
+        notices: [],
+        meta: {
+          source: 'disabled',
+          code: 'NEWS_FETCH_FAILED',
+          cachedAt: formatDateTime(new Date()),
+        },
+      }
     }
   }
 

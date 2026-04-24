@@ -40,6 +40,30 @@ type NormalizedNews = {
   detail: AppNewsDetail
 }
 
+type LocalNewsSeed = {
+  id: string
+  title: string
+  summary: string
+}
+
+const LOCAL_NEWS_SEEDS: LocalNewsSeed[] = [
+  {
+    id: 'local_news_1',
+    title: '系统公告：金影子行情与公告服务运行正常',
+    summary: '当前为本地新闻兜底内容，用于保障首页轮播与公告接口在调试阶段稳定可用。',
+  },
+  {
+    id: 'local_news_2',
+    title: '交易提醒：买入/卖出手续费统一按 0.1% 计费',
+    summary: '平台当前费率规则已统一，交易与提现手续费口径一致，相关字段请以后端返回为准。',
+  },
+  {
+    id: 'local_news_3',
+    title: '支付规则：点对点支付优先扣减增值部分',
+    summary: '点对点支付执行“先增值后本金”扣款顺序，若增值不足再扣本金，并同步更新可提现本金。',
+  },
+]
+
 @Injectable()
 export class NewsFeedService {
   private readonly logger = new Logger(NewsFeedService.name)
@@ -48,26 +72,64 @@ export class NewsFeedService {
   constructor(private readonly configService: ConfigService) {}
 
   async getFeed(): Promise<NoticeFeedResult> {
-    const { items } = await this.fetchNewsPage(1, 10)
+    try {
+      const { items } = await this.fetchNewsPage(1, 10)
 
-    return {
-      notices: items.map((item) => ({ ...item.notice })),
-      meta: {
-        source: 'remote',
-        cachedAt: formatDateTime(new Date()),
-      },
+      return {
+        notices: items.map((item) => ({ ...item.notice })),
+        meta: {
+          source: 'remote',
+          cachedAt: formatDateTime(new Date()),
+        },
+      }
+    } catch (error) {
+      this.logger.warn(
+        `[${NEWS_ERROR_CODES.LOCAL_FALLBACK}] getFeed 使用本地新闻兜底: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return {
+        notices: this.getLocalFallbackNormalizedItems().map((item) => ({ ...item.notice })),
+        meta: {
+          source: 'local',
+          code: NEWS_ERROR_CODES.LOCAL_FALLBACK,
+          cachedAt: formatDateTime(new Date()),
+        },
+      }
     }
   }
 
   async getNewsList(page = 1, limit = 10) {
-    const { items, total } = await this.fetchNewsPage(page, limit)
+    const normalizedPage = Math.max(1, Number(page || 1))
+    const normalizedLimit = Math.max(1, Math.min(50, Number(limit || 10)))
 
-    return {
-      items: items.map((item) => item.listItem),
-      total,
-      page,
-      limit,
-      totalPages: Math.max(1, Math.ceil(total / limit)),
+    try {
+      const { items, total } = await this.fetchNewsPage(normalizedPage, normalizedLimit)
+
+      return {
+        items: items.map((item) => item.listItem),
+        total,
+        page: normalizedPage,
+        limit: normalizedLimit,
+        totalPages: Math.max(1, Math.ceil(total / normalizedLimit)),
+      }
+    } catch (error) {
+      this.logger.warn(
+        `[${NEWS_ERROR_CODES.LOCAL_FALLBACK}] getNewsList 使用本地新闻兜底: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      const fallbackItems = this.getLocalFallbackNormalizedItems()
+      const total = fallbackItems.length
+      const start = (normalizedPage - 1) * normalizedLimit
+      const paged = fallbackItems.slice(start, start + normalizedLimit)
+      return {
+        items: paged.map((item) => item.listItem),
+        total,
+        page: normalizedPage,
+        limit: normalizedLimit,
+        totalPages: Math.max(1, Math.ceil(total / normalizedLimit)),
+      }
     }
   }
 
@@ -77,14 +139,22 @@ export class NewsFeedService {
       return cached
     }
 
-    const { items } = await this.fetchNewsPage(1, 50)
-    const detail = items.find((item) => item.detail.id === id)?.detail
+    try {
+      const { items } = await this.fetchNewsPage(1, 50)
+      const detail = items.find((item) => item.detail.id === id)?.detail
 
-    if (!detail) {
+      if (!detail) {
+        throw new NotFoundException('新闻不存在')
+      }
+
+      return detail
+    } catch (error) {
+      const fallbackDetail = this.getLocalFallbackNormalizedItems().find((item) => item.detail.id === id)?.detail
+      if (fallbackDetail) {
+        return fallbackDetail
+      }
       throw new NotFoundException('新闻不存在')
     }
-
-    return detail
   }
 
   private async fetchNewsPage(page: number, limit: number) {
@@ -287,5 +357,52 @@ export class NewsFeedService {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;')
+  }
+
+  private getLocalFallbackNormalizedItems(): NormalizedNews[] {
+    const now = Date.now()
+    return LOCAL_NEWS_SEEDS.map((seed, index) => {
+      const publishedAt = new Date(now - index * 60 * 60 * 1000)
+      const publishedLabel = formatDateTime(publishedAt)
+      const imageUrl = ''
+
+      return {
+        notice: {
+          id: seed.id,
+          title: seed.title,
+          content: seed.summary,
+          text: seed.summary,
+          status: '本地兜底',
+          publishAt: publishedLabel,
+          pollingEnabled: '是',
+          source: 'local',
+          imageUrl,
+          publishedAtIso: publishedAt.toISOString(),
+          sortTimestamp: publishedAt.getTime(),
+        },
+        listItem: {
+          id: seed.id,
+          title: seed.title,
+          date: publishedLabel,
+          createdAt: publishedAt.toISOString(),
+          summary: seed.summary,
+          thumbnail: imageUrl,
+          cover: imageUrl,
+        },
+        detail: {
+          id: seed.id,
+          title: seed.title,
+          date: publishedLabel,
+          createdAt: publishedAt.toISOString(),
+          views: '-',
+          author: '金影子系统',
+          image: imageUrl,
+          cover: imageUrl,
+          content: `<p>${this.escapeHtml(seed.summary)}</p>`,
+          summary: seed.summary,
+          linkUrl: undefined,
+        },
+      }
+    })
   }
 }

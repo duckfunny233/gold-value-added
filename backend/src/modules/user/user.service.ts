@@ -55,7 +55,8 @@ const P2P_FEE_FREE_THRESHOLD = 100
 export class UserService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getPublicLeaderboard() {
+  async getPublicLeaderboard(limitInput?: string | number) {
+    const limit = this.resolveLeaderboardLimit(limitInput)
     const assets = await this.prisma.asset.findMany({
       include: {
         user: {
@@ -69,14 +70,28 @@ export class UserService {
       },
     })
 
+    const registerSequenceByUid = new Map(
+      assets
+        .map((item) => item.user)
+        .sort((left, right) => {
+          const leftTime = left.createdAt?.getTime?.() || 0
+          const rightTime = right.createdAt?.getTime?.() || 0
+          if (leftTime !== rightTime) {
+            return leftTime - rightTime
+          }
+          return String(left.uid).localeCompare(String(right.uid))
+        })
+        .map((user, index) => [user.uid, index + 1]),
+    )
+
     const leaderboardItems = assets
       .map((item) => ({
         uid: item.user.uid,
         nickname: item.user.nickname || item.user.username,
         goldGrams: toNumber(item.goldHoldingGrams),
         totalAsset: toNumber(item.totalAsset),
-        // UID 形如 UID00000001，和注册先后序号一一对应
-        sequenceNo: Number(String(item.user.uid).replace(/^UID/i, '')) || Number.MAX_SAFE_INTEGER,
+        sequenceNo:
+          registerSequenceByUid.get(item.user.uid) || this.extractUidSequenceNo(String(item.user.uid)),
         updatedAt: item.updatedAt,
       }))
       .sort((left, right) => {
@@ -86,9 +101,12 @@ export class UserService {
         if (right.totalAsset !== left.totalAsset) {
           return right.totalAsset - left.totalAsset
         }
-        return left.sequenceNo - right.sequenceNo
+        if (left.sequenceNo !== right.sequenceNo) {
+          return left.sequenceNo - right.sequenceNo
+        }
+        return String(left.uid).localeCompare(String(right.uid))
       })
-      .slice(0, 10)
+      .slice(0, limit)
 
     return {
       items: leaderboardItems.map((item, index) => ({
@@ -919,6 +937,30 @@ export class UserService {
     const normalized = Number(value || 0)
     const prefix = normalized > 0 ? '+' : normalized < 0 ? '-' : ''
     return `${prefix}${this.formatMoney(Math.abs(normalized))}`
+  }
+
+  private resolveLeaderboardLimit(input: unknown) {
+    const parsed = Number(input)
+    if (!Number.isFinite(parsed)) {
+      return 10
+    }
+
+    const normalized = Math.trunc(parsed)
+    if (normalized < 1) {
+      return 10
+    }
+
+    return Math.min(normalized, 100)
+  }
+
+  private extractUidSequenceNo(uid: string) {
+    const matchedDigits = String(uid || '').match(/(\d+)/)?.[1]
+    if (!matchedDigits) {
+      return Number.MAX_SAFE_INTEGER
+    }
+
+    const value = Number(matchedDigits)
+    return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER
   }
 
   private calculateStandardFeeAmount(amount: number) {

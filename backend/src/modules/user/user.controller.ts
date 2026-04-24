@@ -55,8 +55,8 @@ export class UserController {
   }
 
   @Get('public/leaderboard')
-  getPublicLeaderboard() {
-    return this.userService.getPublicLeaderboard()
+  getPublicLeaderboard(@Query('limit') limit?: string) {
+    return this.userService.getPublicLeaderboard(limit)
   }
 
   @Get('public/gold-chain')

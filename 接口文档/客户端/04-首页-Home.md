@@ -7,7 +7,7 @@
 ## 功能点列表（页面按钮/动作级）
 - 拉取首页公告轮播
 - 拉取新闻轮播并点击进入新闻详情
-- 展示金字塔排行榜（Top10）
+- 展示金字塔排行榜（Top6）
 - 榜单自动刷新与同步时间展示
 
 ## 接口清单表
@@ -15,13 +15,14 @@
 | --- | --- | --- | --- | --- |
 | 首页公告 | GET | `/api/notice` | 获取首页公告文案 | 是 |
 | 新闻轮播列表 | GET | `/api/news?page={page}&limit={limit}` | 获取轮播新闻数据（首页取前 N 条） | 是 |
-| 金字塔排行榜 | GET | `/api/public/leaderboard` | 获取排行榜数据 | 目标（当前为本地模拟） |
+| 金字塔排行榜 | GET | `/api/public/leaderboard?limit={limit}` | 获取首页金字塔排行（默认 Top6） | 是 |
 
 ## 请求/响应关键字段
 - 新闻轮播请求：`page`、`limit`
+- 排行榜请求：`limit`
 - 公告响应：`code`、`data.text`
 - 新闻响应：`code`、`data.items[]`、`data.total`
-- 排行响应：`data[].goldGrams`、`data[].totalAsset`、`data[].sequenceNo`
+- 排行响应：`data[].rank`、`data[].uid`、`data[].nickname`、`data[].goldGrams`、`data[].totalAsset`、`data[].sequenceNo`
 
 ## 金字塔排序规则（强约束）
 1. 第一排序：按克数 `goldGrams` 从高到低。
@@ -30,7 +31,7 @@
 
 ## 现状与目标差异（新增手续费/扣款顺序影响点）
 - 本页无直接资金交易动作，不受新手续费与扣款顺序影响。
-- 当前排行榜为本地模拟，且排序实现需要按上述强约束统一到后端接口口径。
+- 排行榜需由后端按上述强约束排序后返回，前端只负责展示。
 
 ## 错误码与前端提示建议
 - `404`：提示“暂无公告/新闻数据/排行榜数据”
