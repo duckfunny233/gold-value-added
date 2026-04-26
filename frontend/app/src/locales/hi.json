@@ -190,10 +190,11 @@
       "preview": "पूर्वावलोकन",
       "fillAll": "कृपया सभी जानकारी भरें",
       "success": "रजिस्ट्रेशन सफल",
-      "agreementCombinedLabel": "I have read and agree to the User Agreement and Privacy Policy",
-      "riskAgreementLabel": "I have read and agree to the Risk Notice",
+      "agreementCombinedLabel": "मैंने पढ़ लिया है और सहमत हूँ",
+      "riskAgreementLabel": "मैंने पढ़ लिया है और सहमत हूँ",
       "whitepaperNotice": "Whitepaper is an explanatory document and does not require consent. View at:",
-      "mustAgreePolicies": "Please agree to the policies and risk notice before registering"
+      "mustAgreePolicies": "Please agree to the policies and risk notice before registering",
+      "andConnector": "और"
     },
     "forgotPassword": {
       "title": "पासवर्ड रीसेट",
@@ -347,7 +348,7 @@
       },
       "about": {
         "title": "About",
-        "desc": "Version, notices, User Agreement / Privacy Policy / Whitepaper / Risk Notice"
+        "desc": "Version, notices, User Agreement / Privacy Policy / Risk Notice"
       },
       "cancel-account": {
         "title": "Delete Account",

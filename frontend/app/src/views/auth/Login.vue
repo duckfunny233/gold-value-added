@@ -11,14 +11,14 @@ const username = ref('')
 const password = ref('')
 const isLoading = ref(false)
 const errorMessage = ref('')
-const loginAgreementAccepted = ref(true)
-const loginRiskAccepted = ref(true)
+const loginAgreementAccepted = ref(false)
+const loginRiskAccepted = ref(false)
 
 const policyLinks = {
   userAgreement: '/legal/user-agreement.pdf',
   privacyPolicy: '/legal/privacy-policy.docx',
   riskNotice: '/legal/risk-notice.docx',
-  whitepaper: '/legal/whitepaper.docx',
+  // whitepaper: '/legal/whitepaper.docx', // 暂停：白皮书入口
 }
 
 const openPolicy = (key) => {
@@ -30,6 +30,10 @@ const openPolicy = (key) => {
 const handleLogin = async () => {
   if (!username.value || !password.value) {
     errorMessage.value = t('auth.login.fillAll')
+    return
+  }
+  if (!loginAgreementAccepted.value || !loginRiskAccepted.value) {
+    errorMessage.value = t('auth.register.mustAgreePolicies')
     return
   }
 
@@ -94,7 +98,7 @@ const handleLogin = async () => {
 
         <button 
           @click="handleLogin"
-          :disabled="isLoading"
+          :disabled="isLoading || !loginAgreementAccepted || !loginRiskAccepted"
           class="w-full py-3 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-70 btn-interact"
         >
           <span v-if="isLoading" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
@@ -107,7 +111,7 @@ const handleLogin = async () => {
             <span>
               {{ t('auth.register.agreementCombinedLabel') }}
               <button type="button" class="text-primary underline ml-1" @click="openPolicy('userAgreement')">{{ t('settings.about.userAgreement') }}</button>
-              /
+              <span class="mx-1">{{ t('auth.register.andConnector') }}</span>
               <button type="button" class="text-primary underline" @click="openPolicy('privacyPolicy')">{{ t('settings.about.privacyPolicy') }}</button>
             </span>
           </label>
@@ -118,10 +122,11 @@ const handleLogin = async () => {
               <button type="button" class="text-primary underline ml-1" @click="openPolicy('riskNotice')">{{ t('settings.about.riskNotice') }}</button>
             </span>
           </label>
-          <p class="text-[11px] text-gray-500 dark:text-gray-400">
+          <!-- 暂停：白皮书文案与入口 -->
+          <!-- <p class="text-[11px] text-gray-500 dark:text-gray-400">
             {{ t('auth.register.whitepaperNotice') }}
             <button type="button" class="text-primary underline ml-1" @click="openPolicy('whitepaper')">{{ t('settings.about.whitepaper') }}</button>
-          </p>
+          </p> -->
         </div>
 
         <div class="flex justify-start text-sm px-1">

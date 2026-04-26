@@ -37,7 +37,7 @@ const policyLinks = {
   userAgreement: '/legal/user-agreement.pdf',
   privacyPolicy: '/legal/privacy-policy.docx',
   riskNotice: '/legal/risk-notice.docx',
-  whitepaper: '/legal/whitepaper.docx',
+  // whitepaper: '/legal/whitepaper.docx', // 暂停：白皮书入口
 }
 
 const proofTypes = [
@@ -584,7 +584,7 @@ const handleRegister = async () => {
               <span>
                 {{ t('auth.register.agreementCombinedLabel') }}
                 <button type="button" class="text-primary underline ml-1" @click="openPolicy('userAgreement')">{{ t('settings.about.userAgreement') }}</button>
-                /
+                <span class="mx-1">{{ t('auth.register.andConnector') }}</span>
                 <button type="button" class="text-primary underline" @click="openPolicy('privacyPolicy')">{{ t('settings.about.privacyPolicy') }}</button>
               </span>
             </label>
@@ -595,10 +595,11 @@ const handleRegister = async () => {
                 <button type="button" class="text-primary underline ml-1" @click="openPolicy('riskNotice')">{{ t('settings.about.riskNotice') }}</button>
               </span>
             </label>
-            <p class="text-[11px] text-gray-500 dark:text-gray-400">
+            <!-- 暂停：白皮书文案与入口 -->
+            <!-- <p class="text-[11px] text-gray-500 dark:text-gray-400">
               {{ t('auth.register.whitepaperNotice') }}
               <button type="button" class="text-primary underline ml-1" @click="openPolicy('whitepaper')">{{ t('settings.about.whitepaper') }}</button>
-            </p>
+            </p> -->
           </div>
         </div>
       </div>

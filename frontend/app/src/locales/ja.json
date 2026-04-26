@@ -190,10 +190,11 @@
       "preview": "プレビュー",
       "fillAll": "すべての項目を入力してください",
       "success": "登録に成功しました",
-      "agreementCombinedLabel": "I have read and agree to the User Agreement and Privacy Policy",
-      "riskAgreementLabel": "I have read and agree to the Risk Notice",
+      "agreementCombinedLabel": "私は読み、同意します",
+      "riskAgreementLabel": "私は読み、同意します",
       "whitepaperNotice": "Whitepaper is an explanatory document and does not require consent. View at:",
-      "mustAgreePolicies": "Please agree to the policies and risk notice before registering"
+      "mustAgreePolicies": "Please agree to the policies and risk notice before registering",
+      "andConnector": "と"
     },
     "forgotPassword": {
       "title": "パスワード再設定",
@@ -347,7 +348,7 @@
       },
       "about": {
         "title": "About",
-        "desc": "Version, notices, User Agreement / Privacy Policy / Whitepaper / Risk Notice"
+        "desc": "Version, notices, User Agreement / Privacy Policy / Risk Notice"
       },
       "cancel-account": {
         "title": "Delete Account",

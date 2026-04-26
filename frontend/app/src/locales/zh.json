@@ -210,10 +210,11 @@
       "idCardRequired": "请上传身份证正反面照片",
       "proofTypeRequired": "请选择证明材料类型",
       "proofFileRequired": "请上传证明材料",
-      "agreementCombinedLabel": "我已阅读并同意《用户协议》和《隐私政策》",
-      "riskAgreementLabel": "我已阅读并同意《风险提示书》",
+      "agreementCombinedLabel": "我已阅读并同意",
+      "riskAgreementLabel": "我已阅读并同意",
       "whitepaperNotice": "《白皮书》为说明文档，无需勾选，可在下方查看：",
-      "mustAgreePolicies": "请先勾选协议与风险提示后再注册"
+      "mustAgreePolicies": "请先勾选协议与风险提示后再注册",
+      "andConnector": "和"
     },
     "forgotPassword": {
       "title": "找回密钥",
@@ -385,7 +386,7 @@
       },
       "about": {
         "title": "关于我们",
-        "desc": "版本信息、系统公告、用户协议/隐私政策/白皮书/风险提示"
+        "desc": "版本信息、系统公告、用户协议/隐私政策/风险提示"
       },
       "cancel-account": {
         "title": "注销账号",

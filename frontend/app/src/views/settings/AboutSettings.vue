@@ -16,14 +16,14 @@ const policyEntries = ref([])
 onMounted(async () => {
   const response = await SettingsService.getAboutSettings()
   data.value = response.data
-  policyEntries.value = Array.isArray(response.data?.policyEntries)
+  policyEntries.value = (Array.isArray(response.data?.policyEntries)
     ? response.data.policyEntries
     : [
       { id: 'userAgreement', titleKey: 'settings.about.userAgreement', url: '/legal/user-agreement.pdf' },
       { id: 'privacyPolicy', titleKey: 'settings.about.privacyPolicy', url: '/legal/privacy-policy.docx' },
       { id: 'riskNotice', titleKey: 'settings.about.riskNotice', url: '/legal/risk-notice.docx' },
-      { id: 'whitepaper', titleKey: 'settings.about.whitepaper', url: '/legal/whitepaper.docx' },
     ]
+  ).filter((item) => item?.id !== 'whitepaper') // 暂停：白皮书入口
 })
 
 const openEntry = (entry) => {
@@ -74,7 +74,8 @@ const openEntry = (entry) => {
             {{ t(entry.titleKey) }}
           </button>
         </div>
-        <p class="mt-3 text-xs text-[#8e9bb0]">{{ t('settings.about.whitepaperNote') }}</p>
+        <!-- 暂停：白皮书说明 -->
+        <!-- <p class="mt-3 text-xs text-[#8e9bb0]">{{ t('settings.about.whitepaperNote') }}</p> -->
       </section>
     </div>
   </div>

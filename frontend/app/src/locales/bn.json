@@ -190,10 +190,11 @@
       "preview": "Preview:",
       "fillAll": "Please fill in all fields",
       "success": "Registration and real-name verification successful!",
-      "agreementCombinedLabel": "I have read and agree to the User Agreement and Privacy Policy",
-      "riskAgreementLabel": "I have read and agree to the Risk Notice",
+      "agreementCombinedLabel": "আমি পড়েছি এবং সম্মত",
+      "riskAgreementLabel": "আমি পড়েছি এবং সম্মত",
       "whitepaperNotice": "Whitepaper is an explanatory document and does not require consent. View at:",
-      "mustAgreePolicies": "Please agree to the policies and risk notice before registering"
+      "mustAgreePolicies": "Please agree to the policies and risk notice before registering",
+      "andConnector": "এবং"
     },
     "forgotPassword": {
       "title": "Retrieve password",
@@ -347,7 +348,7 @@
       },
       "about": {
         "title": "About",
-        "desc": "Version, notices, User Agreement / Privacy Policy / Whitepaper / Risk Notice"
+        "desc": "Version, notices, User Agreement / Privacy Policy / Risk Notice"
       },
       "cancel-account": {
         "title": "Delete Account",

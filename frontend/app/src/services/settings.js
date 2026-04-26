@@ -49,7 +49,7 @@ const defaultState = {
       { id: 'userAgreement', titleKey: 'settings.about.userAgreement', url: '/legal/user-agreement.pdf' },
       { id: 'privacyPolicy', titleKey: 'settings.about.privacyPolicy', url: '/legal/privacy-policy.docx' },
       { id: 'riskNotice', titleKey: 'settings.about.riskNotice', url: '/legal/risk-notice.docx' },
-      { id: 'whitepaper', titleKey: 'settings.about.whitepaper', url: '/legal/whitepaper.docx' },
+      // { id: 'whitepaper', titleKey: 'settings.about.whitepaper', url: '/legal/whitepaper.docx' }, // 暂停：白皮书入口
     ],
   },
 }
@@ -91,7 +91,7 @@ export const SettingsService = {
         { key: 'account', title: '账户管理', desc: '个人信息、手机号换绑、头像/昵称修改' },
         { key: 'general', title: '通用设置', desc: '消息通知、界面主题、行情刷新频率' },
         { key: 'help', title: '帮助服务', desc: '在线客服、常见问题、意见反馈' },
-        { key: 'about', title: '关于我们', desc: '版本信息、系统公告、用户协议/隐私政策/白皮书/风险提示' },
+        { key: 'about', title: '关于我们', desc: '版本信息、系统公告、用户协议/隐私政策/风险提示' },
         { key: 'cancel-account', title: '注销账号', desc: '风险告知、身份验证、不可恢复注销流程' },
       ],
     }
