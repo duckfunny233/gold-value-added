@@ -34,7 +34,6 @@ const saveAccount = async () => {
   const response = await SettingsService.updateAccountSettings({
     nickname: form.value.nickname,
     avatar: form.value.avatar,
-    mobile: form.value.mobile,
   })
   form.value = response.data
   showToast(t('settings.account.toast.saved'))

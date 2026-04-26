@@ -11,14 +11,28 @@ defineOptions({ name: 'AboutSettings' })
 const router = useRouter()
 const { t } = useI18n()
 const data = ref({ version: '--', buildTime: '--', notices: [] })
+const policyEntries = ref([])
 
 onMounted(async () => {
   const response = await SettingsService.getAboutSettings()
   data.value = response.data
+  policyEntries.value = Array.isArray(response.data?.policyEntries)
+    ? response.data.policyEntries
+    : [
+      { id: 'userAgreement', titleKey: 'settings.about.userAgreement', url: '/legal/user-agreement.pdf' },
+      { id: 'privacyPolicy', titleKey: 'settings.about.privacyPolicy', url: '/legal/privacy-policy.docx' },
+      { id: 'riskNotice', titleKey: 'settings.about.riskNotice', url: '/legal/risk-notice.docx' },
+      { id: 'whitepaper', titleKey: 'settings.about.whitepaper', url: '/legal/whitepaper.docx' },
+    ]
 })
 
-const openEntry = (title) => {
-  showToast(t('settings.about.entryToast', { title }))
+const openEntry = (entry) => {
+  const link = String(entry?.url || '').trim()
+  if (!link) {
+    showToast(t('settings.about.openFailed'))
+    return
+  }
+  window.open(link, '_blank', 'noopener,noreferrer')
 }
 </script>
 
@@ -51,9 +65,16 @@ const openEntry = (title) => {
       <section class="rounded-3xl border border-[#2b3b4c] bg-[#162331] p-4">
         <h3 class="mb-3 text-sm font-bold">{{ t('settings.about.sectionPolicies') }}</h3>
         <div class="grid grid-cols-2 gap-2">
-          <button @click="openEntry(t('settings.about.userAgreement'))" class="rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3 text-sm font-bold btn-interact">{{ t('settings.about.userAgreement') }}</button>
-          <button @click="openEntry(t('settings.about.privacyPolicy'))" class="rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3 text-sm font-bold btn-interact">{{ t('settings.about.privacyPolicy') }}</button>
+          <button
+            v-for="entry in policyEntries"
+            :key="entry.id"
+            @click="openEntry(entry)"
+            class="rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3 text-sm font-bold btn-interact"
+          >
+            {{ t(entry.titleKey) }}
+          </button>
         </div>
+        <p class="mt-3 text-xs text-[#8e9bb0]">{{ t('settings.about.whitepaperNote') }}</p>
       </section>
     </div>
   </div>

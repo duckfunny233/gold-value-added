@@ -11,6 +11,21 @@ const username = ref('')
 const password = ref('')
 const isLoading = ref(false)
 const errorMessage = ref('')
+const loginAgreementAccepted = ref(true)
+const loginRiskAccepted = ref(true)
+
+const policyLinks = {
+  userAgreement: '/legal/user-agreement.pdf',
+  privacyPolicy: '/legal/privacy-policy.docx',
+  riskNotice: '/legal/risk-notice.docx',
+  whitepaper: '/legal/whitepaper.docx',
+}
+
+const openPolicy = (key) => {
+  const url = policyLinks[key]
+  if (!url) return
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
 
 const handleLogin = async () => {
   if (!username.value || !password.value) {
@@ -85,6 +100,29 @@ const handleLogin = async () => {
           <span v-if="isLoading" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
           {{ isLoading ? t('common.submitting') : t('auth.login.loginBtn') }}
         </button>
+
+        <div class="space-y-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/40 p-3">
+          <label class="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-300">
+            <input v-model="loginAgreementAccepted" type="checkbox" class="mt-0.5 h-4 w-4 accent-primary" />
+            <span>
+              {{ t('auth.register.agreementCombinedLabel') }}
+              <button type="button" class="text-primary underline ml-1" @click="openPolicy('userAgreement')">{{ t('settings.about.userAgreement') }}</button>
+              /
+              <button type="button" class="text-primary underline" @click="openPolicy('privacyPolicy')">{{ t('settings.about.privacyPolicy') }}</button>
+            </span>
+          </label>
+          <label class="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-300">
+            <input v-model="loginRiskAccepted" type="checkbox" class="mt-0.5 h-4 w-4 accent-primary" />
+            <span>
+              {{ t('auth.register.riskAgreementLabel') }}
+              <button type="button" class="text-primary underline ml-1" @click="openPolicy('riskNotice')">{{ t('settings.about.riskNotice') }}</button>
+            </span>
+          </label>
+          <p class="text-[11px] text-gray-500 dark:text-gray-400">
+            {{ t('auth.register.whitepaperNotice') }}
+            <button type="button" class="text-primary underline ml-1" @click="openPolicy('whitepaper')">{{ t('settings.about.whitepaper') }}</button>
+          </p>
+        </div>
 
         <div class="flex justify-start text-sm px-1">
           <router-link to="/register" class="text-primary hover:underline font-medium">{{ t('auth.login.registerLink') }}</router-link>

@@ -30,6 +30,15 @@ const proofType = ref('') // workCert, bizLicense, workProof, incomeProof, other
 const proofFile = ref(null)
 const proofPreview = ref('')
 const proofFileInput = ref(null)
+const agreementAccepted = ref(false)
+const riskAccepted = ref(false)
+
+const policyLinks = {
+  userAgreement: '/legal/user-agreement.pdf',
+  privacyPolicy: '/legal/privacy-policy.docx',
+  riskNotice: '/legal/risk-notice.docx',
+  whitepaper: '/legal/whitepaper.docx',
+}
 
 const proofTypes = [
   { value: 'workCert', label: t('auth.register.workCert'), icon: Briefcase },
@@ -196,8 +205,16 @@ const canSubmit = computed(() => {
          idCardFront.value &&
          idCardBack.value &&
          proofType.value &&
-         proofFile.value
+         proofFile.value &&
+         agreementAccepted.value &&
+         riskAccepted.value
 })
+
+const openPolicy = (key) => {
+  const url = policyLinks[key]
+  if (!url) return
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
 
 const handleRegister = async () => {
   // 基础验证
@@ -251,6 +268,11 @@ const handleRegister = async () => {
 
   if (!proofFile.value) {
     showToast(t('auth.register.proofFileRequired'))
+    return
+  }
+
+  if (!agreementAccepted.value || !riskAccepted.value) {
+    showToast(t('auth.register.mustAgreePolicies'))
     return
   }
 
@@ -555,6 +577,29 @@ const handleRegister = async () => {
             <Loader2 v-if="isLoading" class="animate-spin" :size="20" />
             {{ isLoading ? t('common.submitting') : t('auth.register.registerBtn') }}
           </button>
+
+          <div class="space-y-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/40 p-3">
+            <label class="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-300">
+              <input v-model="agreementAccepted" type="checkbox" class="mt-0.5 h-4 w-4 accent-primary" />
+              <span>
+                {{ t('auth.register.agreementCombinedLabel') }}
+                <button type="button" class="text-primary underline ml-1" @click="openPolicy('userAgreement')">{{ t('settings.about.userAgreement') }}</button>
+                /
+                <button type="button" class="text-primary underline" @click="openPolicy('privacyPolicy')">{{ t('settings.about.privacyPolicy') }}</button>
+              </span>
+            </label>
+            <label class="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-300">
+              <input v-model="riskAccepted" type="checkbox" class="mt-0.5 h-4 w-4 accent-primary" />
+              <span>
+                {{ t('auth.register.riskAgreementLabel') }}
+                <button type="button" class="text-primary underline ml-1" @click="openPolicy('riskNotice')">{{ t('settings.about.riskNotice') }}</button>
+              </span>
+            </label>
+            <p class="text-[11px] text-gray-500 dark:text-gray-400">
+              {{ t('auth.register.whitepaperNotice') }}
+              <button type="button" class="text-primary underline ml-1" @click="openPolicy('whitepaper')">{{ t('settings.about.whitepaper') }}</button>
+            </p>
+          </div>
         </div>
       </div>
     </div>

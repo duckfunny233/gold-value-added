@@ -1,3 +1,5 @@
+import { maskMobile } from '../utils/mobile'
+
 const STORAGE_KEY = 'jyz_settings_mock_v1'
 
 const defaultState = {
@@ -19,15 +21,15 @@ const defaultState = {
   account: {
     nickname: '黄金投资者_888',
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=GoldInvestor',
-    mobile: '138****1024',
+    mobile: '13812341024',
     bindStatus: 'settings.account.bindStatus.bound',
   },
   general: {
     noticePush: true,
     tradePush: true,
-    servicePush: false,
+    servicePush: true,
     theme: 'dark',
-    refreshSeconds: 3,
+    refreshSeconds: 5,
   },
   help: {
     faq: [
@@ -37,11 +39,17 @@ const defaultState = {
     ],
   },
   about: {
-    version: 'v0.1.0',
+    version: 'v1.0.0',
     buildTime: '2026-04-12',
     notices: [
       { id: 'n_1', title: 'settings.about.notice.maintenance', time: '2026-04-10 08:00' },
       { id: 'n_2', title: 'settings.about.notice.syncUpgrade', time: '2026-04-08 19:30' },
+    ],
+    policyEntries: [
+      { id: 'userAgreement', titleKey: 'settings.about.userAgreement', url: '/legal/user-agreement.pdf' },
+      { id: 'privacyPolicy', titleKey: 'settings.about.privacyPolicy', url: '/legal/privacy-policy.docx' },
+      { id: 'riskNotice', titleKey: 'settings.about.riskNotice', url: '/legal/risk-notice.docx' },
+      { id: 'whitepaper', titleKey: 'settings.about.whitepaper', url: '/legal/whitepaper.docx' },
     ],
   },
 }
@@ -83,7 +91,7 @@ export const SettingsService = {
         { key: 'account', title: '账户管理', desc: '个人信息、手机号换绑、头像/昵称修改' },
         { key: 'general', title: '通用设置', desc: '消息通知、界面主题、行情刷新频率' },
         { key: 'help', title: '帮助服务', desc: '在线客服、常见问题、意见反馈' },
-        { key: 'about', title: '关于我们', desc: '版本信息、系统公告、用户协议/隐私政策' },
+        { key: 'about', title: '关于我们', desc: '版本信息、系统公告、用户协议/隐私政策/白皮书/风险提示' },
         { key: 'cancel-account', title: '注销账号', desc: '风险告知、身份验证、不可恢复注销流程' },
       ],
     }
@@ -131,20 +139,33 @@ export const SettingsService = {
 
   async getAccountSettings() {
     await wait()
-    return { code: 200, data: readState().account }
+    const account = readState().account || {}
+    return { code: 200, data: { ...account, mobile: maskMobile(account.mobile) } }
   },
 
   async updateAccountSettings(patch) {
     await wait()
     const state = readState()
-    state.account = { ...state.account, ...patch }
+    state.account = {
+      ...state.account,
+      ...patch,
+      mobile: String(patch?.mobile || state.account?.mobile || '').replace(/\D/g, ''),
+    }
     writeState(state)
-    return { code: 200, data: state.account }
+    return { code: 200, data: { ...state.account, mobile: maskMobile(state.account.mobile) } }
   },
 
   async getGeneralSettings() {
     await wait()
-    return { code: 200, data: readState().general }
+    const general = { ...readState().general }
+    const refreshValue = Number(general.refreshSeconds)
+    if (![1, 5, 10].includes(refreshValue)) {
+      general.refreshSeconds = 5
+      if (refreshValue === 3 && general.servicePush === false) {
+        general.servicePush = true
+      }
+    }
+    return { code: 200, data: general }
   },
 
   async updateGeneralSettings(patch) {
@@ -188,7 +209,7 @@ export const SettingsService = {
       data: {
         otpToken,
         expireSeconds: 60,
-        maskedMobile: state.account?.mobile || '138****1024',
+        maskedMobile: maskMobile(state.account?.mobile || '13812341024'),
       },
     }
   },

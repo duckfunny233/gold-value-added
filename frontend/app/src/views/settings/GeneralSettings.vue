@@ -13,14 +13,17 @@ const { t } = useI18n()
 const form = ref({
   noticePush: true,
   tradePush: true,
-  servicePush: false,
+  servicePush: true,
   theme: 'dark',
-  refreshSeconds: 3,
+  refreshSeconds: 5,
 })
 
 onMounted(async () => {
   const response = await SettingsService.getGeneralSettings()
   form.value = response.data
+  if (![1, 5, 10].includes(Number(form.value.refreshSeconds))) {
+    form.value.refreshSeconds = 5
+  }
 })
 
 const saveGeneral = async () => {
@@ -59,7 +62,6 @@ const saveGeneral = async () => {
         <h3 class="mb-3 text-sm font-bold">{{ t('settings.general.sectionRefresh') }}</h3>
         <select v-model="form.refreshSeconds" class="w-full rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3 text-sm text-white outline-none">
           <option :value="1">{{ t('settings.general.seconds', { value: 1 }) }}</option>
-          <option :value="3">{{ t('settings.general.seconds', { value: 3 }) }}</option>
           <option :value="5">{{ t('settings.general.seconds', { value: 5 }) }}</option>
           <option :value="10">{{ t('settings.general.seconds', { value: 10 }) }}</option>
         </select>

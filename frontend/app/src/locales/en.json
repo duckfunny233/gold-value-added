@@ -189,7 +189,11 @@
       "idNumberPlaceholder": "18-digit ID number",
       "preview": "Preview:",
       "fillAll": "Please fill in all fields",
-      "success": "Registration and real-name verification successful!"
+      "success": "Registration and real-name verification successful!",
+      "agreementCombinedLabel": "I have read and agree to the User Agreement and Privacy Policy",
+      "riskAgreementLabel": "I have read and agree to the Risk Notice",
+      "whitepaperNotice": "Whitepaper is an explanatory document and does not require consent. View at:",
+      "mustAgreePolicies": "Please agree to the policies and risk notice before registering"
     },
     "forgotPassword": {
       "title": "Retrieve password",
@@ -356,7 +360,7 @@
       },
       "about": {
         "title": "About",
-        "desc": "Version, notices, agreement/privacy"
+        "desc": "Version, notices, User Agreement / Privacy Policy / Whitepaper / Risk Notice"
       },
       "cancel-account": {
         "title": "Delete Account",
@@ -469,8 +473,8 @@
         "a1": "Normally within 1-3 minutes. Contact support for exception handling.",
         "q2": "Why is withdrawal marked processing?",
         "a2": "After submission, it enters channel handling. ETA 1-24 hours.",
-        "q3": "What if it is outside trading hours?",
-        "a3": "Trading hours follow exchange sessions. Orders are disabled during market close."
+        "q3": "What are the SHFE opening hours?",
+        "a3": "The system follows SHFE sessions: day 09:00-11:30, 13:30-15:30; night 20:00-02:30. Orders are unavailable outside trading hours."
       },
       "toast": {
         "emptyFeedback": "Please enter feedback first",
@@ -490,7 +494,11 @@
       "notice": {
         "maintenance": "System maintenance notice",
         "syncUpgrade": "Trading session sync upgrade online"
-      }
+      },
+      "whitepaper": "Whitepaper",
+      "riskNotice": "Risk Notice",
+      "whitepaperNote": "Whitepaper is for reference only and does not require checkbox consent.",
+      "openFailed": "Document entry is temporarily unavailable"
     },
     "cancel": {
       "title": "Delete Account",

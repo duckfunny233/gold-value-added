@@ -1,4 +1,5 @@
 import { API_BASE } from '../utils/request'
+import { maskMobile } from '../utils/mobile'
 import {
   activitiesFallback,
   buildActivityDetailFallback,
@@ -162,7 +163,7 @@ export const UserService = {
         fallbackSmsTokens.set(smsToken, '123456')
         return {
           smsToken,
-          maskedMobile: '138****1024',
+          maskedMobile: maskMobile(mobile || '13812341024'),
           expireSeconds: 60,
         }
       }
