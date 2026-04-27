@@ -1,5 +1,4 @@
 import { apiFetch } from '../utils/request'
-import { cloneData, tradeOrdersFallback } from './fallback-data'
 
 const resolveCurrentUser = () => {
   try {
@@ -17,15 +16,8 @@ export const TradeService = {
     if (user?.uid) query.set('uid', user.uid)
     if (!user?.uid && user?.username) query.set('username', user.username)
 
-    try {
-      const path = query.size ? `/api/app/trades?${query.toString()}` : '/api/app/trades'
-      return await apiFetch(path)
-    } catch (error) {
-      return {
-        code: 200,
-        data: cloneData(tradeOrdersFallback),
-      }
-    }
+    const path = query.size ? `/api/app/trades?${query.toString()}` : '/api/app/trades'
+    return apiFetch(path)
   },
 
   async submitOrder(assetId, type, quantity, assetName, price) {

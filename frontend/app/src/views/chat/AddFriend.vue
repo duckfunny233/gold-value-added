@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeft, Search, UserPlus, CheckCircle2 } from 'lucide-vue-next'
+import { ArrowLeft, Search, UserPlus, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-vue-next'
 import { ChatService } from '../../services/chat'
 
 const router = useRouter()
@@ -16,17 +16,34 @@ const results = ref([])
 const selectedUser = ref(null)
 const requestState = ref(null)
 const confirmLoading = ref(false)
+const visibleCount = ref(5)
 
 const canSendRequest = computed(() => selectedUser.value && !requestState.value)
 
+const sortedResults = computed(() => {
+  return [...results.value].sort((a, b) => b.mutualFriends - a.mutualFriends)
+})
+
+const hasMore = computed(() => {
+  return sortedResults.value.length > visibleCount.value
+})
+
+const isExpanded = computed(() => {
+  return visibleCount.value > 5
+})
+
 const searchUsers = async () => {
   searching.value = true
+  visibleCount.value = 5
   try {
     const response = await ChatService.searchFriends(keyword.value)
     results.value = response.data || []
     if (!selectedUser.value && results.value.length) {
       selectedUser.value = results.value[0]
     }
+  } catch (error) {
+    console.error('Search friends failed:', error)
+    results.value = []
   } finally {
     searching.value = false
   }
@@ -38,6 +55,8 @@ const loadProfile = async (id) => {
     const response = await ChatService.getFriendProfile(id)
     selectedUser.value = response.data
     requestState.value = null
+  } catch (error) {
+    console.error('Load friend profile failed:', error)
   } finally {
     loading.value = false
   }
@@ -45,11 +64,15 @@ const loadProfile = async (id) => {
 
 const sendRequest = async () => {
   if (!selectedUser.value) return
-  const response = await ChatService.sendFriendRequest({
-    targetUserId: selectedUser.value.id,
-    message: t('chat.addFriendPage.requestMessage'),
-  })
-  requestState.value = response.data
+  try {
+    const response = await ChatService.sendFriendRequest({
+      targetUserId: selectedUser.value.id,
+      message: t('chat.addFriendPage.requestMessage'),
+    })
+    requestState.value = response.data
+  } catch (error) {
+    console.error('Send friend request failed:', error)
+  }
 }
 
 const confirmRequest = async () => {
@@ -61,6 +84,8 @@ const confirmRequest = async () => {
       ...requestState.value,
       ...response.data,
     }
+  } catch (error) {
+    console.error('Confirm friend request failed:', error)
   } finally {
     confirmLoading.value = false
   }
@@ -72,6 +97,14 @@ const openChat = () => {
     path: `/chat/${requestState.value.chatId}`,
     query: { title: requestState.value.chatName || selectedUser.value?.nickname || t('chat.addFriendPage.newFriend') },
   })
+}
+
+const loadMore = () => {
+  visibleCount.value += 5
+}
+
+const collapse = () => {
+  visibleCount.value = 5
 }
 
 onMounted(async () => {
@@ -103,7 +136,7 @@ onMounted(async () => {
 
         <div class="mt-4 space-y-3">
           <button
-            v-for="item in results"
+            v-for="item in sortedResults.slice(0, visibleCount)"
             :key="item.id"
             @click="loadProfile(item.id)"
             class="flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left btn-interact"
@@ -116,6 +149,24 @@ onMounted(async () => {
             </div>
             <span class="text-xs text-[#c99b18]">{{ t('chat.addFriendPage.view') }}</span>
           </button>
+          <div v-if="hasMore || isExpanded" class="flex justify-center gap-3">
+            <button
+              v-if="isExpanded"
+              @click="collapse"
+              class="flex items-center gap-2 rounded-2xl border border-[#273647] bg-[#13202c] px-4 py-3 text-sm text-[#c99b18] btn-interact"
+            >
+              <ChevronUp :size="16" />
+              {{ t('chat.addFriendPage.collapse') }}
+            </button>
+            <button
+              v-if="hasMore"
+              @click="loadMore"
+              class="flex items-center justify-center gap-2 rounded-2xl border border-[#273647] bg-[#13202c] px-4 py-3 text-sm text-[#c99b18] btn-interact"
+            >
+              <ChevronDown :size="16" />
+              {{ t('chat.addFriendPage.loadMore') }}
+            </button>
+          </div>
         </div>
       </section>
 

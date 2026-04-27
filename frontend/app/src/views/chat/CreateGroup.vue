@@ -1,28 +1,48 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeft, CheckCircle2, Users } from 'lucide-vue-next'
+import { ArrowLeft, CheckCircle2, Users, Search, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import { ChatService } from '../../services/chat'
 
 const router = useRouter()
 const { t } = useI18n()
 const loading = ref(false)
 const candidates = ref([])
+const filteredCandidates = ref([])
 const selectedIds = ref([])
 const groupName = ref(t('chat.createGroupPage.defaultName'))
 const notice = ref(t('chat.createGroupPage.defaultNotice'))
 const createResult = ref(null)
+const currentPage = ref(1)
+const pageSize = ref(10)
+const searchKeyword = ref('')
 
 const selectedMembers = computed(() => candidates.value.filter((item) => selectedIds.value.includes(item.id)))
 const canCreate = computed(() => groupName.value.trim() && selectedIds.value.length >= 2 && !createResult.value)
+
+const totalPages = computed(() => {
+  return Math.ceil(filteredCandidates.value.length / pageSize.value)
+})
+
+const paginatedCandidates = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return filteredCandidates.value.slice(start, end)
+})
 
 const loadCandidates = async () => {
   loading.value = true
   try {
     const response = await ChatService.getGroupCandidates()
     candidates.value = response.data || []
+    filteredCandidates.value = candidates.value
     selectedIds.value = candidates.value.slice(0, 2).map((item) => item.id)
+  } catch (error) {
+    console.error('Load group candidates failed:', error)
+    candidates.value = []
+    filteredCandidates.value = []
+    selectedIds.value = []
   } finally {
     loading.value = false
   }
@@ -37,12 +57,16 @@ const toggleMember = (id) => {
 }
 
 const createGroup = async () => {
-  const response = await ChatService.createGroup({
-    name: groupName.value,
-    notice: notice.value,
-    memberIds: selectedIds.value,
-  })
-  createResult.value = response.data
+  try {
+    const response = await ChatService.createGroup({
+      name: groupName.value,
+      notice: notice.value,
+      memberIds: selectedIds.value,
+    })
+    createResult.value = response.data
+  } catch (error) {
+    console.error('Create group failed:', error)
+  }
 }
 
 const enterGroupChat = () => {
@@ -52,6 +76,30 @@ const enterGroupChat = () => {
     query: { title: createResult.value.name || groupName.value || t('chat.createGroupPage.newGroup') },
   })
 }
+
+const searchMembers = () => {
+  if (!searchKeyword.value.trim()) {
+    filteredCandidates.value = candidates.value
+  } else {
+    const keyword = searchKeyword.value.toLowerCase()
+    filteredCandidates.value = candidates.value.filter(item => {
+      return item.nickname.toLowerCase().includes(keyword) || item.uid.includes(keyword)
+    })
+  }
+  currentPage.value = 1
+}
+
+const changePage = (page) => {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+  }
+}
+
+watch(searchKeyword, (newKeyword) => {
+  if (newKeyword.trim() === '') {
+    searchMembers()
+  }
+})
 
 onMounted(loadCandidates)
 </script>
@@ -84,9 +132,20 @@ onMounted(loadCandidates)
           <h3 class="text-base font-bold">{{ t('chat.createGroupPage.selectMembers') }}</h3>
           <span class="text-xs text-[#c99b18]">{{ t('chat.createGroupPage.selectedCount', { count: selectedIds.length }) }}</span>
         </div>
+        
+        <div class="mt-3">
+          <div class="flex items-center gap-3 rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3">
+            <Search :size="18" class="text-[#8e9bb0]" />
+            <input v-model="searchKeyword" @keyup.enter="searchMembers" :placeholder="t('chat.createGroupPage.searchPlaceholder')" class="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#6f8093]" />
+            <button @click="searchMembers" class="rounded-xl bg-[#c99b18] px-3 py-1.5 text-xs font-bold text-white btn-interact">
+              {{ t('common.search') }}
+            </button>
+          </div>
+        </div>
+        
         <div class="mt-4 grid grid-cols-1 gap-3">
           <button
-            v-for="item in candidates"
+            v-for="item in paginatedCandidates"
             :key="item.id"
             @click="toggleMember(item.id)"
             class="flex items-center gap-3 rounded-2xl border px-4 py-3 text-left btn-interact"
@@ -100,6 +159,16 @@ onMounted(loadCandidates)
             <span class="text-xs" :class="selectedIds.includes(item.id) ? 'text-[#c99b18]' : 'text-[#7a8ca1]'">
               {{ selectedIds.includes(item.id) ? t('chat.createGroupPage.selected') : t('chat.createGroupPage.select') }}
             </span>
+          </button>
+        </div>
+        
+        <div v-if="totalPages > 1" class="mt-4 flex items-center justify-center gap-2">
+          <button @click="changePage(currentPage - 1)" :disabled="currentPage === 1" class="flex items-center justify-center h-8 w-8 rounded-full border border-[#273647] bg-[#13202c] text-[#8e9bb0] btn-interact" :class="{ 'opacity-50 cursor-not-allowed': currentPage === 1 }">
+            <ChevronLeft :size="16" />
+          </button>
+          <span class="text-xs text-[#8e9bb0]">{{ currentPage }} / {{ totalPages }}</span>
+          <button @click="changePage(currentPage + 1)" :disabled="currentPage === totalPages" class="flex items-center justify-center h-8 w-8 rounded-full border border-[#273647] bg-[#13202c] text-[#8e9bb0] btn-interact" :class="{ 'opacity-50 cursor-not-allowed': currentPage === totalPages }">
+            <ChevronRight :size="16" />
           </button>
         </div>
       </section>

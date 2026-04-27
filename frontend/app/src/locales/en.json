@@ -62,7 +62,9 @@
       "simulateConfirm": "Simulate peer confirmation",
       "sendMessage": "Send message",
       "requestMessage": "Hi, I am GoldInvestor_888. I would like to add you as a friend.",
-      "newFriend": "New friend"
+      "newFriend": "New friend",
+      "loadMore": "Load more",
+      "collapse": "Collapse"
     },
     "createGroupPage": {
       "defaultName": "Precious Metal Flash Group",
@@ -77,7 +79,8 @@
       "created": "Group created",
       "createdDesc": "{name} · {count} members joined",
       "enterGroup": "Enter group",
-      "newGroup": "New group"
+      "newGroup": "New group",
+      "searchPlaceholder": "Search by UID or nickname"
     },
     "scanPage": {
       "cameraOpen": "Camera is on, simulating QR recognition...",
@@ -144,6 +147,7 @@
     "delete": "Delete",
     "refresh": "Refresh",
     "search": "Search",
+    "copy": "Copy",
     "all": "All",
     "yes": "Yes",
     "no": "No",
@@ -264,6 +268,8 @@
     "recentOrders": "Recent orders",
     "refresh": "Refresh",
     "noOrders": "No order records",
+    "noSearchResults": "No search results",
+    "searchPlaceholder": "Search by product name",
     "orderSuccess": "Order successful!",
     "spotGold": "Spot Gold",
     "unnamedAsset": "Unnamed Asset",

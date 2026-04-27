@@ -120,7 +120,7 @@ const sendMessage = async (text = null) => {
 
   try {
     const json = await ChatService.sendMessage(parseInt(chatId.value, 10), content)
-    chatList.value.push(json.data)
+    chatList.value.push(localizeMessage(json.data))
     if (!text) message.value = ''
     showEmoji.value = false
     scrollToBottom()
@@ -149,7 +149,7 @@ const translateTransferStatus = (status) => {
 }
 
 const handleTransferSuccess = (transferMessage) => {
-  chatList.value.push(transferMessage)
+  chatList.value.push(localizeMessage(transferMessage))
   scrollToBottom()
 }
 

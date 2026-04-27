@@ -62,7 +62,9 @@
       "simulateConfirm": "模拟对方确认",
       "sendMessage": "发消息",
       "requestMessage": "你好，我是黄金投资者_888，希望添加你为好友。",
-      "newFriend": "新好友"
+      "newFriend": "新好友",
+      "loadMore": "展开更多",
+      "collapse": "收起"
     },
     "createGroupPage": {
       "defaultName": "贵金属快讯群",
@@ -77,7 +79,8 @@
       "created": "群聊创建成功",
       "createdDesc": "{name} · {count} 位成员已加入",
       "enterGroup": "进入群聊",
-      "newGroup": "新建群聊"
+      "newGroup": "新建群聊",
+      "searchPlaceholder": "搜索UID或昵称"
     },
     "scanPage": {
       "cameraOpen": "摄像头已开启，正在模拟识别二维码...",
@@ -144,6 +147,7 @@
     "delete": "删除",
     "refresh": "刷新",
     "search": "搜索",
+    "copy": "复制",
     "all": "全部",
     "yes": "是",
     "no": "否",
@@ -284,6 +288,8 @@
     "recentOrders": "最近订单",
     "refresh": "刷新",
     "noOrders": "暂无订单记录",
+    "noSearchResults": "没有搜索结果",
+    "searchPlaceholder": "按品种名称搜索",
     "orderSuccess": "下单成功",
     "spotGold": "现货黄金",
     "unnamedAsset": "未命名品种",

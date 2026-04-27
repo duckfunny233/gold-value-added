@@ -67,6 +67,7 @@ const submitTransfer = async () => {
   try {
     const response = await ChatService.sendTransfer(props.chatId, {
       recipientId: selectedTarget.value.id,
+      recipientUid: selectedTarget.value.uid,
       recipientName: selectedTarget.value.nickname,
       amount: Number(amount.value),
       note: note.value.trim(),

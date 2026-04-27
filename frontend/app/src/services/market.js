@@ -1,10 +1,4 @@
 import { API_BASE, apiFetch } from '../utils/request'
-import {
-  buildKLineFallback,
-  cloneData,
-  marketPeriodsFallback,
-  marketPricesFallback,
-} from './fallback-data'
 
 const DEFAULT_TRADING_WINDOWS = [
   {
@@ -176,25 +170,25 @@ const buildTradingStatus = () => {
 
 const normalizePeriods = (items) => {
   if (!Array.isArray(items)) {
-    return cloneData(marketPeriodsFallback)
+    return []
   }
 
-  const normalized = items
-    .filter((item) => EXPECTED_PERIOD_VALUES.includes(item?.value))
-    .map((item) => {
-      const fallback = marketPeriodsFallback.find((period) => period.value === item.value)
-      return {
-        label: fallback?.label || item.label,
-        value: item.value,
-        type: fallback?.type || item.type || 'candle',
-      }
-    })
+  const byValue = new Map(
+    items
+      .filter((item) => EXPECTED_PERIOD_VALUES.includes(item?.value))
+      .map((item) => [
+        item.value,
+        {
+          label: item?.label || '',
+          value: item.value,
+          type: item?.type || (item.value === '1m' ? 'area' : 'candle'),
+        },
+      ]),
+  )
 
-  if (normalized.length !== EXPECTED_PERIOD_VALUES.length) {
-    return cloneData(marketPeriodsFallback)
-  }
-
-  return EXPECTED_PERIOD_VALUES.map((value) => normalized.find((item) => item.value === value))
+  return EXPECTED_PERIOD_VALUES
+    .map((value) => byValue.get(value))
+    .filter(Boolean)
 }
 
 const bootstrapTradingWindows = async () => {
@@ -220,49 +214,25 @@ const bootstrapTradingWindows = async () => {
   return cachedTradingWindows
 }
 
-const buildMergedMarketQuotes = (remoteQuotes = []) => {
-  const remoteMap = new Map(Array.isArray(remoteQuotes) ? remoteQuotes.map((item) => [item.id, item]) : [])
-
-  return INSTRUMENT_CATALOG.map((catalog) => {
-    if (EXTERNAL_IDS.has(catalog.id) && remoteMap.has(catalog.id)) {
-      return normalizeRemoteQuote(remoteMap.get(catalog.id), catalog)
-    }
-    return buildLocalQuote(catalog)
-  })
-}
-
 export const MarketService = {
   async getPrices() {
-    try {
-      const response = await apiFetch('/api/market/prices')
-      return {
-        code: 200,
-        data: buildMergedMarketQuotes(response?.data || []),
-      }
-    } catch (error) {
-      const fallbackData = buildMergedMarketQuotes(cloneData(marketPricesFallback))
-      return { code: 200, data: fallbackData }
-    }
+    return apiFetch('/api/market/prices')
   },
 
   async getPeriods() {
-    try {
-      const payload = await apiFetch('/api/market/periods')
-      return {
-        ...payload,
-        data: normalizePeriods(payload?.data),
-      }
-    } catch (error) {
-      return { code: 200, data: cloneData(marketPeriodsFallback) }
+    const payload = await apiFetch('/api/market/periods')
+    return {
+      ...payload,
+      data: normalizePeriods(payload?.data),
     }
   },
 
   async getKLine(assetId, period) {
-    try {
-      return await apiFetch(`/api/market/kline?period=${period}&asset=${assetId}`)
-    } catch (error) {
-      return { code: 200, data: buildKLineFallback(assetId, period) }
-    }
+    return apiFetch(`/api/market/kline?period=${period}&asset=${assetId}`)
+  },
+
+  async getOrderBook(assetId) {
+    return apiFetch(`/api/market/order-book?asset=${encodeURIComponent(assetId || 'AU9999')}`)
   },
 
   async getTradingStatus() {

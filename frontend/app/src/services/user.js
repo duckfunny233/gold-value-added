@@ -5,7 +5,6 @@ import {
   buildActivityDetailFallback,
   cloneData,
   profileFallback,
-  leaderboardFallback,
 } from './fallback-data'
 
 let fallbackBalanceDelta = 0
@@ -74,6 +73,24 @@ const requestJsonOrFallback = async (path, options = {}, fallbackData) => {
   }
 }
 
+const requestJson = async (path, options = {}) => {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: options.method || 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: localStorage.getItem('token') ? `Bearer ${localStorage.getItem('token')}` : '',
+      ...(options.headers || {}),
+    },
+    body: options.body,
+  })
+  const text = await response.text()
+  const payload = text ? JSON.parse(text) : {}
+  if (!response.ok) {
+    throw new Error(payload.message || 'request-failed')
+  }
+  return payload
+}
+
 const fetchJsonOrFallback = async (path, fallbackData) => requestJsonOrFallback(path, {}, fallbackData)
 
 export const UserService = {
@@ -85,7 +102,7 @@ export const UserService = {
   },
 
   getNotice() {
-    return fetchJsonOrFallback('/api/notice', { text: '【调试模式】当前正在使用本地兜底数据。' })
+    return requestJson('/api/notice')
   },
 
   getActivities() {
@@ -97,7 +114,7 @@ export const UserService = {
   },
 
   getLeaderboard() {
-    return fetchJsonOrFallback('/api/public/leaderboard', { items: leaderboardFallback })
+    return requestJson('/api/public/leaderboard')
   },
 
   getGoldChainRecords() {

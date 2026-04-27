@@ -75,14 +75,16 @@ onMounted(loadQr)
         <div class="mt-4 rounded-2xl bg-[#1d2c3d] p-4">
           <div class="flex items-center justify-between gap-3">
             <div>
-              <p class="text-base font-bold">{{ qrData?.nickname || 'GoldInvestor_888' }}</p>
+              <p class="text-base font-bold">{{ qrData?.displayName || qrData?.nickname || 'GoldInvestor_888' }}</p>
               <p class="mt-1 text-xs text-[#8e9bb0]">{{ t('chat.myQr.uidLabel') }}{{ qrData?.uid || 'U0001001' }}</p>
+              <p v-if="qrData?.qrPayload" class="mt-1 text-[11px] text-[#7e92a8] break-all">{{ qrData.qrPayload }}</p>
             </div>
             <button @click="copyUid" class="rounded-xl border border-[#3a4e64] px-3 py-1.5 text-xs text-[#d8e2ee] btn-interact">
               {{ t('chat.myQr.copyUid') }}
             </button>
           </div>
           <ul class="mt-3 space-y-1 text-xs text-[#8e9bb0]">
+            <li v-if="qrData?.slogan">{{ qrData.slogan }}</li>
             <li v-for="tip in (qrData?.tips || [])" :key="tip">{{ tip }}</li>
           </ul>
         </div>

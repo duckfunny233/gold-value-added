@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { TradeService } from '../services/trade'
 import { UserService } from '../services/user'
 import { MarketService } from '../services/market'
-import { Loader2, ChevronDown, ChevronUp } from 'lucide-vue-next'
+import { Loader2, ChevronDown, ChevronUp, Search } from 'lucide-vue-next'
 import { useMarketPolling } from '../composables/useMarketPolling'
 import { showToast } from '../composables/useToast'
 
@@ -23,6 +23,7 @@ const submitting = ref(false)
 const availableBalance = ref(null)
 const assetName = ref(route.query.assetName || '')
 const assetId = ref(route.query.assetId || '')
+const searchKeyword = ref('')
 const BUY_ARRIVAL_STORAGE_KEY = 'jyz_last_buy_arrival'
 const buyFeedback = ref({
   visible: false,
@@ -41,7 +42,7 @@ const orderBookData = ref({
   sell: []
 })
 const orderBookLoading = ref(false)
-const orderBookTimer = null
+let orderBookTimer = null
 
 // 品种列表（与 markets 顺序一致）
 const assetList = computed(() => markets.value)
@@ -70,6 +71,17 @@ const currentPrice = computed(() => {
 const totalAmount = computed(() => {
   if (!quantity.value || isNaN(quantity.value) || !currentPrice.value) return '0.00'
   return (currentPrice.value * parseFloat(quantity.value)).toFixed(2)
+})
+
+// 过滤订单
+const filteredOrders = computed(() => {
+  if (!searchKeyword.value.trim()) {
+    return orders.value
+  }
+  const keyword = searchKeyword.value.toLowerCase()
+  return orders.value.filter(order => {
+    return order.name.toLowerCase().includes(keyword)
+  })
 })
 
 const parseMoney = (value) => {
@@ -229,7 +241,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   clearBuyFeedback()
-  if (orderBookTimer) clearInterval(orderBookTimer)
+  if (orderBookTimer) {
+    clearInterval(orderBookTimer)
+    orderBookTimer = null
+  }
 })
 
 // 五档盘口相关方法
@@ -238,7 +253,6 @@ const toggleOrderBook = () => {
   if (showOrderBook.value) {
     // 默认选中当前交易品种
     orderBookAssetId.value = assetId.value || (markets.value[0]?.id || '')
-    fetchOrderBook()
   }
 }
 
@@ -251,52 +265,42 @@ const fetchOrderBook = async () => {
   if (!orderBookAssetId.value) return
   orderBookLoading.value = true
   try {
-    const data = await MarketService.getOrderBook(orderBookAssetId.value)
-    orderBookData.value = data
+    const payload = await MarketService.getOrderBook(orderBookAssetId.value)
+    const data = payload?.data || {}
+    orderBookData.value = {
+      buy: Array.isArray(data?.buy) ? data.buy : [],
+      sell: Array.isArray(data?.sell) ? data.sell : [],
+      updatedAt: data?.updatedAt || '',
+    }
   } catch (err) {
-    // 如果接口不存在，使用模拟数据
-    generateMockOrderBook()
+    console.error('Failed to fetch order book:', err)
+    orderBookData.value = { buy: [], sell: [], updatedAt: '' }
   } finally {
     orderBookLoading.value = false
   }
 }
 
-// 模拟五档数据
-const generateMockOrderBook = () => {
-  const currentAsset = markets.value.find(m => m.id === orderBookAssetId.value)
-  const basePrice = currentAsset ? parseFloat(currentAsset.price) : 500
-  
-  // 卖五到卖一（价格从高到低）
-  const sellOrders = []
-  for (let i = 5; i >= 1; i--) {
-    sellOrders.push({
-      level: i,
-      price: (basePrice + i * 0.02 + Math.random() * 0.01).toFixed(2),
-      quantity: Math.floor(Math.random() * 50) + 5
-    })
+const startOrderBookPolling = () => {
+  if (orderBookTimer) {
+    clearInterval(orderBookTimer)
+    orderBookTimer = null
   }
-  
-  // 买一到买五（价格从低到高）
-  const buyOrders = []
-  for (let i = 1; i <= 5; i++) {
-    buyOrders.push({
-      level: i,
-      price: (basePrice - i * 0.02 - Math.random() * 0.01).toFixed(2),
-      quantity: Math.floor(Math.random() * 50) + 5
-    })
-  }
-  
-  orderBookData.value = {
-    sell: sellOrders,
-    buy: buyOrders,
-    updatedAt: new Date().toLocaleTimeString('zh-CN', { hour12: false })
-  }
+  fetchOrderBook()
+  orderBookTimer = setInterval(fetchOrderBook, 3000)
 }
 
-// 监听盘口展开状态，定时刷新数据
 watch(showOrderBook, (visible) => {
   if (visible) {
-    generateMockOrderBook()
+    if (!orderBookAssetId.value) {
+      orderBookAssetId.value = assetId.value || (markets.value[0]?.id || '')
+    }
+    startOrderBookPolling()
+    return
+  }
+
+  if (orderBookTimer) {
+    clearInterval(orderBookTimer)
+    orderBookTimer = null
   }
 })
 </script>
@@ -332,16 +336,16 @@ watch(showOrderBook, (visible) => {
 
         <!-- Asset Selector Inside Card -->
         <div class="px-4 pt-3 pb-2 border-b border-[#2a3a4b] bg-[#1f2d3b]">
-          <div class="flex gap-3 overflow-x-auto no-scrollbar pb-1">
-          <button 
-            v-for="asset in markets" 
-            :key="asset.id"
-            @click="selectAsset(asset)"
-            :class="assetId === asset.id ? 'bg-[#c99b18] text-white shadow-sm' : 'bg-[#223244] text-[#a6b0c3] border border-[#304255]'"
-            class="px-4 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap btn-interact"
-          >
-            {{ asset.name }}
-          </button>
+          <div class="flex flex-nowrap gap-3 overflow-x-auto no-scrollbar pb-1">
+            <button 
+              v-for="asset in markets" 
+              :key="asset.id"
+              @click="selectAsset(asset)"
+              :class="assetId === asset.id ? 'bg-[#c99b18] text-white shadow-sm' : 'bg-[#223244] text-[#a6b0c3] border border-[#304255]'"
+              class="px-4 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap btn-interact"
+            >
+              {{ asset.name }}
+            </button>
           </div>
         </div>
 
@@ -397,7 +401,7 @@ watch(showOrderBook, (visible) => {
         <div v-show="showOrderBook" class="border-t border-[#2a3a4b]">
           <!-- 品种 Tab -->
           <div class="px-3 py-2 border-b border-[#2a3a4b] bg-[#1f2d3b]">
-            <div class="flex gap-2 overflow-x-auto no-scrollbar">
+            <div class="flex flex-nowrap gap-2 overflow-x-auto no-scrollbar">
               <button 
                 v-for="asset in assetList" 
                 :key="asset.id"
@@ -460,13 +464,21 @@ watch(showOrderBook, (visible) => {
         <h3 class="font-bold text-lg text-white">{{ t('trade.recentOrders') }}</h3>
         <button v-if="!loading" @click="fetchOrders" class="text-xs text-[#c99b18] btn-interact font-medium">{{ t('trade.refresh') }}</button>
       </div>
+      
+      <div class="flex items-center gap-3 rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3">
+        <Search :size="18" class="text-[#8e9bb0]" />
+        <input v-model="searchKeyword" @keyup.enter="searchKeyword = searchKeyword" :placeholder="t('trade.searchPlaceholder')" class="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#6f8093]" />
+        <button @click="searchKeyword = searchKeyword" class="rounded-xl bg-[#c99b18] px-3 py-1.5 text-xs font-bold text-white btn-interact">
+          {{ t('common.search') }}
+        </button>
+      </div>
 
       <div v-if="loading" class="py-10 flex justify-center">
         <Loader2 class="animate-spin text-gray-300" :size="32" />
       </div>
 
       <template v-else>
-        <div v-for="order in orders" :key="order.id" class="card-base p-4 animate-in slide-in-from-top-2 duration-300">
+        <div v-for="order in filteredOrders" :key="order.id" class="card-base p-4 animate-in slide-in-from-top-2 duration-300">
           <div class="flex justify-between items-center mb-2">
             <div class="flex items-center gap-2">
               <span class="px-2 py-0.5 text-[10px] rounded font-bold" :class="translateOrderType(order.type) === t('trade.orderType.buy') ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'">
@@ -482,8 +494,8 @@ watch(showOrderBook, (visible) => {
           </div>
         </div>
 
-        <div v-if="orders.length === 0" class="py-10 text-center text-[#7d8da2] text-sm">
-          {{ t('trade.noOrders') }}
+        <div v-if="filteredOrders.length === 0" class="py-10 text-center text-[#7d8da2] text-sm">
+          {{ searchKeyword ? t('trade.noSearchResults') : t('trade.noOrders') }}
         </div>
       </template>
     </div>

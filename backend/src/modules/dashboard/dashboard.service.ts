@@ -69,37 +69,7 @@ export class DashboardService {
   }
 
   async getAppNoticeFeed(): Promise<NoticeFeedResult> {
-    const [remoteFeed, localNotices] = await Promise.all([
-      this.safeGetRemoteFeed(),
-      this.getPublishedLocalNotices(),
-    ])
-
-    if (remoteFeed.notices.length) {
-      return {
-        notices: this.mergeNotices(remoteFeed.notices, localNotices),
-        meta: remoteFeed.meta,
-      }
-    }
-
-    if (localNotices.length) {
-      return {
-        notices: localNotices,
-        meta: {
-          source: 'local',
-          code: remoteFeed.meta.code,
-          cachedAt: remoteFeed.meta.cachedAt,
-        },
-      }
-    }
-
-    return {
-      notices: [this.buildDefaultLocalNotice()],
-      meta: {
-        source: 'default-local',
-        code: remoteFeed.meta.code,
-        cachedAt: remoteFeed.meta.cachedAt,
-      },
-    }
+    return this.newsFeedService.getFeed()
   }
 
   async publishNotice(body: PublishNoticeDto, actor: AdminActor) {

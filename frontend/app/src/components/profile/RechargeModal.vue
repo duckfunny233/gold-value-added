@@ -318,6 +318,8 @@ const downloadQRCode = () => {
   document.body.removeChild(link)
   showToast(t('settings.recharge.qrDownloaded'))
 }
+
+
 </script>
 
 <template>

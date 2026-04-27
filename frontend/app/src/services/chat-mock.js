@@ -179,7 +179,10 @@ export const scanEntriesMock = [
 
 export const myQrMock = {
   uid: 'U0001001',
+  displayName: '黄金投资者_888',
   nickname: '黄金投资者_888',
+  qrPayload: 'jinlian://pay?uid=U0001001&name=%E9%BB%84%E9%87%91%E6%8A%95%E8%B5%84%E8%80%85_888',
+  slogan: '支付先扣增值后扣本金，收款方可能产生手续费',
   qrCode: createQrDataUri('金影子·我的二维码'),
   tips: ['扫码可添加我为好友', '仅展示模拟二维码，用于页面展示'],
 }
