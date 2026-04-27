@@ -1,0 +1,954 @@
+openapi: 3.1.0
+info:
+  title: 金影子客户端API
+  version: 1.0.0
+  description: 客户端接口文档，用于Apifox测试
+servers:
+  - url: http://localhost:3001/api
+    description: 本地开发环境
+
+tags:
+  - name: Auth
+  - name: User
+  - name: Notice
+  - name: News
+  - name: Chat
+  - name: Leaderboard
+  - name: Activities
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: 用户登录
+      operationId: 用户登录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                      user:
+                        type: object
+                        properties:
+                          uid:
+                            type: string
+                          roleCodes:
+                            type: array
+                            items:
+                              type: string
+  /auth/send-otp:
+    post:
+      tags: [Auth]
+      summary: 发送短信验证码
+      operationId: 发送短信验证码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone:
+                  type: string
+              required:
+                - phone
+      responses:
+        '200':
+          description: 发送成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+  /auth/register-with-files:
+    post:
+      tags: [Auth]
+      summary: 文件注册
+      operationId: 文件注册
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                phone:
+                  type: string
+                otpCode:
+                  type: string
+                realName:
+                  type: string
+                idCardFront:
+                  type: string
+                  format: binary
+                idCardBack:
+                  type: string
+                  format: binary
+              required:
+                - username
+                - password
+                - phone
+                - otpCode
+                - realName
+                - idCardFront
+                - idCardBack
+      responses:
+        '200':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      uid:
+                        type: string
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: JSON注册（兼容）
+      operationId: JSON注册（兼容）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                phone:
+                  type: string
+                otpCode:
+                  type: string
+                realName:
+                  type: string
+              required:
+                - username
+                - password
+                - phone
+                - otpCode
+                - realName
+      responses:
+        '200':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      uid:
+                        type: string
+  /user/profile:
+    get:
+      tags: [User]
+      summary: 获取用户资料、实名状态、资产与持仓
+      operationId: 获取用户资料、实名状态、资产与持仓
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      uid:
+                        type: string
+                      nickname:
+                        type: string
+                      realNameVerified:
+                        type: boolean
+                      assets:
+                        type: array
+                        items:
+                          type: object
+                      goldPositions:
+                        type: array
+                        items:
+                          type: object
+                      silverPositions:
+                        type: array
+                        items:
+                          type: object
+                      withdrawablePrincipal:
+                        type: number
+                      principalBalance:
+                        type: number
+                      appreciationIncome:
+                        type: number
+  /notice:
+    get:
+      tags: [Notice]
+      summary: 首页公告
+      operationId: 首页公告
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      text:
+                        type: string
+  /news:
+    get:
+      tags: [News]
+      summary: 新闻轮播列表
+      operationId: 新闻轮播列表
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            title:
+                              type: string
+                            cover:
+                              type: string
+                      total:
+                        type: integer
+  /news/{id}:
+    get:
+      tags: [News]
+      summary: 新闻详情
+      operationId: 新闻详情
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      title:
+                        type: string
+                      content:
+                        type: string
+                      createdAt:
+                        type: string
+                      cover:
+                        type: string
+  /activities/{id}:
+    get:
+      tags: [Activities]
+      summary: 活动详情
+      operationId: 活动详情
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      title:
+                        type: string
+                      content:
+                        type: string
+                      createdAt:
+                        type: string
+                      cover:
+                        type: string
+  /public/leaderboard:
+    get:
+      tags: [Leaderboard]
+      summary: 金字塔排行榜
+      operationId: 金字塔排行榜
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        rank:
+                          type: integer
+                        uid:
+                          type: string
+                        nickname:
+                          type: string
+                        goldGrams:
+                          type: number
+                        totalAsset:
+                          type: number
+                        sequenceNo:
+                          type: integer
+  /chat/list:
+    get:
+      tags: [Chat]
+      summary: 会话列表
+      operationId: 会话列表
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        lastMsg:
+                          type: string
+                        time:
+                          type: string
+                        type:
+                          type: string
+  /chat/my-qr:
+    get:
+      tags: [Chat]
+      summary: 我的收款码
+      operationId: 我的收款码
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      uid:
+                        type: string
+                      displayName:
+                        type: string
+                      qrPayload:
+                        type: string
+                      slogan:
+                        type: string
+  /chat/messages/{id}:
+    get:
+      tags: [Chat]
+      summary: 消息列表
+      operationId: 消息列表
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        chatId:
+                          type: string
+                        senderUid:
+                          type: string
+                        text:
+                          type: string
+                        createdAt:
+                          type: string
+  /chat/send:
+    post:
+      tags: [Chat]
+      summary: 发送消息
+      operationId: 发送消息
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                chatId:
+                  type: string
+                text:
+                  type: string
+              required:
+                - chatId
+                - text
+      responses:
+        '200':
+          description: 发送成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      messageId:
+                        type: string
+  /chat/transfer-targets:
+    get:
+      tags: [Chat]
+      summary: 转账目标列表
+      operationId: 转账目标列表
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        uid:
+                          type: string
+                        name:
+                          type: string
+                        type:
+                          type: string
+  /chat/transfer:
+    post:
+      tags: [Chat]
+      summary: 聊天转账
+      operationId: 聊天转账
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                chatId:
+                  type: string
+                recipientUid:
+                  type: string
+                amount:
+                  type: number
+                note:
+                  type: string
+              required:
+                - chatId
+                - recipientUid
+                - amount
+      responses:
+        '200':
+          description: 转账成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      orderId:
+                        type: string
+                      amount:
+                        type: number
+                      status:
+                        type: string
+                      appreciationUsed:
+                        type: number
+                      principalUsed:
+                        type: number
+                      receiverFeeAmount:
+                        type: number
+  /chat/friend-search:
+    get:
+      tags: [Chat]
+      summary: 搜索好友
+      operationId: 搜索好友
+      parameters:
+        - in: query
+          name: keyword
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        uid:
+                          type: string
+                        nickname:
+                          type: string
+  /chat/friend-profile/{id}:
+    get:
+      tags: [Chat]
+      summary: 好友资料
+      operationId: 好友资料
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      uid:
+                        type: string
+                      nickname:
+                        type: string
+                      realNameVerified:
+                        type: boolean
+  /chat/friend-request:
+    post:
+      tags: [Chat]
+      summary: 发送好友申请
+      operationId: 发送好友申请
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                targetUserId:
+                  type: string
+                message:
+                  type: string
+              required:
+                - targetUserId
+      responses:
+        '200':
+          description: 发送成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      requestId:
+                        type: string
+  /chat/friend-request/{requestId}/confirm:
+    post:
+      tags: [Chat]
+      summary: 确认好友申请
+      operationId: 确认好友申请
+      parameters:
+        - in: path
+          name: requestId
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 确认成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      requestId:
+                        type: string
+                      status:
+                        type: string
+                      chatId:
+                        type: string
+                      chatName:
+                        type: string
+  /chat/group-candidates:
+    get:
+      tags: [Chat]
+      summary: 群成员候选
+      operationId: 群成员候选
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        uid:
+                          type: string
+                        nickname:
+                          type: string
+  /chat/groups:
+    post:
+      tags: [Chat]
+      summary: 创建群聊
+      operationId: 创建群聊
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                memberIds:
+                  type: array
+                  items:
+                    type: string
+                notice:
+                  type: string
+              required:
+                - name
+                - memberIds
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      groupId:
+                        type: string
+                      chatId:
+                        type: string
+                      memberCount:
+                        type: integer
+                      status:
+                        type: string
+  /chat/scan/parse:
+    post:
+      tags: [Chat]
+      summary: 扫码解析
+      operationId: 扫码解析
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+              required:
+                - code
+      responses:
+        '200':
+          description: 解析成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      targetId:
+                        type: string
+                      action:
+                        type: string
+                      payload:
+                        type: object

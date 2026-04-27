@@ -1,0 +1,322 @@
+openapi: 3.1.0
+info:
+  title: 金影子后端测试API
+  version: 1.0.0
+  description: 基于测试用例生成的API文档，用于Apifox测试
+servers:
+  - url: http://localhost:3001/api
+    description: 本地开发环境
+
+tags:
+  - name: Auth
+  - name: Fund
+  - name: Trade
+  - name: User
+  - name: Admin
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: 用户登录
+      operationId: 用户登录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  traceId:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      accessToken:
+                        type: string
+                      user:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                          username:
+                            type: string
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: 用户注册
+      operationId: 用户注册
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                email:
+                  type: string
+              required:
+                - username
+                - password
+                - email
+      responses:
+        '200':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  traceId:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      userId:
+                        type: string
+                      username:
+                        type: string
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: 密码重置
+      operationId: 密码重置
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                newPassword:
+                  type: string
+              required:
+                - email
+                - newPassword
+      responses:
+        '200':
+          description: 密码重置成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  traceId:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+  /fund/accounts:
+    get:
+      tags: [Fund]
+      summary: 资金账户查询
+      operationId: 资金账户查询
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  traceId:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      accounts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            type:
+                              type: string
+                            balance:
+                              type: number
+                            currency:
+                              type: string
+  /fund/transactions:
+    get:
+      tags: [Fund]
+      summary: 资金变动记录
+      operationId: 资金变动记录
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+        - in: query
+          name: type
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  traceId:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      transactions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            type:
+                              type: string
+                            amount:
+                              type: number
+                            balance:
+                              type: number
+                            createdAt:
+                              type: string
+                      total:
+                        type: integer
+  /fund/balance:
+    get:
+      tags: [Fund]
+      summary: 资金余额计算
+      operationId: 资金余额计算
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: currency
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  traceId:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      balance:
+                        type: number
+                      currency:
+                        type: string
+
+components:
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        traceId:
+          type: string
+        data:
+          type: object
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+    Account:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        balance:
+          type: number
+        currency:
+          type: string
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        amount:
+          type: number
+        balance:
+          type: number
+        createdAt:
+          type: string

@@ -42,6 +42,7 @@ paths:
     post:
       tags: [Auth]
       summary: 用户注册并分配 UID
+      operationId: 用户注册并分配 UID
       responses:
         '200':
           description: OK
@@ -53,6 +54,7 @@ paths:
     post:
       tags: [Auth]
       summary: 用户登录
+      operationId: 用户登录
       responses:
         '200':
           description: OK
@@ -64,6 +66,7 @@ paths:
     get:
       tags: [AppAssets]
       summary: 获取用户资产总览
+      operationId: 获取用户资产总览
       responses:
         '200':
           description: OK
@@ -75,6 +78,7 @@ paths:
     post:
       tags: [AppRecharge]
       summary: 创建充值订单并自动到账
+      operationId: 创建充值订单并自动到账
       description: 创建成功后同事务写入资产、资金流水、审计日志和哈希记录
       responses:
         '200':
@@ -86,6 +90,7 @@ paths:
     get:
       tags: [AppRecharge]
       summary: 查询充值记录
+      operationId: 查询充值记录
       responses:
         '200':
           description: OK
@@ -97,6 +102,7 @@ paths:
     post:
       tags: [AppWithdraw]
       summary: 发起提现申请
+      operationId: 发起提现申请
       description: |
         仅交易时间可发起，提交后立即冻结金额并扣减暂定资产/总资产，进入按提交时间排序的提现队列。
         提现手续费统一为 0.1%，响应返回 `feeRate`、`feeAmount`、`netAmount`。
@@ -110,6 +116,7 @@ paths:
     get:
       tags: [AppWithdraw]
       summary: 查询提现记录
+      operationId: 查询提现记录
       responses:
         '200':
           description: OK
@@ -121,6 +128,7 @@ paths:
     post:
       tags: [AppTrade]
       summary: 提交买单并实时撮合
+      operationId: 提交买单并实时撮合
       description: |
         买单真实落库并在事务内执行撮合。
         撮合规则为价格优先、时间优先；用户被冻结或当前非交易时段/停盘时会直接拦截。
@@ -146,6 +154,7 @@ paths:
     post:
       tags: [AppTrade]
       summary: 提交卖单并实时撮合
+      operationId: 提交卖单并实时撮合
       description: |
         卖单真实落库并在事务内执行撮合。
         撮合规则为价格优先、时间优先；用户被冻结或当前非交易时段/停盘时会直接拦截。
@@ -171,6 +180,7 @@ paths:
     get:
       tags: [AppTrade]
       summary: 查询交易记录
+      operationId: 查询交易记录
       responses:
         '200':
           description: OK
@@ -182,6 +192,7 @@ paths:
     get:
       tags: [AppPayment]
       summary: 获取收款二维码数据
+      operationId: 获取收款二维码数据
       description: 返回收款二维码 payload 与固定文案“金链·GYC  法币锚定金银结算系统。”
       responses:
         '200':
@@ -194,6 +205,7 @@ paths:
     post:
       tags: [AppPayment]
       summary: 发起点对点支付
+      operationId: 发起点对点支付
       description: |
         扣款顺序强制为“先增值后本金”：先扣 `appreciationIncome`，不足时再扣 `principalBalance`，禁止先扣本金。
         若动用本金，必须同步减少 `withdrawablePrincipal`。
@@ -218,6 +230,7 @@ paths:
     get:
       tags: [AppPayment]
       summary: 查询支付与收款记录
+      operationId: 查询支付与收款记录
       responses:
         '200':
           description: OK
@@ -229,6 +242,7 @@ paths:
     get:
       tags: [AppMarket]
       summary: 获取上金所 AU9999 实时行情
+      operationId: 获取上金所 AU9999 实时行情
       description: |
         优先从实时行情 provider 获取 AU9999 价格，失败时按 system_config 缓存、最新成交价、本地默认值逐级降级。
         返回 source、timestamp、refreshSeconds，价格精度固定为 0.01 元/克。
@@ -243,6 +257,7 @@ paths:
     get:
       tags: [AppNotice]
       summary: 获取首页公告轮播
+      operationId: 获取首页公告轮播
       description: 前端按轮巡方式展示
       responses:
         '200':
@@ -255,6 +270,7 @@ paths:
     get:
       tags: [AdminDashboard]
       summary: 获取仪表盘总览
+      operationId: 获取仪表盘总览
       description: 包含提现语音提醒中的订单数量
       responses:
         '200':
@@ -267,6 +283,7 @@ paths:
     post:
       tags: [AdminDashboard]
       summary: 发布公告
+      operationId: 发布公告
       responses:
         '200':
           description: OK
@@ -278,6 +295,7 @@ paths:
     get:
       tags: [AdminFunds]
       summary: 查询充值对账列表
+      operationId: 查询充值对账列表
       responses:
         '200':
           description: OK
@@ -289,6 +307,7 @@ paths:
     get:
       tags: [AdminFunds]
       summary: 查询后台资金聚合面板
+      operationId: 查询后台资金聚合面板
       responses:
         '200':
           description: OK
@@ -296,6 +315,7 @@ paths:
     get:
       tags: [AdminFunds]
       summary: 查询提现审核列表
+      operationId: 查询提现审核列表
       description: 按提交时间升序返回，确保队列顺序稳定；新单默认触发语音持续提醒
       responses:
         '200':
@@ -308,6 +328,7 @@ paths:
     post:
       tags: [AdminFunds]
       summary: 提现审核通过并进入转账处理中
+      operationId: 提现审核通过并进入转账处理中
       description: 同一订单只允许成功处理一次；重复点击会返回已处理结果或 409 冲突，并保留审计留痕。
       responses:
         '200':
@@ -322,6 +343,7 @@ paths:
     post:
       tags: [AdminFunds]
       summary: 停止提现语音提醒
+      operationId: 停止提现语音提醒
       description: 工作人员进入订单详情或手动静音时调用
       responses:
         '200':
@@ -334,6 +356,7 @@ paths:
     post:
       tags: [AdminFunds]
       summary: 驳回提现并解冻回补资产
+      operationId: 驳回提现并解冻回补资产
       description: 同一订单只允许成功驳回一次；重复点击会返回已处理结果或 409 冲突，并在事务内完成回补与留痕。
       responses:
         '200':
@@ -348,6 +371,7 @@ paths:
     post:
       tags: [AdminFunds]
       summary: 线下转账后确认提现完成
+      operationId: 线下转账后确认提现完成
       description: 只允许更新订单为 completed，不允许二次扣减资产；重复点击会返回已处理结果或 409 冲突。
       responses:
         '200':
@@ -362,6 +386,7 @@ paths:
     post:
       tags: [AdminFunds]
       summary: 后台手工转账
+      operationId: 后台手工转账
       description: 实时调整 tentativeAsset 和 totalAsset，并同步写入 ledger、audit、hash；需要手工转账权限。支持 `Idempotency-Key` 防止后台双击重复记账。
       parameters:
         - in: header
@@ -383,6 +408,7 @@ paths:
     post:
       tags: [AdminFunds]
       summary: 后台手工补款/冲正
+      operationId: 后台手工补款/冲正
       description: 实时调整 tentativeAsset 和 totalAsset，并同步写入 ledger、audit、hash；需要手工补款权限。支持 `Idempotency-Key` 防止后台双击重复记账。
       parameters:
         - in: header
@@ -404,6 +430,7 @@ paths:
     get:
       tags: [AdminPayments]
       summary: 查询支付订单列表
+      operationId: 查询支付订单列表
       responses:
         '200':
           description: OK
@@ -415,6 +442,7 @@ paths:
     get:
       tags: [AdminPayments]
       summary: 查询支付总览
+      operationId: 查询支付总览
       responses:
         '200':
           description: OK
@@ -426,6 +454,7 @@ paths:
     get:
       tags: [AdminTrades]
       summary: 查询交易列表
+      operationId: 查询交易列表
       description: 前后台交易数据需实时同步，资产变动一秒更新；非上金所交易时段自动禁止撮合
       responses:
         '200':
@@ -438,6 +467,7 @@ paths:
     get:
       tags: [AdminTrades]
       summary: 查询上金所交易时段同步状态
+      operationId: 查询上金所交易时段同步状态
       description: 只读状态接口，交易时段由系统自动同步，无人工配置入口
       responses:
         '200':
@@ -450,6 +480,7 @@ paths:
     get:
       tags: [AdminLeaderboard]
       summary: 查询排行榜治理面板
+      operationId: 查询排行榜治理面板
       description: |
         返回排行榜快照列表与同步监控信息。
         支持按黄金克数或总资产排序，同值时按 UID 升序保持稳定顺序。
@@ -460,6 +491,7 @@ paths:
     get:
       tags: [AdminSecurity]
       summary: 查询管理员与角色分配
+      operationId: 查询管理员与角色分配
       description: 返回管理员、角色、权限聚合结果；以数据库实时角色权限为准
       responses:
         '200':
@@ -468,6 +500,7 @@ paths:
     get:
       tags: [AdminSecurity]
       summary: 查询角色列表
+      operationId: 查询角色列表
       description: 返回角色、权限集合和已分配管理员数量
       responses:
         '200':
@@ -476,6 +509,7 @@ paths:
     get:
       tags: [AdminSecurity]
       summary: 查询权限列表
+      operationId: 查询权限列表
       description: 返回可配置权限码和关联角色数量
       responses:
         '200':
@@ -484,6 +518,7 @@ paths:
     post:
       tags: [AdminSecurity]
       summary: 覆盖式分配管理员角色
+      operationId: 覆盖式分配管理员角色
       description: 角色分配后权限即时生效，并写入 admin_operation_log、audit_log、hash_record
       parameters:
         - in: path
@@ -498,6 +533,7 @@ paths:
     post:
       tags: [AdminSecurity]
       summary: 覆盖式分配角色权限
+      operationId: 覆盖式分配角色权限
       description: 权限分配后接口级校验立即使用数据库最新权限结果
       parameters:
         - in: path
@@ -512,6 +548,7 @@ paths:
     post:
       tags: [AdminLeaderboard]
       summary: 切换排行榜规则
+      operationId: 切换排行榜规则
       description: 切换当前排行榜规则配置，支持黄金克数排序和总资产排序，并写入治理审计日志；需要排行榜规则更新权限
       responses:
         '200':
@@ -520,6 +557,7 @@ paths:
     post:
       tags: [AdminLeaderboard]
       summary: 触发排行榜重排
+      operationId: 触发排行榜重排
       description: 创建新的排行榜重排任务并持久化最新快照，任务状态按 rebuilding/synced/failed 流转；需要排行榜重建权限
       responses:
         '200':
@@ -528,6 +566,7 @@ paths:
     post:
       tags: [AdminLeaderboard]
       summary: 异常重试与状态修复
+      operationId: 异常重试与状态修复
       description: 针对异常排行榜快照重新生成同步结果，并写入 adminOperationLog、auditLog、hashRecord；需要排行榜异常修复权限
       responses:
         '200':
@@ -536,6 +575,7 @@ paths:
     get:
       tags: [AdminTrades]
       summary: 查询交易总览与当前交易状态
+      operationId: 查询交易总览与当前交易状态
       description: 返回当前开闭盘状态、当前时段、下次开盘时间、最后同步时间和待同步数量
       responses:
         '200':
@@ -548,6 +588,7 @@ paths:
     post:
       tags: [AdminTrades]
       summary: 后台停盘
+      operationId: 后台停盘
       description: 仅管理员可调用，停盘操作会写入 admin_operation_log、audit_log、hash_record，并校验停盘权限
       responses:
         '200':
@@ -556,6 +597,7 @@ paths:
     post:
       tags: [AdminTrades]
       summary: 后台恢复交易
+      operationId: 后台恢复交易
       description: 仅管理员可调用，恢复操作会写入 admin_operation_log、audit_log、hash_record，并校验恢复交易权限
       responses:
         '200':
@@ -564,6 +606,7 @@ paths:
     post:
       tags: [AdminRisk]
       summary: 冻结用户
+      operationId: 冻结用户
       description: 仅管理员可调用，冻结后交易与提现流程应按既有规则进行拦截并保留审计留痕；需要冻结用户权限
       parameters:
         - in: path
@@ -578,6 +621,7 @@ paths:
     post:
       tags: [AdminRisk]
       summary: 解冻用户
+      operationId: 解冻用户
       description: 仅管理员可调用，恢复用户正常交易资格并保留审计留痕；需要解冻用户权限
       parameters:
         - in: path
@@ -592,6 +636,7 @@ paths:
     get:
       tags: [AdminRisk]
       summary: 查询风控规则配置
+      operationId: 查询风控规则配置
       description: 返回提现拦截开关、单笔提现上限、日提现上限、异常交易阈值和黑名单 UID 列表
       responses:
         '200':
@@ -599,6 +644,7 @@ paths:
     post:
       tags: [AdminRisk]
       summary: 更新风控规则配置
+      operationId: 更新风控规则配置
       description: 覆盖式更新风控规则和黑名单 UID 列表，并写入 admin_operation_log、audit_log、hash_record
       responses:
         '200':
@@ -607,6 +653,7 @@ paths:
     get:
       tags: [AdminAudit]
       summary: 查询 trace 全链路详情
+      operationId: 查询 trace 全链路详情
       description: 返回资金、交易、风控、后台操作、hash、syncStatus 等全链路节点
       parameters:
         - in: path
@@ -625,6 +672,7 @@ paths:
     post:
       tags: [AdminAudit]
       summary: 校验 trace 哈希完整性
+      operationId: 校验 trace 哈希完整性
       description: 校验 trace 下 hash_record 是否通过校验，并写入 admin_operation_log、audit_log、hash_record
       parameters:
         - in: path
@@ -643,6 +691,7 @@ paths:
     get:
       tags: [AdminAudit]
       summary: 导出 trace 详情
+      operationId: 导出 trace 详情
       description: 支持 csv/json 导出，返回文件元信息与导出内容，并写入 admin_operation_log、audit_log、hash_record
       parameters:
         - in: path
@@ -667,6 +716,7 @@ paths:
     get:
       tags: [AdminAudit]
       summary: 按 traceId 查询全链路追踪
+      operationId: 按 traceId 查询全链路追踪
       responses:
         '200':
           description: OK
@@ -678,6 +728,7 @@ paths:
     get:
       tags: [AdminAudit]
       summary: 查询哈希记录
+      operationId: 查询哈希记录
       responses:
         '200':
           description: OK
@@ -689,6 +740,7 @@ paths:
     post:
       tags: [AdminReports]
       summary: 生成报表任务
+      operationId: 生成报表任务
       description: 创建报表任务并持久化导出产物，生成过程写入 admin_operation_log、audit_log、hash_record
       responses:
         '200':
@@ -701,6 +753,7 @@ paths:
     get:
       tags: [AdminReports]
       summary: 查询报表任务列表
+      operationId: 查询报表任务列表
       responses:
         '200':
           description: OK
@@ -712,6 +765,7 @@ paths:
     get:
       tags: [AdminReports]
       summary: 查询报表任务详情
+      operationId: 查询报表任务详情
       parameters:
         - in: path
           name: jobId
@@ -729,6 +783,7 @@ paths:
     post:
       tags: [AdminReports]
       summary: 导出报表任务产物
+      operationId: 导出报表任务产物
       description: 支持 csv 导出；excel 当前为占位产物，导出操作写入 admin_operation_log、audit_log、hash_record
       parameters:
         - in: path
@@ -747,6 +802,7 @@ paths:
     post:
       tags: [AdminReports]
       summary: 保存报表模板
+      operationId: 保存报表模板
       description: 保存可复用报表模板，并写入 admin_operation_log、audit_log、hash_record
       responses:
         '200':
@@ -758,6 +814,7 @@ paths:
     get:
       tags: [AdminReports]
       summary: 查询报表模板
+      operationId: 查询报表模板
       responses:
         '200':
           description: OK
