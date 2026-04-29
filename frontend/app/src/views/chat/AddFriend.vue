@@ -17,6 +17,7 @@ const selectedUser = ref(null)
 const requestState = ref(null)
 const confirmLoading = ref(false)
 const visibleCount = ref(5)
+const searched = ref(false)
 
 const canSendRequest = computed(() => selectedUser.value && !requestState.value)
 
@@ -34,16 +35,18 @@ const isExpanded = computed(() => {
 
 const searchUsers = async () => {
   searching.value = true
+  searched.value = true
   visibleCount.value = 5
   try {
     const response = await ChatService.searchFriends(keyword.value)
     results.value = response.data || []
-    if (!selectedUser.value && results.value.length) {
-      selectedUser.value = results.value[0]
-    }
+    selectedUser.value = results.value.length ? results.value[0] : null
+    requestState.value = null
   } catch (error) {
     console.error('Search friends failed:', error)
     results.value = []
+    selectedUser.value = null
+    requestState.value = null
   } finally {
     searching.value = false
   }
@@ -133,6 +136,9 @@ onMounted(async () => {
             {{ searching ? t('chat.addFriendPage.searching') : t('common.search') }}
           </button>
         </div>
+        <p v-if="searched && !searching && sortedResults.length === 0" class="mt-3 text-sm text-[#f87171]">
+          该用户不存在
+        </p>
 
         <div class="mt-4 space-y-3">
           <button

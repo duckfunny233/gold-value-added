@@ -67,6 +67,7 @@ type SendTransferInput = {
 type FriendProfile = {
   id: string
   uid: string
+  username?: string
   nickname: string
   avatar: string
   intro: string
@@ -287,15 +288,22 @@ export class ChatService {
       return directory
     }
 
-    return directory.filter((item) => {
-      const searchable = [
-        item.uid,
-        item.nickname,
-        item.city,
-        item.intro,
-        ...item.tags,
-      ]
-      return searchable.some((part) => part.toLowerCase().includes(query))
+    const matched = directory.filter((item) => {
+      const searchable = [item.uid, item.username || '', item.nickname]
+      return searchable.some((part) => String(part || '').toLowerCase().includes(query))
+    })
+
+    return matched.sort((a, b) => {
+      const aExact = [a.uid, a.username || '', a.nickname].some(
+        (part) => String(part || '').toLowerCase() === query,
+      )
+      const bExact = [b.uid, b.username || '', b.nickname].some(
+        (part) => String(part || '').toLowerCase() === query,
+      )
+      if (aExact !== bExact) {
+        return aExact ? -1 : 1
+      }
+      return b.mutualFriends - a.mutualFriends
     })
   }
 
@@ -749,6 +757,7 @@ export class ChatService {
       return {
         id: user.id,
         uid: user.uid,
+        username: user.username,
         nickname,
         avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(user.uid)}`,
         intro: '关注贵金属行情，欢迎交流交易经验。',

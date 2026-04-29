@@ -1,0 +1,303 @@
+openapi: 3.0.3
+info:
+  title: 金影子-Auth模块完整测试用例
+  version: 1.0.0
+  description: 包含正向、负向、边界值、安全性四大类测试用例
+servers:
+  - url: http://localhost:3001/api
+    description: 本地开发环境
+
+tags:
+  - name: Auth-正向测试
+    description: 正常业务场景测试
+  - name: Auth-负向测试
+    description: 异常输入测试
+  - name: Auth-边界值测试
+    description: 参数边界测试
+  - name: Auth-安全性测试
+    description: 安全漏洞测试
+
+paths:
+  /auth/login:
+    post:
+      tags:
+        - Auth-正向测试
+      summary: 用户登录-获取Token
+      operationId: login
+      requestBody:
+        description: 登录请求体
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  example: test_user_01
+                  description: 用户名
+                password:
+                  type: string
+                  example: "123456"
+                  description: 密码
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: 登录成功
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                        description: JWT Token
+                      user:
+                        type: object
+                        properties:
+                          uid:
+                            type: string
+                          roleCodes:
+                            type: array
+                            items:
+                              type: string
+        '401':
+          description: 认证失败
+
+  /auth/send-otp:
+    post:
+      tags:
+        - Auth-正向测试
+        - Auth-负向测试
+        - Auth-安全性测试
+      summary: 发送短信验证码
+      description: 需要JWT认证，测试认证漏洞是否修复
+      operationId: sendOtp
+      security:
+        - bearerAuth: []
+      requestBody:
+        description: 发送验证码请求体
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone:
+                  type: string
+                  example: "13800138000"
+                  description: 手机号
+              required:
+                - phone
+      responses:
+        '200':
+          description: 发送成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: 验证码发送成功
+                  data:
+                    type: object
+                    properties:
+                      phone:
+                        type: string
+                      expireSeconds:
+                        type: integer
+                        example: 300
+        '400':
+          description: 参数错误
+        '401':
+          description: 未授权
+
+  /auth/register-with-files:
+    post:
+      tags:
+        - Auth-正向测试
+        - Auth-负向测试
+        - Auth-边界值测试
+      summary: 文件注册
+      description: 上传证件文件完成注册
+      operationId: registerWithFiles
+      requestBody:
+        description: 注册请求体（含文件）
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  example: new_user_test
+                  description: 用户名（6-18位）
+                password:
+                  type: string
+                  example: "123456"
+                  description: 密码（6-16位）
+                phone:
+                  type: string
+                  example: "13800138001"
+                  description: 手机号
+                otpCode:
+                  type: string
+                  example: "123456"
+                  description: 短信验证码
+                realName:
+                  type: string
+                  example: 张三
+                  description: 真实姓名（2-20位）
+                idNumber:
+                  type: string
+                  example: "110101199003071234"
+                  description: 身份证号（18位）
+                proofType:
+                  type: string
+                  description: 证明类型
+                  enum:
+                    - workCert
+                    - bizLicense
+                    - workProof
+                    - incomeProof
+                    - other
+                  example: workCert
+                idCardFront:
+                  type: string
+                  format: binary
+                  description: 身份证正面图片
+                idCardBack:
+                  type: string
+                  format: binary
+                  description: 身份证反面图片
+                proofFile:
+                  type: string
+                  format: binary
+                  description: 证明文件
+              required:
+                - username
+                - password
+                - phone
+                - otpCode
+                - realName
+                - idNumber
+                - proofType
+                - idCardFront
+                - idCardBack
+                - proofFile
+      responses:
+        '200':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: 注册成功
+                  data:
+                    type: object
+                    properties:
+                      uid:
+                        type: string
+        '400':
+          description: 参数错误或文件缺失
+        '409':
+          description: 账号已存在
+        '422':
+          description: 验证码错误
+
+  /auth/register:
+    post:
+      tags:
+        - Auth-正向测试
+        - Auth-负向测试
+        - Auth-边界值测试
+      summary: JSON注册（兼容）
+      description: 无文件模式注册
+      operationId: register
+      requestBody:
+        description: 注册请求体（JSON）
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  example: json_user_test
+                  description: 用户名（6-18位）
+                password:
+                  type: string
+                  example: "123456"
+                  description: 密码（6-16位）
+                phone:
+                  type: string
+                  example: "13800138999"
+                  description: 手机号
+                otpCode:
+                  type: string
+                  example: "123456"
+                  description: 短信验证码
+                realName:
+                  type: string
+                  example: 李四
+                  description: 真实姓名（2-20位）
+              required:
+                - username
+                - password
+                - phone
+                - otpCode
+                - realName
+      responses:
+        '200':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: 注册成功
+                  data:
+                    type: object
+                    properties:
+                      uid:
+                        type: string
+        '400':
+          description: 参数错误
+        '409':
+          description: 账号已存在
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT认证Token，登录成功后获取

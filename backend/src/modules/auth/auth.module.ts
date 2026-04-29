@@ -12,12 +12,15 @@ import {
   UnprocessableEntityException,
   UnauthorizedException,
   UploadedFiles,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common'
 import { ConfigModule, ConfigService } from '@nestjs/config'
 import { JwtModule, JwtService } from '@nestjs/jwt'
 import { FileFieldsInterceptor } from '@nestjs/platform-express'
 import { ApiProperty, ApiTags } from '@nestjs/swagger'
+import { JwtAuthGuard } from './jwt-auth.guard'
+import { JwtStrategy } from './jwt.strategy'
 import { Prisma } from '@prisma/client'
 import { randomUUID } from 'crypto'
 import {
@@ -493,6 +496,7 @@ class AuthController {
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard],
+  exports: [JwtAuthGuard],
 })
 export class AuthModule {}
