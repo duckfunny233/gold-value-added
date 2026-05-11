@@ -510,8 +510,8 @@ export class ChatService {
       id: u.id,
       uid: u.uid,
       username: u.username,
-      nickname: u.username,
-      avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(u.uid)}`,
+      nickname: u.nickname || u.username,
+      avatar: u.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(u.uid)}`,
       intro: '关注贵金属行情，欢迎交流交易经验。',
       city: '上海',
       tags: ['黄金', '白银'],
@@ -530,8 +530,8 @@ export class ChatService {
       id: user.id,
       uid: user.uid,
       username: user.username,
-      nickname: user.username,
-      avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(user.uid)}`,
+      nickname: user.nickname || user.username,
+      avatar: user.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(user.uid)}`,
       intro: '关注贵金属行情，欢迎交流交易经验。',
       city: '上海',
       tags: ['黄金', '白银'],
@@ -551,8 +551,8 @@ export class ChatService {
       return {
         id: target.id,
         uid: target.uid,
-        nickname: target.username,
-        avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(target.uid)}`,
+        nickname: target.nickname || target.username,
+        avatar: target.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(target.uid)}`,
         role: '群成员',
       }
     })
@@ -904,7 +904,7 @@ export class ChatService {
       include: { paymentProfile: true },
     })
     const uid = user?.uid || 'U0001001'
-    const displayName = user?.paymentProfile?.displayName || user?.username || '黄金投资者_888'
+    const displayName = user?.nickname || user?.paymentProfile?.displayName || user?.username || '黄金投资者_888'
     const qrPayload = user?.paymentProfile?.qrPayload || `jinlian://pay?uid=${encodeURIComponent(uid)}&name=${encodeURIComponent(displayName)}`
     return {
       uid,
@@ -927,8 +927,8 @@ export class ChatService {
     return users.map((u) => ({
       id: u.id,
       uid: u.uid,
-      nickname: u.username,
-      avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(u.uid)}`,
+      nickname: u.nickname || u.username,
+      avatar: u.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(u.uid)}`,
     }))
   }
 

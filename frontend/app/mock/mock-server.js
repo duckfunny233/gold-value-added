@@ -1283,6 +1283,67 @@ app.get('/api/public/leaderboard', (req, res) => {
   })
 })
 
+// 11. 设置相关接口 (Settings)
+const securitySettingsData = {
+  realNameStatus: 'settings.security.status.verified',
+  passwordSet: true,
+  biometricEnabled: false,
+  devices: [
+    { id: 'dev_1', name: 'iPhone 15 Pro', location: '上海', lastActive: '2026-05-11 09:15', trusted: true },
+    { id: 'dev_2', name: 'Windows Chrome', location: '杭州', lastActive: '2026-05-10 21:03', trusted: false },
+  ],
+  loginLogs: [
+    { id: 'log_1', time: '2026-05-11 09:15', ip: '116.233.128.45', result: 'success' },
+    { id: 'log_2', time: '2026-05-11 09:14', ip: '116.233.128.45', result: 'success' },
+    { id: 'log_3', time: '2026-05-11 08:48', ip: '183.129.205.67', result: 'success' },
+    { id: 'log_4', time: '2026-05-11 08:36', ip: '101.69.132.89', result: 'success' },
+    { id: 'log_5', time: '2026-05-08 08:04', ip: '192.168.1.105', result: 'success' },
+    { id: 'log_6', time: '2026-05-04 01:37', ip: '223.104.56.178', result: 'success' },
+    { id: 'log_7', time: '2026-05-03 23:03', ip: '116.233.128.45', result: 'success' },
+  ],
+}
+
+app.get('/api/settings/security', (req, res) => {
+  res.json({
+    code: 200,
+    data: securitySettingsData
+  })
+})
+
+app.patch('/api/settings/security', (req, res) => {
+  const patch = req.body
+  Object.keys(patch).forEach(key => {
+    if (securitySettingsData.hasOwnProperty(key)) {
+      securitySettingsData[key] = patch[key]
+    }
+  })
+  res.json({
+    code: 200,
+    data: securitySettingsData
+  })
+})
+
+app.delete('/api/settings/security/devices/:deviceId', (req, res) => {
+  const { deviceId } = req.params
+  securitySettingsData.devices = securitySettingsData.devices.filter(d => d.id !== deviceId)
+  res.json({
+    code: 200,
+    data: securitySettingsData
+  })
+})
+
+app.post('/api/settings/security/change-secret-key', (req, res) => {
+  const { currentKey, newKey } = req.body
+  if (!currentKey || !newKey) {
+    return res.status(400).json({ code: 400, message: '参数不完整' })
+  }
+  res.json({
+    code: 200,
+    message: '密钥修改成功',
+    data: securitySettingsData
+  })
+})
+
 app.listen(port, '0.0.0.0', () => {
   console.log(`Mock server running at http://0.0.0.0:${port}`)
 })

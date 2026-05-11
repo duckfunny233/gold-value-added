@@ -423,6 +423,8 @@
       "title": "Account Management",
       "sectionProfile": "Profile",
       "nickname": "Nickname",
+      "editNickname": "Edit Nickname",
+      "nicknamePlaceholder": "Enter nickname",
       "currentAvatar": "Current avatar",
       "avatarTip": "Tap plus to replace avatar",
       "avatarRule": "Supports JPG / PNG, max 2MB",
@@ -434,6 +436,7 @@
       "uploadDesc": "Preview first, then confirm replacement",
       "selectImage": "Select Image",
       "confirmReplace": "Confirm Replace",
+      "noNickname": "No nickname",
       "bindStatus": {
         "bound": "Bound",
         "unbound": "Unbound"
@@ -443,7 +446,9 @@
         "uploadImageOnly": "Please upload an image file",
         "uploadTooLarge": "Avatar must be <= 2MB",
         "selectImageFirst": "Please select an image first",
-        "avatarReplaced": "Avatar replaced, remember to save settings"
+        "avatarReplaced": "Avatar replaced, remember to save settings",
+        "nicknameEmpty": "Please enter nickname",
+        "nicknameSaved": "Nickname saved"
       }
     },
     "general": {

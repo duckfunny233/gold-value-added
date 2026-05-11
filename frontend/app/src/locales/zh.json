@@ -448,6 +448,8 @@
       "title": "账户管理",
       "sectionProfile": "个人信息",
       "nickname": "昵称",
+      "editNickname": "修改昵称",
+      "nicknamePlaceholder": "请输入昵称",
       "currentAvatar": "当前头像",
       "avatarTip": "点击加号替换头像",
       "avatarRule": "支持 JPG / PNG，大小不超过 2MB",
@@ -463,12 +465,15 @@
         "bound": "已绑定",
         "unbound": "已解绑"
       },
+      "noNickname": "未设置昵称",
       "toast": {
         "saved": "账户信息已保存",
         "uploadImageOnly": "请上传图片文件",
         "uploadTooLarge": "头像大小不能超过 2MB",
         "selectImageFirst": "请先选择头像图片",
-        "avatarReplaced": "头像已替换，记得保存设置"
+        "avatarReplaced": "头像已替换，记得保存设置",
+        "nicknameEmpty": "请输入昵称",
+        "nicknameSaved": "昵称已保存"
       }
     },
     "general": {

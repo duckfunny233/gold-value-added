@@ -140,4 +140,12 @@ export const UserService = {
   hasRechargeHistory() {
     return requestJson(withUsernameQuery('/api/user/recharge-history/check'))
   },
+
+  getRechargeOrders() {
+    return requestJson(withUsernameQuery('/api/app/recharges'))
+  },
+
+  getWithdrawOrders() {
+    return requestJson(withUsernameQuery('/api/app/withdrawals'))
+  },
 }

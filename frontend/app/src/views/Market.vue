@@ -11,7 +11,7 @@ defineOptions({ name: 'Market' })
 
 const { t } = useI18n()
 const router = useRouter()
-const { markets } = useMarketPolling(3000)
+const { markets } = useMarketPolling()
 const kLineData = ref([])
 const loading = ref(false)
 const currentPeriod = ref('1m')

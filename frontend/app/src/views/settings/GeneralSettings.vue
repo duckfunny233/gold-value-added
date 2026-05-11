@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { ArrowLeft } from 'lucide-vue-next'
 import { SettingsService } from '../../services/settings'
 import { showToast } from '../../composables/useToast'
+import { useMarketPolling, invalidateSettingsCache, updateGlobalRefreshSeconds } from '../../composables/useMarketPolling'
 
 defineOptions({ name: 'GeneralSettings' })
 
@@ -29,6 +30,7 @@ onMounted(async () => {
 const saveGeneral = async () => {
   const response = await SettingsService.updateGeneralSettings(form.value)
   form.value = response.data
+  updateGlobalRefreshSeconds(response.data.refreshSeconds)
   showToast(t('settings.general.toast.saved'))
 }
 </script>

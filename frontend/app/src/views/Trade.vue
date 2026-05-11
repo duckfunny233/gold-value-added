@@ -6,14 +6,14 @@ import { TradeService } from '../services/trade'
 import { UserService } from '../services/user'
 import { MarketService } from '../services/market'
 import { Loader2, ChevronDown, ChevronUp, Search } from 'lucide-vue-next'
-import { useMarketPolling } from '../composables/useMarketPolling'
+import { useMarketPolling, updateGlobalRefreshSeconds } from '../composables/useMarketPolling'
 import { showToast } from '../composables/useToast'
 
 defineOptions({ name: 'Trade' })
 
 const { t } = useI18n()
 const route = useRoute()
-const { markets } = useMarketPolling(3000)
+const { markets } = useMarketPolling()
 
 const activeTab = ref(route.query.type || 'buy')
 const quantity = ref('')
@@ -286,7 +286,7 @@ const startOrderBookPolling = () => {
     orderBookTimer = null
   }
   fetchOrderBook()
-  orderBookTimer = setInterval(fetchOrderBook, 3000)
+  orderBookTimer = setInterval(fetchOrderBook, 5000)
 }
 
 watch(showOrderBook, (visible) => {

@@ -32,10 +32,6 @@ const paymentMethods = [
   },
 ]
 
-// 本地存储键名
-const STORAGE_KEY = 'jyz_recharge_orders'
-const STORAGE_KEY_METHOD = 'jyz_default_payment_method'
-
 const selectedMethod = ref('')
 const amount = ref('')
 const creating = ref(false)
@@ -49,49 +45,29 @@ const showOrderList = ref(false) // 是否显示订单列表
 const amountValue = computed(() => Number(amount.value))
 const canCreate = computed(() => amountValue.value > 0 && !creating.value && isVerified.value)
 
-// 获取历史订单
-const getRechargeOrders = () => {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
-      return JSON.parse(saved)
-    }
-  } catch (e) {
-    console.warn('Failed to read recharge orders:', e)
-  }
-  return []
+const rechargeOrders = ref([])
+
+const normalizeRechargeStatus = (status) => {
+  const normalized = String(status || '').toUpperCase()
+  if (normalized === 'PENDING') return 'pending'
+  if (normalized === 'PROCESSING') return 'reviewing'
+  if (normalized === 'COMPLETED') return 'completed'
+  return 'failed'
 }
 
-// 保存订单
-const saveRechargeOrder = (orderData) => {
-  try {
-    const orders = getRechargeOrders()
-    orders.unshift(orderData)
-    // 只保留最近20条
-    if (orders.length > 20) {
-      orders.pop()
-    }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(orders))
-  } catch (e) {
-    console.warn('Failed to save recharge order:', e)
-  }
+const fetchRechargeOrders = async () => {
+  const response = await UserService.getRechargeOrders()
+  const rows = Array.isArray(response?.data) ? response.data : []
+  rechargeOrders.value = rows.map((row) => ({
+    orderId: row.orderId,
+    amount: Number(row.amount || 0),
+    channel: row.channel,
+    status: normalizeRechargeStatus(row.status),
+    createdAt: row.createdAt,
+    payTime: row.createdAt,
+    completeTime: row.settledAt || null,
+  }))
 }
-
-// 更新订单状态
-const updateOrderStatus = (orderId, status) => {
-  try {
-    const orders = getRechargeOrders()
-    const index = orders.findIndex(o => o.orderId === orderId)
-    if (index !== -1) {
-      orders[index].status = status
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(orders))
-    }
-  } catch (e) {
-    console.warn('Failed to update order status:', e)
-  }
-}
-
-const rechargeOrders = ref(getRechargeOrders())
 
 const reset = () => {
   selectedMethod.value = ''
@@ -141,7 +117,7 @@ const checkVerificationStatus = async () => {
 watch(() => props.visible, (value) => {
   if (value) {
     checkVerificationStatus()
-    rechargeOrders.value = getRechargeOrders()
+    fetchRechargeOrders()
   } else {
     reset()
   }
@@ -154,19 +130,7 @@ const selectPaymentMethod = async (method) => {
   try {
     const response = await UserService.createRechargeOrder(method, amountValue.value)
     order.value = response.data
-    
-    // 保存订单到本地，状态为 pending（待支付）
-    const orderData = {
-      orderId: response.data.orderId,
-      amount: amountValue.value,
-      channel: method,
-      status: 'pending', // 待支付
-      createdAt: new Date().toISOString(),
-      payTime: null,
-      completeTime: null
-    }
-    saveRechargeOrder(orderData)
-    rechargeOrders.value = getRechargeOrders()
+    await fetchRechargeOrders()
   } catch (error) {
     showToast(error.message ? t(error.message) : t('settings.recharge.toast.createFailed'))
     selectedMethod.value = ''
@@ -204,18 +168,7 @@ const createOrder = async () => {
     const response = await UserService.createRechargeOrder(selectedMethod.value, amountValue.value)
     order.value = response.data
     
-    // 保存订单到本地
-    const orderData = {
-      orderId: response.data.orderId,
-      amount: amountValue.value,
-      channel: selectedMethod.value,
-      status: 'pending', // pending, reviewing, completed
-      createdAt: new Date().toISOString(),
-      payTime: null,
-      completeTime: null
-    }
-    saveRechargeOrder(orderData)
-    rechargeOrders.value = getRechargeOrders()
+    await fetchRechargeOrders()
     
     showToast(t('settings.recharge.toast.orderCreated'))
   } catch (error) {
@@ -232,9 +185,7 @@ const confirmPaid = async () => {
     // 调用确认支付 API
     const response = await UserService.confirmRecharge(order.value.orderId)
     
-    // 更新订单状态为审核中
-    updateOrderStatus(order.value.orderId, 'reviewing')
-    rechargeOrders.value = getRechargeOrders()
+    await fetchRechargeOrders()
     
     emit('success', response.data)
     showToast(t('settings.recharge.toast.confirmSuccess'))

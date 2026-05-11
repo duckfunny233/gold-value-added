@@ -4,12 +4,14 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ArrowLeft, ShieldCheck, UserRoundCog, SlidersHorizontal, LifeBuoy, Info, UserX } from 'lucide-vue-next'
 import { SettingsService } from '../../services/settings'
+import { showToast } from '../../composables/useToast'
 
 defineOptions({ name: 'SettingsHome' })
 
 const router = useRouter()
 const { t } = useI18n()
 const items = ref([])
+const loading = ref(false)
 
 const iconMap = {
   security: ShieldCheck,
@@ -21,8 +23,17 @@ const iconMap = {
 }
 
 onMounted(async () => {
-  const response = await SettingsService.getSettingsOverview()
-  items.value = response.data
+  loading.value = true
+  try {
+    const response = await SettingsService.getSettingsOverview()
+    items.value = Array.isArray(response?.data) ? response.data : []
+  } catch (error) {
+    console.error('Failed to load settings overview:', error)
+    items.value = []
+    showToast('设置项加载失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
 })
 </script>
 
@@ -34,7 +45,8 @@ onMounted(async () => {
     </header>
 
     <div class="flex-1 overflow-y-auto py-4">
-      <div class="border-y border-[#2b3b4c] bg-[#162331]">
+      <div v-if="loading" class="px-4 py-6 text-sm text-[#8e9bb0]">加载中...</div>
+      <div v-else class="border-y border-[#2b3b4c] bg-[#162331]">
         <button
           v-for="item in items"
           :key="item.key"
@@ -45,8 +57,8 @@ onMounted(async () => {
             <component :is="iconMap[item.key]" :size="20" />
           </div>
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-bold text-[#ecf2f9]">{{ t(`settings.overview.${item.key}.title`) }}</p>
-            <p class="mt-1 truncate text-xs text-[#8e9bb0]">{{ t(`settings.overview.${item.key}.desc`) }}</p>
+            <p class="text-sm font-bold text-[#ecf2f9]">{{ item.title || t(`settings.overview.${item.key}.title`) }}</p>
+            <p class="mt-1 truncate text-xs text-[#8e9bb0]">{{ item.desc || t(`settings.overview.${item.key}.desc`) }}</p>
           </div>
         </button>
       </div>

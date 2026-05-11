@@ -163,7 +163,7 @@ onMounted(fetchData)
       <section class="border-b border-[#2b3b4c] bg-[#162331] px-4 py-4">
         <h3 class="text-sm font-bold mb-3 flex items-center gap-2"><History :size="14" class="text-[#7f90a4]" />{{ t('settings.security.sectionLoginLogs') }}</h3>
         <div class="space-y-0 border border-[#2b3b4c] bg-[#101b28]">
-          <div v-for="log in data.loginLogs" :key="log.id" class="border-b border-[#2b3b4c] px-4 py-3 text-xs last:border-b-0">
+          <div v-for="log in data.loginLogs.slice(0, 5)" :key="log.id" class="border-b border-[#2b3b4c] px-4 py-3 text-xs last:border-b-0">
             <div class="flex justify-between"><span>{{ log.time }}</span><span :class="isLogSuccess(log.result) ? 'text-[#19c58a]' : 'text-[#ff7d75]'">{{ translateLogResult(log.result) }}</span></div>
             <p class="mt-1 text-[#8e9bb0]">{{ t('settings.security.ipLabel') }}{{ log.ip }}</p>
           </div>

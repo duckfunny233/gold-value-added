@@ -91,7 +91,7 @@ export class UserService {
     const leaderboardItems = assets
       .map((item) => ({
         uid: item.user.uid,
-        nickname: item.user.username,
+        nickname: item.user.nickname || item.user.username,
         goldGrams: toNumber(item.goldHoldingGrams),
         totalAsset: toNumber(item.totalAsset),
         sequenceNo:
@@ -355,7 +355,7 @@ export class UserService {
         return {
           sequenceNo: 100001 + index,
           uid: primaryUser?.uid || '',
-          nickname: primaryUser?.username || '系统记录',
+          nickname: primaryUser?.nickname || primaryUser?.username || '系统记录',
           buyInfo: `买入 ${stats.buyCount} 笔 / 卖出 ${stats.sellCount} 笔`,
           buyCount: stats.buyCount,
           sellCount: stats.sellCount,
@@ -415,6 +415,10 @@ export class UserService {
     const appreciationIncome = toNumber(asset?.appreciationIncome)
     const withdrawFrozenAmount = toNumber(asset?.withdrawFrozenAmount)
 
+    const userAvatar =
+      user.avatar ||
+      `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.uid)}`
+
     // 使用真实行情计算持仓市值；失败时回退到常量基准价，避免页面不可用
     let goldPricePerGram = GOLD_UNIT_PRICE
     let silverPricePerGram = SILVER_UNIT_PRICE
@@ -450,7 +454,7 @@ export class UserService {
     const principalBalance = Math.max(totalAsset - appreciationIncome, 0)
     const withdrawablePrincipal = Math.max(principalBalance - withdrawFrozenAmount, 0)
 
-    // 昨日收益：按撮合成交(tradeMatch)使用 FIFO 成本法计算“昨日已实现盈亏”（暂不计手续费）
+    // 昨日收益：按撮合成交(tradeMatch)使用 FIFO 成本法计算"昨日已实现盈亏"（暂不计手续费）
     const now = new Date()
     const todayStart = new Date(now)
     todayStart.setHours(0, 0, 0, 0)
@@ -467,8 +471,8 @@ export class UserService {
       id: user.uid,
       uid: user.uid,
       username: user.username,
-      nickname: user.username,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.uid)}`,
+      nickname: user.nickname || user.username,
+      avatar: userAvatar,
       fee: '--',
       realNameVerified: user.realNameStatus === RealNameStatus.VERIFIED,
       principalBalance,

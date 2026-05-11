@@ -1,8 +1,8 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeft, Plus, Save, Upload, X } from 'lucide-vue-next'
+import { ArrowLeft, Plus, Save, Upload, X, PenLine } from 'lucide-vue-next'
 import { SettingsService } from '../../services/settings'
 import { showToast } from '../../composables/useToast'
 
@@ -19,6 +19,9 @@ const form = ref({
 const showAvatarModal = ref(false)
 const pendingAvatar = ref('')
 const fileInputRef = ref(null)
+const showNicknameSheet = ref(false)
+const pendingNickname = ref('')
+const nicknameInputRef = ref(null)
 
 const avatarInitial = computed(() => {
   const nickname = String(form.value.nickname || '').trim()
@@ -30,12 +33,63 @@ onMounted(async () => {
   form.value = response.data
 })
 
+const openNicknameSheet = () => {
+  pendingNickname.value = form.value.nickname || ''
+  showNicknameSheet.value = true
+}
+
+const closeNicknameSheet = () => {
+  showNicknameSheet.value = false
+}
+
+const saveNickname = async () => {
+  if (pendingNickname.value.trim() === '') {
+    showToast(t('settings.account.toast.nicknameEmpty'))
+    return
+  }
+  try {
+    const response = await SettingsService.updateAccountSettings({
+      nickname: pendingNickname.value,
+      avatar: form.value.avatar,
+    })
+    form.value = response.data
+
+    const storedUser = JSON.parse(localStorage.getItem('user') || '{}')
+    if (storedUser) {
+      storedUser.nickname = response.data.nickname
+      storedUser.avatar = response.data.avatar
+      localStorage.setItem('user', JSON.stringify(storedUser))
+    }
+
+    showNicknameSheet.value = false
+    showToast(t('settings.account.toast.nicknameSaved'))
+  } catch (error) {
+    showToast(error.message || 'Failed to save nickname')
+  }
+}
+
+watch(showNicknameSheet, (val) => {
+  if (val) {
+    nextTick(() => {
+      nicknameInputRef.value?.focus()
+    })
+  }
+})
+
 const saveAccount = async () => {
   const response = await SettingsService.updateAccountSettings({
     nickname: form.value.nickname,
     avatar: form.value.avatar,
   })
   form.value = response.data
+
+  const storedUser = JSON.parse(localStorage.getItem('user') || '{}')
+  if (storedUser) {
+    storedUser.nickname = response.data.nickname
+    storedUser.avatar = response.data.avatar
+    localStorage.setItem('user', JSON.stringify(storedUser))
+  }
+
   showToast(t('settings.account.toast.saved'))
 }
 
@@ -95,10 +149,13 @@ const confirmAvatarChange = () => {
       <section class="rounded-3xl border border-[#2b3b4c] bg-[#162331] p-4">
         <h3 class="mb-3 text-sm font-bold">{{ t('settings.account.sectionProfile') }}</h3>
         <div class="space-y-3">
-          <label class="block text-xs text-[#8e9bb0]">
-            {{ t('settings.account.nickname') }}
-            <input v-model="form.nickname" class="mt-2 w-full rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3 text-white outline-none" />
-          </label>
+          <div class="block">
+            <label class="text-xs text-[#8e9bb0]">{{ t('settings.account.nickname') }}</label>
+            <button @click="openNicknameSheet" class="mt-2 w-full rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3 text-left text-white flex items-center justify-between btn-interact">
+              <span :class="form.nickname ? 'text-white' : 'text-[#8e9bb0]'">{{ form.nickname || t('settings.account.noNickname') }}</span>
+              <PenLine :size="16" class="text-[#c99b18]" />
+            </button>
+          </div>
           <div class="text-xs text-[#8e9bb0]">
             {{ t('settings.account.currentAvatar') }}
             <div class="mt-2 flex items-center gap-4 rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-4">
@@ -132,6 +189,29 @@ const confirmAvatarChange = () => {
         <Save :size="16" />{{ t('settings.account.save') }}
       </button>
     </div>
+
+    <teleport to="body">
+      <div v-if="showNicknameSheet" class="fixed inset-0 z-[130] flex items-end justify-center">
+        <div class="absolute inset-0 bg-black/60" @click="closeNicknameSheet"></div>
+        <div class="relative w-full rounded-t-[28px] bg-[#162331] text-white">
+          <div class="flex items-center justify-between border-b border-[#304255] px-4 py-4">
+            <button @click="closeNicknameSheet" class="btn-interact text-[#8e9bb0] text-sm">{{ t('common.cancel') }}</button>
+            <span class="text-base font-bold">{{ t('settings.account.editNickname') }}</span>
+            <button @click="saveNickname" class="btn-interact text-[#19c58a] text-sm font-bold">{{ t('common.confirm') }}</button>
+          </div>
+          <div class="p-4">
+            <input
+              ref="nicknameInputRef"
+              v-model="pendingNickname"
+              :placeholder="t('settings.account.nicknamePlaceholder')"
+              class="w-full rounded-2xl border border-[#304255] bg-[#101b28] px-4 py-3 text-white outline-none focus:border-[#c99b18]"
+              maxlength="20"
+            />
+            <p class="mt-2 text-xs text-[#8e9bb0] text-right">{{ pendingNickname.length }}/20</p>
+          </div>
+        </div>
+      </div>
+    </teleport>
 
     <teleport to="body">
       <div v-if="showAvatarModal" class="fixed inset-0 z-[130] flex items-end justify-center">

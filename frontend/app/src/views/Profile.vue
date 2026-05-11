@@ -61,6 +61,15 @@ const fetchProfile = async (silent = false) => {
   try {
     const json = await UserService.getProfile()
     userProfile.value = json.data
+
+    const storedUser = JSON.parse(localStorage.getItem('user') || '{}')
+    if (storedUser?.avatar) {
+      userProfile.value.avatar = storedUser.avatar
+    }
+    if (storedUser?.nickname) {
+      userProfile.value.nickname = storedUser.nickname
+    }
+
     // 重置头像错误状态
     avatarError.value = false
   } catch (err) {

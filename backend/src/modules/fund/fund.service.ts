@@ -1,4 +1,12 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
+import {
+  BadRequestException,
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common'
 import {
   AssetChangeType,
   AuditLog,
@@ -267,12 +275,12 @@ export class FundService {
       sms.expiresAt < Date.now() ||
       String(body.smsCode || '').trim() !== sms.code
     ) {
-      throw new BadRequestException('短信验证码错误')
+      throw new UnprocessableEntityException('短信验证码错误')
     }
     this.withdrawSmsMap.delete(body.smsToken)
 
     if (!user.asset || Number(user.asset.tentativeAsset) < amount) {
-      throw new BadRequestException('余额不足或可提现本金不足')
+      throw new HttpException('余额不足或可提现本金不足', HttpStatus.PAYMENT_REQUIRED)
     }
 
     const paymentMethod = await this.getUserPaymentMethod(user.id)

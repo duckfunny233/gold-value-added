@@ -138,6 +138,7 @@ model User {
   username         String          @unique
   passwordHash     String
   nickname         String?
+  avatar           String?
   phone            String?         @unique
   email            String?         @unique
   status           UserStatus      @default(ACTIVE)
@@ -159,6 +160,23 @@ model User {
   friendRelationsA FriendRelation[]   @relation("friend_relation_a")
   friendRelationsB FriendRelation[]   @relation("friend_relation_b")
   ownedConversations ChatConversation[]
+  loginSessions      UserLoginSession[]
+}
+
+/// 用户端登录会话（设备管理列表）；按 UA 指纹合并，非 JWT 有状态续期
+model UserLoginSession {
+  id                 String   @id @default(cuid())
+  userId             String
+  clientFingerprint  String
+  deviceName         String
+  location           String   @default("未知")
+  ipLast             String   @default("")
+  lastSeenAt         DateTime @default(now())
+  createdAt          DateTime @default(now())
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientFingerprint])
+  @@index([userId, lastSeenAt])
 }
 
 model ChatConversation {

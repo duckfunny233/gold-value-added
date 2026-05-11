@@ -9,6 +9,7 @@ import {
   Injectable,
   Module,
   Post,
+  Req,
   UnprocessableEntityException,
   UnauthorizedException,
   UploadedFiles,
@@ -34,6 +35,7 @@ import {
   MinLength,
 } from 'class-validator'
 import { sha256 } from '../../common/utils/hash.util'
+import { clientFingerprintFromUserAgent, summarizeClient } from '../../common/utils/user-agent.util'
 import { generateUid } from '../../common/utils/uid.util'
 import { PrismaService } from '../../prisma/prisma.service'
 
@@ -342,7 +344,7 @@ class AuthService {
     }
   }
 
-  async login(payload: LoginDto) {
+  async login(payload: LoginDto, ip?: string, userAgent?: string) {
     const username = payload.username.trim()
     const user = await this.prisma.user.findUnique({
       where: {
@@ -351,15 +353,18 @@ class AuthService {
     })
 
     if (!user) {
+      await this.recordLoginAudit(null, username, 'failed', ip)
       throw new UnauthorizedException('账号或密码错误')
     }
 
     const inputPasswordHash = sha256(payload.password)
     if (user.passwordHash !== inputPasswordHash) {
+      await this.recordLoginAudit(user, username, 'failed', ip)
       throw new UnauthorizedException('账号或密码错误')
     }
 
     if (user.status === 'FROZEN' || user.status === 'DISABLED') {
+      await this.recordLoginAudit(user, username, 'failed', ip)
       throw new HttpException('账号已冻结，请联系管理员', HttpStatus.LOCKED)
     }
 
@@ -372,19 +377,29 @@ class AuthService {
       userType: 'app',
     })
 
-    await this.prisma.auditLog.create({
-      data: {
-        userId: user.id,
-        actorType: 'USER',
-        actorId: user.id,
-        module: 'auth',
-        action: 'login',
-        traceId: randomUUID(),
-        payload: {
-          uid: user.uid,
-          username: user.username,
-          roleCodes,
+    await this.recordLoginAudit(user, username, 'success', ip, roleCodes)
+
+    const { deviceName } = summarizeClient(userAgent)
+    const clientFingerprint = clientFingerprintFromUserAgent(userAgent)
+    const session = await this.prisma.userLoginSession.upsert({
+      where: {
+        userId_clientFingerprint: {
+          userId: user.id,
+          clientFingerprint,
         },
+      },
+      create: {
+        userId: user.id,
+        clientFingerprint,
+        deviceName,
+        location: '未知',
+        ipLast: String(ip || '').trim(),
+        lastSeenAt: new Date(),
+      },
+      update: {
+        deviceName,
+        ipLast: String(ip || '').trim(),
+        lastSeenAt: new Date(),
       },
     })
 
@@ -395,11 +410,12 @@ class AuthService {
         user: {
           uid: user.uid,
           username: user.username,
+          nickname: user.nickname || user.username,
           roleCodes,
           status: user.status,
           realNameVerified: user.realNameStatus === 'VERIFIED',
         },
-        sessionId: randomUUID(),
+        sessionId: session.id,
       },
     }
   }
@@ -415,6 +431,38 @@ class AuthService {
         loggedOut: true,
       },
     }
+  }
+
+  private async recordLoginAudit(
+    user:
+      | {
+          id: string
+          uid: string
+          username: string
+        }
+      | null,
+    username: string,
+    result: 'success' | 'failed',
+    ip?: string,
+    roleCodes?: string[],
+  ) {
+    await this.prisma.auditLog.create({
+      data: {
+        userId: user?.id || null,
+        actorType: 'USER',
+        actorId: user?.id || null,
+        module: 'auth',
+        action: result === 'success' ? 'login' : 'login_failed',
+        traceId: randomUUID(),
+        payload: {
+          uid: user?.uid || null,
+          username: user?.username || username,
+          roleCodes: roleCodes || [],
+          ip: ip || '',
+          result,
+        },
+      },
+    })
   }
 }
 
@@ -465,8 +513,15 @@ class AuthController {
 
   @Post('login')
   @HttpCode(200)
-  login(@Body() body: LoginDto) {
-    return this.authService.login(body)
+  login(@Body() body: LoginDto, @Req() req: any) {
+    const rawIp =
+      String(req?.headers?.['x-forwarded-for'] || '')
+        .split(',')[0]
+        .trim() ||
+      String(req?.ip || '').trim() ||
+      String(req?.socket?.remoteAddress || '').trim()
+    const userAgent = req?.headers?.['user-agent']
+    return this.authService.login(body, rawIp, userAgent)
   }
 
   @Post('reset-password')

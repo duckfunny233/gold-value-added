@@ -3,38 +3,18 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RefreshCw } from 'lucide-vue-next'
 import { UserService } from '../services/user'
+import { showToast } from '../composables/useToast'
 
 defineOptions({ name: 'GoldChain' })
-const { t, locale } = useI18n()
+const { t } = useI18n()
 
 const loading = ref(false)
 const list = ref([])
 
-const fallbackList = [
-  { sequenceNo: 100001, nickname: '金海逐光', buyInfo: '买入 12 笔 / 卖出 3 笔', goldGrams: 1280.65, silverGrams: 356.2, totalAssets: 998600, updatedAt: '2026-04-05 10:52:10' },
-  { sequenceNo: 100002, nickname: '沪上买手', buyInfo: '买入 10 笔 / 卖出 2 笔', goldGrams: 1150.2, silverGrams: 280.5, totalAssets: 892500, updatedAt: '2026-04-05 10:50:40' },
-  { sequenceNo: 100003, nickname: '北城风控', buyInfo: '买入 8 笔 / 卖出 1 笔', goldGrams: 972.88, silverGrams: 228.36, totalAssets: 761000, updatedAt: '2026-04-05 10:49:06' },
-  { sequenceNo: 100004, nickname: '长安金客', buyInfo: '买入 7 笔 / 卖出 2 笔', goldGrams: 845.42, silverGrams: 176.48, totalAssets: 665900, updatedAt: '2026-04-05 10:48:15' },
-  { sequenceNo: 100005, nickname: '晨雾交易员', buyInfo: '买入 6 笔 / 卖出 2 笔', goldGrams: 724.9, silverGrams: 140.33, totalAssets: 571300, updatedAt: '2026-04-05 10:47:34' }
-]
-
-function formatCurrency(value) {
-  const localeMap = {
-    zh: 'zh-CN',
-    en: 'en-US',
-    es: 'es-ES',
-    ar: 'ar-SA',
-    hi: 'hi-IN',
-    ru: 'ru-RU',
-    ja: 'ja-JP',
-    pt: 'pt-BR',
-    bn: 'bn-BD',
-  }
-  const selectedLocale = localeMap[String(locale.value || '').toLowerCase()] || 'en-US'
-  return `¥${Number(value || 0).toLocaleString(selectedLocale, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}`
+const shortText = (value, max = 24) => {
+  const raw = String(value || '')
+  if (raw.length <= max) return raw
+  return `${raw.slice(0, max)}...`
 }
 
 async function fetchChainData() {
@@ -43,25 +23,19 @@ async function fetchChainData() {
     const result = await UserService.getGoldChainRecords()
     const rows = result?.data?.items || result?.data || []
 
-    if (Array.isArray(rows) && rows.length > 0) {
-      list.value = rows.map((item, index) => ({
-        sequenceNo: item.sequenceNo || 100000 + index + 1,
-        nickname: item.nickname || t('goldChain.userNo', { index: index + 1 }),
-        buyInfo:
-          item.buyInfo ||
-          t('goldChain.tradeInfo', { buy: Number(item.buyCount || 0), sell: Number(item.sellCount || 0) }),
-        goldGrams: Number(item.goldGrams || 0),
-        silverGrams: Number(item.silverGrams || 0),
-        totalAssets: Number(item.totalAssets || 0),
-        updatedAt: item.updatedAt || item.lastTradeAt || '-'
-      }))
-      return
-    }
-
-    list.value = fallbackList
+    list.value = Array.isArray(rows)
+      ? rows.map((item, index) => ({
+          sequenceNo: item.sequenceNo || 100000 + index + 1,
+          traceId: String(item.traceId || '-'),
+          hashValue: String(item.hashValue || '-'),
+          chainSyncStatus: String(item.chainSyncStatus || item.syncStatus || '-'),
+          createdAt: String(item.createdAt || item.updatedAt || '-'),
+        }))
+      : []
   } catch (error) {
-    console.error('Gold chain load failed, fallback to local samples:', error)
-    list.value = fallbackList
+    console.error('Gold chain load failed:', error)
+    list.value = []
+    showToast('记录加载失败，请重试')
   } finally {
     loading.value = false
   }
@@ -92,22 +66,18 @@ onMounted(fetchChainData)
         <div class="chain-table">
           <div class="chain-row chain-head">
             <span class="col-seq">{{ t('goldChain.columns.sequence') }}</span>
-            <span class="col-name">{{ t('goldChain.columns.nickname') }}</span>
-            <span class="col-trade">{{ t('goldChain.metrics.trade') }}</span>
-            <span class="col-gold">{{ t('goldChain.metrics.gold') }}</span>
-            <span class="col-silver">{{ t('goldChain.metrics.silver') }}</span>
-            <span class="col-asset">{{ t('goldChain.metrics.totalAsset') }}</span>
+            <span class="col-name">Trace ID</span>
+            <span class="col-trade">Hash</span>
+            <span class="col-gold">同步状态</span>
             <span class="col-time">{{ t('goldChain.columns.time') }}</span>
           </div>
 
           <article v-for="row in list" :key="row.sequenceNo" class="chain-row">
             <span class="col-seq sequence-no">#{{ row.sequenceNo }}</span>
-            <span class="col-name nickname">{{ row.nickname }}</span>
-            <span class="col-trade metric-plain">{{ row.buyInfo }}</span>
-            <span class="col-gold metric-gold">{{ row.goldGrams.toFixed(2) }} g</span>
-            <span class="col-silver metric-silver">{{ row.silverGrams.toFixed(2) }} g</span>
-            <span class="col-asset metric-asset">{{ formatCurrency(row.totalAssets) }}</span>
-            <span class="col-time time">{{ row.updatedAt }}</span>
+            <span class="col-name nickname" :title="row.traceId">{{ shortText(row.traceId, 22) }}</span>
+            <span class="col-trade metric-plain" :title="row.hashValue">{{ shortText(row.hashValue, 26) }}</span>
+            <span class="col-gold metric-gold">{{ row.chainSyncStatus }}</span>
+            <span class="col-time time">{{ row.createdAt }}</span>
           </article>
         </div>
       </div>
@@ -181,12 +151,12 @@ onMounted(fetchChainData)
 }
 
 .chain-table {
-  min-width: 980px;
+  min-width: 860px;
 }
 
 .chain-row {
   display: grid;
-  grid-template-columns: 120px 160px 180px 130px 130px 160px 170px;
+  grid-template-columns: 110px 240px 300px 130px 180px;
   align-items: center;
   gap: 0;
   min-height: 52px;
@@ -235,16 +205,6 @@ onMounted(fetchChainData)
 
 .metric-gold {
   color: #f3d27f;
-  font-weight: 700;
-}
-
-.metric-silver {
-  color: #d7e1ec;
-  font-weight: 700;
-}
-
-.metric-asset {
-  color: rgba(191, 148, 63, 0.92);
   font-weight: 700;
 }
 

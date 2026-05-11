@@ -30,6 +30,7 @@ import { IsBoolean, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'cla
 import { randomUUID } from 'crypto'
 import { PrismaModule } from '../../prisma/prisma.module'
 import { PrismaService } from '../../prisma/prisma.service'
+import { sha256 } from '../../common/utils/hash.util'
 
 const SETTINGS_OVERVIEW_ITEMS = [
   {
@@ -68,22 +69,7 @@ const DEFAULT_SECURITY_SETTINGS = {
   passwordSet: true,
   secretKey: 'Key@2026',
   biometricEnabled: false,
-  devices: [
-    {
-      id: 'dev_1',
-      name: 'iPhone 15 Pro',
-      location: '上海',
-      lastActive: '2026-04-12 10:26',
-      trusted: true,
-    },
-    {
-      id: 'dev_2',
-      name: 'Windows Chrome',
-      location: '杭州',
-      lastActive: '2026-04-11 21:03',
-      trusted: false,
-    },
-  ],
+  devices: [],
   loginLogs: [
     { id: 'log_1', time: '2026-04-12 10:26', ip: '116.233.**.**', result: 'success' },
     { id: 'log_2', time: '2026-04-11 21:03', ip: '183.129.**.**', result: 'success' },
@@ -371,7 +357,7 @@ class SettingsService {
   async getSecuritySettings(query: SettingsUserQueryDto = {}) {
     const user = await this.resolveUser(query)
     const state = await this.getSecurityState(user.id)
-    return this.toSecurityView(state, user.realNameStatus)
+    return this.buildSecurityView(user.id, state, user.realNameStatus)
   }
 
   async updateSecuritySettings(body: UpdateSecuritySettingsDto) {
@@ -407,22 +393,25 @@ class SettingsService {
       biometricEnabled: state.biometricEnabled,
     })
 
-    return this.toSecurityView(state, user.realNameStatus)
+    return this.buildSecurityView(user.id, state, user.realNameStatus)
   }
 
   async removeSecurityDevice(deviceId: string, query: SettingsUserQueryDto = {}) {
     const user = await this.resolveUser(query)
-    const state = await this.getSecurityState(user.id)
-    const beforeCount = state.devices.length
-    state.devices = state.devices.filter((item) => item.id !== deviceId)
-
-    await this.saveSecurityState(user.id, state)
-    await this.appendSecurityAuditLog(user.id, 'settings.security.remove-device', {
-      deviceId,
-      removed: beforeCount !== state.devices.length,
+    const removed = await this.prisma.userLoginSession.deleteMany({
+      where: {
+        id: deviceId,
+        userId: user.id,
+      },
     })
 
-    return this.toSecurityView(state, user.realNameStatus)
+    await this.appendSecurityAuditLog(user.id, 'settings.security.remove-device', {
+      deviceId,
+      removed: removed.count > 0,
+    })
+
+    const state = await this.getSecurityState(user.id)
+    return this.buildSecurityView(user.id, state, user.realNameStatus)
   }
 
   async changeSecretKey(body: ChangeSecretKeyDto) {
@@ -434,19 +423,29 @@ class SettingsService {
     const currentKey = String(body.currentKey || '').trim()
     const newKey = String(body.newKey || '').trim()
 
-    if (!currentKey || !newKey) {
+    if (!newKey) {
       throw new BadRequestException('settings.security.toast.fillAll')
     }
     if (newKey.length < 6) {
       throw new BadRequestException('settings.security.toast.keyTooShort')
     }
-    if (currentKey !== String(state.secretKey || '').trim()) {
+
+    const storedSecretKey = String(state.secretKey || '').trim()
+    const loginPasswordMatched = !!currentKey && user.passwordHash === sha256(currentKey)
+    const localSecretMatched = !!currentKey && (currentKey === storedSecretKey || currentKey === DEFAULT_SECURITY_SETTINGS.secretKey)
+    if (!loginPasswordMatched && !localSecretMatched) {
       throw new BadRequestException('settings.security.toast.currentKeyWrong')
     }
 
     state.secretKey = newKey
     state.passwordSet = true
-    await this.saveSecurityState(user.id, state)
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { passwordHash: sha256(newKey) },
+      })
+      await this.saveSecurityState(user.id, state)
+    })
     await this.appendSecurityAuditLog(user.id, 'settings.security.change-secret-key', {
       result: 'success',
     })
@@ -464,6 +463,7 @@ class SettingsService {
       uid: user.uid,
       username: user.username,
       nickname: user.nickname || user.username,
+      avatar: user.avatar,
       phone: user.phone || '',
       state,
     })
@@ -502,6 +502,7 @@ class SettingsService {
       },
       data: {
         nickname: nextNickname,
+        ...(typeof body.avatar === 'string' && body.avatar.trim() ? { avatar: body.avatar } : {}),
         ...(nextPhone ? { phone: nextPhone } : {}),
       },
       select: {
@@ -509,6 +510,7 @@ class SettingsService {
         uid: true,
         username: true,
         nickname: true,
+        avatar: true,
         phone: true,
       },
     })
@@ -530,6 +532,7 @@ class SettingsService {
       uid: updatedUser.uid,
       username: updatedUser.username,
       nickname: updatedUser.nickname || updatedUser.username,
+      avatar: updatedUser.avatar,
       phone: updatedUser.phone || '',
       state,
     })
@@ -695,7 +698,11 @@ class SettingsService {
       otpRecord.userId === user.id &&
       otpRecord.code === smsCode &&
       otpRecord.expiresAt >= Date.now()
-    const keyValid = secretKey === String(securityState.secretKey || '').trim()
+    const storedSecretKey = String(securityState.secretKey || '').trim()
+    const keyValid =
+      user.passwordHash === sha256(secretKey) ||
+      secretKey === storedSecretKey ||
+      secretKey === DEFAULT_SECURITY_SETTINGS.secretKey
 
     if (!otpValid || !keyValid) {
       throw new UnprocessableEntityException('密钥或短信验证码错误')
@@ -735,6 +742,12 @@ class SettingsService {
 
     const canceledAt = new Date()
     await this.prisma.$transaction(async (tx) => {
+      await tx.userLoginSession.deleteMany({
+        where: {
+          userId: user.id,
+        },
+      })
+
       await tx.user.update({
         where: {
           id: user.id,
@@ -831,11 +844,20 @@ class SettingsService {
   }
 
   private async resolveUser(query: SettingsUserQueryDto = {}) {
-    const where = query.uid
-      ? { uid: query.uid }
-      : query.username
-        ? { username: query.username }
-        : undefined
+    const uid = String(query.uid || '').trim()
+    const username = String(query.username || '').trim()
+    const where =
+      uid && username
+        ? { uid, username }
+        : uid
+          ? { uid }
+          : username
+            ? { username }
+            : undefined
+
+    if (!where) {
+      throw new BadRequestException('缺少用户标识')
+    }
 
     const user = await this.prisma.user.findFirst({
       where,
@@ -846,7 +868,9 @@ class SettingsService {
         id: true,
         uid: true,
         username: true,
+        passwordHash: true,
         nickname: true,
+        avatar: true,
         phone: true,
         status: true,
         realNameStatus: true,
@@ -924,7 +948,7 @@ class SettingsService {
         typeof input.biometricEnabled === 'boolean'
           ? input.biometricEnabled
           : defaults.biometricEnabled,
-      devices: this.parseDevices(input.devices, defaults.devices),
+      devices: [],
       loginLogs: this.parseLoginLogs(input.loginLogs, defaults.loginLogs),
     }
   }
@@ -1061,27 +1085,6 @@ class SettingsService {
       .filter((item): item is HelpFaqItem => !!item && !!item.id && !!item.q && !!item.a)
   }
 
-  private parseDevices(input: unknown, fallback: SecurityDevice[]) {
-    if (!Array.isArray(input)) {
-      return fallback
-    }
-    return input
-      .map((item) => {
-        if (!item || typeof item !== 'object' || Array.isArray(item)) {
-          return null
-        }
-        const row = item as Record<string, unknown>
-        return {
-          id: String(row.id || ''),
-          name: String(row.name || ''),
-          location: String(row.location || ''),
-          lastActive: String(row.lastActive || ''),
-          trusted: Boolean(row.trusted),
-        }
-      })
-      .filter((item): item is SecurityDevice => !!item && !!item.id && !!item.name)
-  }
-
   private parseLoginLogs(input: unknown, fallback: SecurityLog[]) {
     if (!Array.isArray(input)) {
       return fallback
@@ -1126,6 +1129,95 @@ class SettingsService {
     return JSON.parse(JSON.stringify(DEFAULT_SECURITY_SETTINGS)) as SecuritySettingsState
   }
 
+  private async buildSecurityView(
+    userId: string,
+    state: SecuritySettingsState,
+    realNameStatus: RealNameStatus,
+  ) {
+    state.loginLogs = await this.getRecentLoginLogs(userId)
+    state.devices = await this.listLoginSessions(userId)
+    return this.toSecurityView(state, realNameStatus)
+  }
+
+  private async listLoginSessions(userId: string): Promise<SecurityDevice[]> {
+    const rows = await this.prisma.userLoginSession.findMany({
+      where: {
+        userId,
+      },
+      orderBy: {
+        lastSeenAt: 'desc',
+      },
+      take: 50,
+    })
+
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.deviceName,
+      location: row.location?.trim() || '未知',
+      lastActive: this.formatSecurityLogTime(row.lastSeenAt),
+      trusted: false,
+    }))
+  }
+
+  private async getRecentLoginLogs(userId: string): Promise<SecurityLog[]> {
+    const rows = await this.prisma.auditLog.findMany({
+      where: {
+        userId,
+        module: 'auth',
+        action: {
+          in: ['login', 'login_failed'],
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 20,
+      select: {
+        id: true,
+        action: true,
+        createdAt: true,
+        payload: true,
+      },
+    })
+
+    return rows.map((row) => {
+      const payload =
+        row.payload && typeof row.payload === 'object' && !Array.isArray(row.payload)
+          ? (row.payload as Record<string, unknown>)
+          : {}
+      const rawIp = String(payload.ip || '')
+
+      return {
+        id: row.id,
+        time: this.formatSecurityLogTime(row.createdAt),
+        ip: this.maskIp(rawIp),
+        result: row.action === 'login' ? 'success' : 'failed',
+      }
+    })
+  }
+
+  private formatSecurityLogTime(value: Date) {
+    const date = new Date(value)
+    const yyyy = date.getFullYear()
+    const mm = `${date.getMonth() + 1}`.padStart(2, '0')
+    const dd = `${date.getDate()}`.padStart(2, '0')
+    const hh = `${date.getHours()}`.padStart(2, '0')
+    const mi = `${date.getMinutes()}`.padStart(2, '0')
+    return `${yyyy}-${mm}-${dd} ${hh}:${mi}`
+  }
+
+  private maskIp(ip: string) {
+    const source = String(ip || '').trim()
+    if (!source) return '-'
+    if (source.includes('.')) {
+      const parts = source.split('.')
+      if (parts.length === 4) {
+        return `${parts[0]}.${parts[1]}.**.**`
+      }
+    }
+    return source
+  }
+
   private defaultAccountState(): AccountSettingsState {
     return {
       avatar: '',
@@ -1137,9 +1229,9 @@ class SettingsService {
     return {
       noticePush: true,
       tradePush: true,
-      servicePush: false,
+      servicePush: true,
       theme: 'dark',
-      refreshSeconds: 3,
+      refreshSeconds: 5,
     }
   }
 
@@ -1222,9 +1314,11 @@ class SettingsService {
     username: string
     nickname: string
     phone: string
+    avatar?: string | null
     state: AccountSettingsState
   }) {
     const avatar =
+      payload.avatar ||
       payload.state.avatar ||
       `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(payload.uid)}`
     const mobile = this.maskMobile(payload.phone)
