@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Bell, User, Users, RefreshCw } from 'lucide-vue-next'
@@ -14,6 +14,7 @@ const route = useRoute()
 const chats = ref([])
 const isRefreshing = ref(false)
 const showQrModal = computed(() => route.query.modal === 'my-qr')
+let pollTimer = null
 
 const iconMap = {
   system: Bell,
@@ -39,6 +40,7 @@ const localizeChatItem = (item) => {
     ...item,
     name: translateMaybe(item?.name),
     lastMsg: translateMaybe(item?.lastMsg),
+    avatar: item?.avatar || '',
     time: mappedTime,
   }
 }
@@ -62,6 +64,14 @@ const handleRefresh = () => {
 
 onMounted(() => {
   fetchChats()
+  pollTimer = setInterval(() => {
+    if (document.hidden || route.path !== '/chat') return
+    fetchChats(true)
+  }, 5000)
+})
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
 })
 
 watch(() => route.fullPath, () => {
@@ -72,6 +82,12 @@ watch(() => route.fullPath, () => {
 
 const openChat = (id) => {
   router.push(`/chat/${id}`)
+}
+
+const avatarFallback = (chat) => {
+  if (chat?.type === 'group') return 'https://api.dicebear.com/7.x/shapes/svg?seed=group-default'
+  if (chat?.type === 'user') return `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(chat?.name || 'user')}`
+  return ''
 }
 </script>
 
@@ -102,15 +118,27 @@ const openChat = (id) => {
         @click="openChat(chat.id)"
         class="card-base mb-3 flex items-center gap-4 p-4 active:bg-[#1d2a38] transition-all btn-interact border-none shadow-sm bg-[#162331]"
       >
-        <div class="w-12 h-12 rounded-full flex items-center justify-center shrink-0 shadow-inner"
-          :class="chat.type === 'system' ? 'bg-blue-100 text-blue-600' : (chat.type === 'group' ? 'bg-green-100 text-green-600' : 'bg-[#223244] text-[#b8c4d3]')"
+        <div
+          v-if="chat.type === 'group' || chat.type === 'user'"
+          class="w-12 h-12 rounded-full shrink-0 shadow-inner border border-[#2a3a4d] bg-[#162331] overflow-hidden"
         >
+          <img :src="chat.avatar || avatarFallback(chat)" :alt="chat.name" class="h-full w-full object-cover" />
+        </div>
+        <div v-else class="w-12 h-12 rounded-full flex items-center justify-center shrink-0 shadow-inner bg-blue-100 text-blue-600">
           <component :is="iconMap[chat.type]" :size="24" />
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex justify-between items-baseline mb-1">
             <h4 class="font-bold truncate text-sm">{{ chat.name }}</h4>
-            <span class="text-[10px] text-[#8e9bb0] font-medium tabular-nums">{{ chat.time }}</span>
+            <div class="flex items-center gap-2">
+              <span
+                v-if="Number(chat.unreadCount || 0) > 0"
+                class="min-w-[18px] h-[18px] rounded-full bg-[#ef4444] px-1 text-[10px] leading-[18px] text-white text-center font-bold"
+              >
+                {{ Number(chat.unreadCount) > 99 ? '99+' : Number(chat.unreadCount) }}
+              </span>
+              <span class="text-[10px] text-[#8e9bb0] font-medium tabular-nums">{{ chat.time }}</span>
+            </div>
           </div>
           <p class="text-xs text-[#8e9bb0] truncate">{{ chat.lastMsg }}</p>
         </div>

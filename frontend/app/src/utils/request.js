@@ -35,11 +35,15 @@ export const apiFetch = createApiFetch({
     }
   },
   onBusinessError: (message) => {
+    const normalized = String(message || '').trim().toLowerCase()
+    if (!normalized || normalized === 'ok' || normalized === 'success') return
     showToast(message)
   },
   onNetworkError: (error) => {
     console.error('[API Error]', error.message)
     const t = getT()
+    const normalized = String(error?.message || '').trim().toLowerCase()
+    if (!normalized || normalized === 'ok' || normalized === 'success') return
     const canFallbackSilently = error.message.includes('Failed to fetch')
       || error.message.includes('接口返回了非 JSON 内容')
       || error.message.includes('Cannot GET /api/')

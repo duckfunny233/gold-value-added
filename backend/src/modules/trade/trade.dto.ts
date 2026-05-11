@@ -88,3 +88,10 @@ export class TradeRetrySyncDto {
   @IsString()
   tradeNo?: string
 }
+
+export class TradeBackfillAssetsDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  uid?: string
+}

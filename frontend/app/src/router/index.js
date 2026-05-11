@@ -14,6 +14,7 @@ import NewsDetail from '../views/NewsDetail.vue'
 import GoldChain from '../views/GoldChain.vue'
 import AddFriend from '../views/chat/AddFriend.vue'
 import CreateGroup from '../views/chat/CreateGroup.vue'
+import GroupManage from '../views/chat/GroupManage.vue'
 import Scan from '../views/chat/Scan.vue'
 import SettingsHome from '../views/settings/SettingsHome.vue'
 import SecuritySettings from '../views/settings/SecuritySettings.vue'
@@ -68,6 +69,11 @@ const routes = [
     path: '/chat/scan',
     name: 'Scan',
     component: Scan
+  },
+  {
+    path: '/chat/group/:id/manage',
+    name: 'GroupManage',
+    component: GroupManage
   },
   {
     path: '/settings',

@@ -11,6 +11,7 @@ export class ApiResponseInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const response = context.switchToHttp().getResponse()
     const statusCode = response.statusCode || 200
+    const businessCode = statusCode >= 200 && statusCode < 300 ? 200 : statusCode
     const traceId = response.getHeader('x-trace-id') as string | undefined
 
     return next.handle().pipe(
@@ -23,7 +24,7 @@ export class ApiResponseInterceptor implements NestInterceptor {
           const payload = data as Record<string, unknown>
           if ('data' in payload || 'message' in payload) {
             return {
-              code: statusCode,
+              code: businessCode,
               message: (payload.message as string | undefined) || 'OK',
               traceId,
               data: ('data' in payload ? payload.data : null) ?? null,
@@ -32,7 +33,7 @@ export class ApiResponseInterceptor implements NestInterceptor {
         }
 
         return {
-          code: statusCode,
+          code: businessCode,
           message: 'OK',
           traceId,
           data,

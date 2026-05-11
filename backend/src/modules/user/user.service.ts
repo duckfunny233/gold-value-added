@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable, NotFoundException, Optional } from '@nestjs/common'
 import {
   Prisma,
   RealNameStatus,
@@ -22,6 +22,7 @@ import {
 } from '../../common/utils/admin-view.util'
 import { sha256 } from '../../common/utils/hash.util'
 import { PrismaService } from '../../prisma/prisma.service'
+import { MarketService } from '../market/market.service'
 import {
   AdminUserManualCheckDto,
   AdminUsersQueryDto,
@@ -45,7 +46,7 @@ type AppPaymentMethod = {
   updatedAt: string
 }
 
-const METAL_SPECS = [10, 50, 100, 1000, 5000] as const
+const METAL_SPECS = [1, 10, 50, 100, 1000, 5000] as const
 const GOLD_UNIT_PRICE = 1046.2
 const SILVER_UNIT_PRICE = 18.83
 const STANDARD_FEE_RATE = 0.001
@@ -53,7 +54,10 @@ const P2P_FEE_FREE_THRESHOLD = 100
 
 @Injectable()
 export class UserService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly marketService?: MarketService,
+  ) {}
 
   async getPublicLeaderboard(limitInput?: string | number) {
     const limit = this.resolveLeaderboardLimit(limitInput)
@@ -87,7 +91,7 @@ export class UserService {
     const leaderboardItems = assets
       .map((item) => ({
         uid: item.user.uid,
-        nickname: item.user.nickname || item.user.username,
+        nickname: item.user.username,
         goldGrams: toNumber(item.goldHoldingGrams),
         totalAsset: toNumber(item.totalAsset),
         sequenceNo:
@@ -351,7 +355,7 @@ export class UserService {
         return {
           sequenceNo: 100001 + index,
           uid: primaryUser?.uid || '',
-          nickname: primaryUser?.nickname || primaryUser?.username || '系统记录',
+          nickname: primaryUser?.username || '系统记录',
           buyInfo: `买入 ${stats.buyCount} 笔 / 卖出 ${stats.sellCount} 笔`,
           buyCount: stats.buyCount,
           sellCount: stats.sellCount,
@@ -407,27 +411,63 @@ export class UserService {
     const asset = user.asset
     const goldGrams = toNumber(asset?.goldHoldingGrams)
     const silverGrams = await this.getUserSilverHoldingGrams(user.id)
-    const marketValue = goldGrams * GOLD_UNIT_PRICE + silverGrams * SILVER_UNIT_PRICE
-
-    const cashBalance = toNumber(asset?.cashAsset)
     const tentativeAsset = toNumber(asset?.tentativeAsset)
     const appreciationIncome = toNumber(asset?.appreciationIncome)
     const withdrawFrozenAmount = toNumber(asset?.withdrawFrozenAmount)
-    const totalAssetFromLedger = toNumber(asset?.totalAsset)
-    const totalAsset =
-      totalAssetFromLedger > 0 ? totalAssetFromLedger : cashBalance + marketValue
+
+    // 使用真实行情计算持仓市值；失败时回退到常量基准价，避免页面不可用
+    let goldPricePerGram = GOLD_UNIT_PRICE
+    let silverPricePerGram = SILVER_UNIT_PRICE
+    if (this.marketService) {
+      const [goldResult, silverResult] = await Promise.allSettled([
+        this.marketService.getTicker('AU9999'),
+        this.marketService.getTicker('AG9999'),
+      ])
+
+      if (goldResult.status === 'fulfilled') {
+        const price = Number(goldResult.value?.price)
+        if (Number.isFinite(price) && price > 0) {
+          goldPricePerGram = price
+        }
+      }
+      if (silverResult.status === 'fulfilled') {
+        const price = Number(silverResult.value?.price)
+        if (Number.isFinite(price) && price > 0) {
+          silverPricePerGram = price
+        }
+      }
+    }
+
+    const marketValue = goldGrams * goldPricePerGram + silverGrams * silverPricePerGram
+
+    // 业务口径：
+    // 1) 暂定资产 = 充值/支付资金沉淀，不随金价波动
+    // 2) 持仓市值 = 实时行情价 * 持仓克数
+    // 3) 总资产 = 暂定资产 + 持仓市值
+    const availableBalance = Math.max(tentativeAsset, 0)
+    const totalAsset = availableBalance + marketValue
+
     const principalBalance = Math.max(totalAsset - appreciationIncome, 0)
-    const withdrawablePrincipal = Math.max(
-      principalBalance - withdrawFrozenAmount,
-      0,
+    const withdrawablePrincipal = Math.max(principalBalance - withdrawFrozenAmount, 0)
+
+    // 昨日收益：按撮合成交(tradeMatch)使用 FIFO 成本法计算“昨日已实现盈亏”（暂不计手续费）
+    const now = new Date()
+    const todayStart = new Date(now)
+    todayStart.setHours(0, 0, 0, 0)
+
+    const yesterdayStart = new Date(todayStart)
+    yesterdayStart.setDate(todayStart.getDate() - 1)
+    const yesterdayProfit = await this.calculateYesterdayRealizedProfitFifo(
+      user.id,
+      yesterdayStart,
+      todayStart,
     )
-    const yesterdayProfit = appreciationIncome * 0.08
 
     return {
       id: user.uid,
       uid: user.uid,
       username: user.username,
-      nickname: user.nickname || user.username,
+      nickname: user.username,
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.uid)}`,
       fee: '--',
       realNameVerified: user.realNameStatus === RealNameStatus.VERIFIED,
@@ -439,7 +479,7 @@ export class UserService {
         { key: 'profile.assets.total', value: this.formatMoney(totalAsset), unit: 'CNY' },
         {
           key: 'profile.assets.balance',
-          value: this.formatMoney(cashBalance),
+          value: this.formatMoney(availableBalance),
           unit: 'CNY',
         },
         {
@@ -459,12 +499,18 @@ export class UserService {
           unit: 'CNY',
           trend: appreciationIncome >= 0 ? 'up' : 'down',
         },
+        // Profile 页面“暂定资产”展示为 tentativeAsset（不随行情波动）
+        {
+          key: 'profile.tempAssets',
+          value: this.formatMoney(availableBalance),
+          unit: 'CNY',
+        },
       ],
-      goldPositions: this.buildMetalPositions('gold', goldGrams, GOLD_UNIT_PRICE),
+      goldPositions: this.buildMetalPositions('gold', goldGrams, goldPricePerGram),
       silverPositions: this.buildMetalPositions(
         'silver',
         silverGrams,
-        SILVER_UNIT_PRICE,
+        silverPricePerGram,
       ),
     }
   }
@@ -973,6 +1019,88 @@ export class UserService {
       return 0
     }
     return Number((normalized * STANDARD_FEE_RATE).toFixed(2))
+  }
+
+  private async calculateYesterdayRealizedProfitFifo(
+    userId: string,
+    yesterdayStart: Date,
+    todayStart: Date,
+  ) {
+    const orders = await this.prisma.tradeOrder.findMany({
+      where: {
+        userId,
+        status: TradeStatus.FILLED,
+        completedAt: {
+          not: null,
+          lt: todayStart,
+        },
+      },
+      select: {
+        side: true,
+        assetCode: true,
+        price: true,
+        quantityGrams: true,
+        filledGrams: true,
+        completedAt: true,
+      },
+      orderBy: [{ completedAt: 'asc' }, { id: 'asc' }],
+    })
+
+    const lotsByAsset = new Map<string, Array<{ grams: number; costPerGram: number }>>()
+    let realizedPnl = 0
+
+    for (const order of orders) {
+      const assetCode = String(order.assetCode || '')
+      if (!(assetCode.startsWith('AU') || assetCode.startsWith('AG'))) {
+        continue
+      }
+
+      const price = toNumber(order.price)
+      const filled = toNumber(order.filledGrams)
+      const grams = filled > 0 ? filled : toNumber(order.quantityGrams)
+      if (grams <= 0 || price <= 0) {
+        continue
+      }
+
+      const lots = lotsByAsset.get(assetCode) || []
+
+      if (order.side === TradeSide.BUY) {
+        lots.push({ grams, costPerGram: price })
+      }
+
+      if (order.side === TradeSide.SELL) {
+        let remaining = grams
+        let matchedCost = 0
+
+        while (remaining > 0) {
+          const lot = lots[0]
+          if (!lot) {
+            // 缺失历史成本时按当笔成交价兜底，避免夸大利润
+            matchedCost += remaining * price
+            remaining = 0
+            break
+          }
+
+          const take = Math.min(remaining, lot.grams)
+          matchedCost += take * lot.costPerGram
+          lot.grams -= take
+          remaining -= take
+
+          if (lot.grams <= 0) {
+            lots.shift()
+          }
+        }
+
+        if (order.completedAt && order.completedAt >= yesterdayStart && order.completedAt < todayStart) {
+          const sellAmount = grams * price
+          realizedPnl += sellAmount - matchedCost
+        }
+      }
+
+      lotsByAsset.set(assetCode, lots)
+    }
+
+    return Number(realizedPnl.toFixed(2))
   }
 
   private mapGoldChainSyncStatus(syncStatus?: string) {

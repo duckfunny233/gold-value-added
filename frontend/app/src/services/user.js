@@ -36,9 +36,25 @@ const requestJson = async (path, options = {}) => {
   return payload
 }
 
+const getCurrentUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem('user') || '{}')
+  } catch (error) {
+    return {}
+  }
+}
+
+const withUsernameQuery = (path) => {
+  const user = getCurrentUser()
+  const username = String(user?.username || '').trim()
+  if (!username) return path
+  const separator = path.includes('?') ? '&' : '?'
+  return `${path}${separator}username=${encodeURIComponent(username)}`
+}
+
 export const UserService = {
   getProfile() {
-    return requestJson('/api/user/profile').then((payload) => ({
+    return requestJson(withUsernameQuery('/api/user/profile')).then((payload) => ({
       ...payload,
       data: normalizeProfile(payload.data || {}),
     }))
@@ -65,55 +81,63 @@ export const UserService = {
   },
 
   createRechargeOrder(channel, amount) {
+    const user = getCurrentUser()
     return requestJson('/api/wallet/recharge', {
       method: 'POST',
-      body: JSON.stringify({ channel, amount }),
+      body: JSON.stringify({ channel, amount, username: user?.username }),
     })
   },
 
   confirmRecharge(orderId) {
+    const user = getCurrentUser()
     return requestJson(`/api/wallet/recharge/${orderId}/confirm`, {
       method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify({ username: user?.username }),
     })
   },
 
   sendWithdrawSms(channel, amount, mobile) {
+    const user = getCurrentUser()
     return requestJson('/api/wallet/withdraw/send-sms', {
       method: 'POST',
-      body: JSON.stringify({ channel, amount, mobile }),
+      body: JSON.stringify({ channel, amount, mobile, username: user?.username }),
     })
   },
 
   submitWithdraw(channel, amount, smsCode, smsToken, mobile) {
+    const user = getCurrentUser()
     return requestJson('/api/wallet/withdraw', {
       method: 'POST',
-      body: JSON.stringify({ channel, amount, smsCode, smsToken, mobile }),
+      body: JSON.stringify({ channel, amount, smsCode, smsToken, mobile, username: user?.username }),
     })
   },
 
   // 获取收款方式
   getPaymentMethod() {
-    return requestJson('/api/user/payment-method')
+    return requestJson(withUsernameQuery('/api/user/payment-method'))
   },
 
   // 绑定收款方式
   bindPaymentMethod(data) {
+    const user = getCurrentUser()
     return requestJson('/api/user/payment-method', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        ...data,
+        username: user?.username,
+      }),
     })
   },
 
   // 解绑收款方式
   unbindPaymentMethod() {
-    return requestJson('/api/user/payment-method', {
+    return requestJson(withUsernameQuery('/api/user/payment-method'), {
       method: 'DELETE',
     })
   },
 
   // 检查用户是否有充值记录
   hasRechargeHistory() {
-    return requestJson('/api/user/recharge-history/check')
+    return requestJson(withUsernameQuery('/api/user/recharge-history/check'))
   },
 }

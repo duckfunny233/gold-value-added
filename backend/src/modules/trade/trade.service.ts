@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import {
   Asset,
   AssetChangeType,
@@ -22,7 +22,7 @@ import {
 } from '../../common/utils/admin-view.util'
 import { sha256 } from '../../common/utils/hash.util'
 import { PrismaService } from '../../prisma/prisma.service'
-import { AdminTradesQueryDto, TradeDto, TradeQueryDto, TradeRetrySyncDto } from './trade.dto'
+import { AdminTradesQueryDto, TradeBackfillAssetsDto, TradeDto, TradeQueryDto, TradeRetrySyncDto } from './trade.dto'
 import { TradeRuntimeService } from './trade-runtime.service'
 
 type TradeTx = Omit<
@@ -108,16 +108,16 @@ export class TradeService {
   private async executeSubmit(side: TradeSide, body: TradeDto, requestTraceId: string) {
     const runtime = await this.tradeRuntimeService.getRuntimeStatus()
     if (runtime.status === 'PAUSED') {
-      throw new ForbiddenException('当前处于停盘状态，暂不支持提交买卖订单')
+      throw new BadRequestException('当前处于停盘状态，暂不支持提交买卖订单')
     }
     if (!runtime.isOpen) {
-      throw new ForbiddenException('当前不在交易时段，暂不支持提交买卖订单')
+      throw new BadRequestException('当前不在交易时段，暂不支持提交买卖订单')
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
       const user = await this.requireTradeUser(tx, body)
       if (user.status === UserStatus.FROZEN) {
-        throw new ForbiddenException('当前用户已被冻结，无法发起交易')
+        throw new BadRequestException('当前用户已被冻结，无法发起交易')
       }
       if (!user.asset) {
         throw new NotFoundException('用户资产不存在')
@@ -133,10 +133,12 @@ export class TradeService {
         data: {
           userId: user.id,
           side,
-          status: TradeStatus.OPEN,
+          status: TradeStatus.FILLED,
           assetCode,
           price,
           quantityGrams,
+          filledGrams: quantityGrams,
+          completedAt: new Date(),
           traceId: requestTraceId,
         },
       })
@@ -166,9 +168,68 @@ export class TradeService {
         } as Prisma.InputJsonValue,
       })
 
-      const matchSummary = await this.executeMatching(tx, {
-        incomingOrder: order,
-        incomingUser: user,
+      const tradedAmount = price.mul(quantityGrams)
+      const updatedAsset = await tx.asset.update({
+        where: {
+          userId: user.id,
+        },
+        data:
+          side === TradeSide.BUY
+            ? {
+                tentativeAsset: { decrement: tradedAmount },
+                cashAsset: { decrement: tradedAmount },
+                goldHoldingGrams: { increment: quantityGrams },
+              }
+            : {
+                tentativeAsset: { increment: tradedAmount },
+                cashAsset: { increment: tradedAmount },
+                goldHoldingGrams: { decrement: quantityGrams },
+              },
+      })
+
+      const fillTraceId = randomUUID()
+      await tx.tradeMatch.create({
+        data: {
+          buyOrderId: order.id,
+          sellOrderId: order.id,
+          matchedPrice: price,
+          matchedGrams: quantityGrams,
+          traceId: fillTraceId,
+        },
+      })
+
+      await this.createLedgerEntry(tx, {
+        assetId: updatedAsset?.id || user.asset.id,
+        userId: user.id,
+        changeType: side === TradeSide.BUY ? AssetChangeType.TRADE_BUY : AssetChangeType.TRADE_SELL,
+        amount: tradedAmount,
+        traceId: fillTraceId,
+        balanceAfter: updatedAsset?.totalAsset || user.asset.totalAsset,
+        referenceType: 'TRADE_ORDER',
+        referenceId: order.id,
+      })
+
+      await this.createAuditLog(tx, {
+        userId: user.id,
+        actorType: 'SYSTEM',
+        actorId: null,
+        module: 'trade',
+        action: side === TradeSide.BUY ? 'trade.fill.buy' : 'trade.fill.sell',
+        traceId: fillTraceId,
+        payload: {
+          tradeOrderId: order.id,
+          side,
+          matchedPrice: Number(price),
+          matchedGrams: Number(quantityGrams),
+        } as Prisma.InputJsonValue,
+      })
+
+      await this.createHashRecord(tx, {
+        referenceType: 'TRADE_MATCH',
+        referenceId: `${order.id}:${fillTraceId}`,
+        traceId: fillTraceId,
+        raw: `trade_fill:${order.id}:${side}:${price.toString()}:${quantityGrams.toString()}`,
+        tradeOrderId: order.id,
       })
 
       const persistedOrder = await tx.tradeOrder.findUnique({
@@ -183,8 +244,8 @@ export class TradeService {
 
       return {
         order: persistedOrder,
-        matches: matchSummary.matches,
-        matchedAmount: matchSummary.matchedAmount,
+        matches: 1,
+        matchedAmount: tradedAmount,
       }
     }, {
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -548,6 +609,177 @@ export class TradeService {
       data: {
         tradeNo: trade?.id || body.tradeNo || '',
         repairedCount: pendingHashes.length,
+        traceId,
+      },
+    }
+  }
+
+  async backfillAssets(body: TradeBackfillAssetsDto, actor: AdminActor) {
+    const traceId = randomUUID()
+    const orders = await this.prisma.tradeOrder.findMany({
+      where: {
+        status: {
+          in: [TradeStatus.FILLED, TradeStatus.PARTIALLY_FILLED],
+        },
+        ...(body.uid ? { user: { uid: body.uid } } : {}),
+      },
+      include: {
+        user: {
+          include: {
+            asset: true,
+          },
+        },
+      },
+      orderBy: [{ submittedAt: 'asc' }, { createdAt: 'asc' }],
+    })
+
+    const ledgerRefs = orders.length
+      ? await this.prisma.ledgerEntry.findMany({
+          where: {
+            referenceType: 'TRADE_ORDER',
+            referenceId: {
+              in: orders.map((item) => item.id),
+            },
+          },
+          select: {
+            referenceId: true,
+          },
+        })
+      : []
+    const doneSet = new Set(ledgerRefs.map((item) => item.referenceId))
+    const pendingOrders = orders.filter((item) => !doneSet.has(item.id))
+
+    let applied = 0
+    let skipped = 0
+
+    for (const order of pendingOrders) {
+      if (!order.user.asset) {
+        skipped += 1
+        continue
+      }
+
+      const quantity = new Prisma.Decimal(order.filledGrams).gt(0)
+        ? new Prisma.Decimal(order.filledGrams)
+        : new Prisma.Decimal(order.quantityGrams)
+      if (quantity.lte(0)) {
+        skipped += 1
+        continue
+      }
+      const amount = new Prisma.Decimal(order.price).mul(quantity)
+      const orderTraceId = randomUUID()
+
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          const updatedAsset = await tx.asset.update({
+            where: {
+              userId: order.userId,
+            },
+            data:
+              order.side === TradeSide.BUY
+                ? {
+                    tentativeAsset: { decrement: amount },
+                    cashAsset: { decrement: amount },
+                    goldHoldingGrams: { increment: quantity },
+                  }
+                : {
+                    tentativeAsset: { increment: amount },
+                    cashAsset: { increment: amount },
+                    goldHoldingGrams: { decrement: quantity },
+                  },
+          })
+
+          await this.createLedgerEntry(tx, {
+            assetId: updatedAsset.id,
+            userId: order.userId,
+            changeType: order.side === TradeSide.BUY ? AssetChangeType.TRADE_BUY : AssetChangeType.TRADE_SELL,
+            amount,
+            traceId: orderTraceId,
+            balanceAfter: updatedAsset.totalAsset,
+            referenceType: 'TRADE_ORDER',
+            referenceId: order.id,
+          })
+
+          await this.createAuditLog(tx, {
+            userId: order.userId,
+            actorType: 'ADMIN',
+            actorId: actor.adminUserId,
+            module: 'trade',
+            action: 'trade.backfill-asset',
+            traceId: orderTraceId,
+            payload: {
+              tradeOrderId: order.id,
+              uid: order.user.uid,
+              side: order.side,
+              quantity: Number(quantity),
+              amount: Number(amount),
+            } as Prisma.InputJsonValue,
+          })
+
+          await this.createHashRecord(tx, {
+            referenceType: 'TRADE_BACKFILL',
+            referenceId: order.id,
+            traceId: orderTraceId,
+            raw: `TRADE_BACKFILL:${order.id}:${order.side}:${quantity.toString()}:${amount.toString()}`,
+            tradeOrderId: order.id,
+          })
+        }, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        })
+        applied += 1
+      } catch (error) {
+        skipped += 1
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const payload = {
+        uid: body.uid || '',
+        scanned: orders.length,
+        pending: pendingOrders.length,
+        applied,
+        skipped,
+      } as Prisma.InputJsonValue
+
+      await tx.adminOperationLog.create({
+        data: {
+          adminUserId: actor.adminUserId,
+          module: 'trade',
+          action: 'trade.backfill-assets',
+          traceId,
+          payload,
+        },
+      })
+
+      await tx.auditLog.create({
+        data: {
+          userId: null,
+          actorType: 'ADMIN',
+          actorId: actor.adminUserId,
+          module: 'trade',
+          action: 'trade.backfill-assets',
+          traceId,
+          payload,
+        },
+      })
+
+      await tx.hashRecord.create({
+        data: {
+          referenceType: 'TRADE_BACKFILL_BATCH',
+          referenceId: body.uid || 'all',
+          traceId,
+          sha256: sha256(`TRADE_BACKFILL_BATCH:${body.uid || 'all'}:${traceId}:${JSON.stringify(payload)}`),
+          syncStatus: 'PENDING',
+        },
+      })
+    })
+
+    return {
+      message: applied > 0 ? '历史交易资产回填完成' : '没有需要回填的历史交易订单',
+      data: {
+        scanned: orders.length,
+        pending: pendingOrders.length,
+        applied,
+        skipped,
         traceId,
       },
     }

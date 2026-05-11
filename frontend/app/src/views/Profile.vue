@@ -471,7 +471,9 @@ onBeforeUnmount(() => {
             </div>
             <div class="self-end pl-6">
               <p class="text-gray-400 text-[10px] mb-1">{{ t('profile.tempAssets') }}</p>
-              <p class="font-bold text-sm tabular-nums leading-none">{{ showAmount ? '¥0.00' : '****' }}</p>
+              <p class="font-bold text-sm tabular-nums leading-none">
+                {{ showAmount ? '¥' + getAssetByIndex(5).value : '****' }}
+              </p>
             </div>
 
             <div>

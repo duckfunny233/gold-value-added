@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter, useRoute, onBeforeRouteLeave } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeft, Smile, Send, Plus } from 'lucide-vue-next'
+import { ArrowLeft, Smile, Send, Plus, Settings } from 'lucide-vue-next'
 import { ChatService } from '../services/chat'
 import { useChatScroll } from '../composables/useChatScroll'
 import TransferModal from '../components/chat/TransferModal.vue'
@@ -22,12 +22,16 @@ const chatType = ref('user')
 const page = ref(1)
 const hasMore = ref(true)
 const loading = ref(false)
+const handlingRequest = ref({})
+const rejectNoteMap = ref({})
 
 const { scrollToBottom, handleLoadMoreScroll } = useChatScroll(chatContainer)
 
 const chatId = computed(() => route.params.id)
 const canOpenTransfer = computed(() => chatType.value !== 'system')
+const isGroupChat = computed(() => chatType.value === 'group')
 let pollTimer = null
+const pollingEnabled = ref(true)
 
 const emojis = ['😀', '😁', '😄', '❤️', '👏', '🙏', '🔥', '💰', '🚀', '🙂', '😎', '🤝', '✅', '🎉', '👍', '📈']
 
@@ -45,6 +49,23 @@ const normalizeTime = (value, timeKey = '') => {
   return value
 }
 
+const resolveAvatar = (avatar, fallbackSeed = 'user') => {
+  const value = String(avatar || '').trim()
+  if (value.startsWith('http://') || value.startsWith('https://')) return value
+  const seed = value || fallbackSeed
+  return `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(seed)}`
+}
+
+const messageAvatar = (msg) => {
+  const seed = String(msg?.senderNickname || msg?.text || 'user')
+  return resolveAvatar(msg?.senderAvatar, seed)
+}
+
+const messageSenderName = (msg) => {
+  const nickname = String(msg?.senderNickname || '').trim()
+  return nickname || '用户'
+}
+
 const localizeMessage = (item) => ({
   ...item,
   text: translateMaybe(item?.text),
@@ -52,6 +73,7 @@ const localizeMessage = (item) => ({
 })
 
 const fetchMessages = async (isLoadMore = false, isSilent = false) => {
+  if (!pollingEnabled.value) return
   if (loading.value && !isSilent) return
   if (!isSilent) loading.value = true
 
@@ -83,8 +105,27 @@ const fetchMessages = async (isLoadMore = false, isSilent = false) => {
     hasMore.value = json.data.hasMore
   } catch (err) {
     console.error('Failed to fetch messages:', err)
+    const msg = String(err?.message || '')
+    if (msg.includes('会话不存在') || msg.includes('404')) {
+      pollingEnabled.value = false
+      if (pollTimer) {
+        clearInterval(pollTimer)
+        pollTimer = null
+      }
+      router.replace('/chat')
+    }
   } finally {
     if (!isSilent) loading.value = false
+  }
+}
+
+const markCurrentChatRead = async () => {
+  const id = Number(chatId.value)
+  if (!Number.isFinite(id)) return
+  try {
+    await ChatService.markChatRead(id)
+  } catch (err) {
+    console.error('Failed to mark chat read:', err)
   }
 }
 
@@ -117,11 +158,12 @@ const fetchChatInfo = async () => {
 const sendMessage = async (text = null) => {
   const content = text || message.value
   if (typeof content !== 'string' || !content.trim()) return
+  const normalized = content.trim()
+  message.value = ''
 
   try {
-    const json = await ChatService.sendMessage(parseInt(chatId.value, 10), content)
+    const json = await ChatService.sendMessage(parseInt(chatId.value, 10), normalized)
     chatList.value.push(localizeMessage(json.data))
-    if (!text) message.value = ''
     showEmoji.value = false
     scrollToBottom()
   } catch (err) {
@@ -139,6 +181,37 @@ const openTransferModal = () => {
     return
   }
   showTransferModal.value = true
+}
+
+const openGroupManage = () => {
+  router.push(`/chat/group/${chatId.value}/manage`)
+}
+
+const handleApproveRequest = async (msg) => {
+  if (!msg?.requestId) return
+  handlingRequest.value[msg.requestId] = true
+  try {
+    await ChatService.confirmFriendRequest(msg.requestId)
+    await fetchMessages(false, true)
+  } catch (err) {
+    console.error('Approve friend request failed:', err)
+  } finally {
+    handlingRequest.value[msg.requestId] = false
+  }
+}
+
+const handleRejectRequest = async (msg) => {
+  if (!msg?.requestId) return
+  handlingRequest.value[msg.requestId] = true
+  try {
+    const note = String(rejectNoteMap.value[msg.requestId] || '').trim()
+    await ChatService.rejectFriendRequest(msg.requestId, note)
+    await fetchMessages(false, true)
+  } catch (err) {
+    console.error('Reject friend request failed:', err)
+  } finally {
+    handlingRequest.value[msg.requestId] = false
+  }
 }
 
 const translateTransferStatus = (status) => {
@@ -163,17 +236,29 @@ const handleInputFocus = () => {
 }
 
 onMounted(() => {
+  pollingEnabled.value = true
   fetchMessages()
   fetchChatInfo()
+  markCurrentChatRead()
   window.addEventListener('resize', scrollToBottom)
 
   pollTimer = setInterval(() => {
+    if (document.hidden || !pollingEnabled.value) return
     fetchMessages(false, true)
-    fetchChatInfo()
+    // 聊天详情页轮询仅拉取消息，避免持续触发会话列表接口。
   }, 5000)
 })
 
+onBeforeRouteLeave(() => {
+  pollingEnabled.value = false
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+})
+
 onUnmounted(() => {
+  pollingEnabled.value = false
   window.removeEventListener('resize', scrollToBottom)
   if (pollTimer) clearInterval(pollTimer)
 })
@@ -185,7 +270,10 @@ onUnmounted(() => {
       <button @click="router.back()" class="rounded-full p-1 -ml-1 text-[#9fb0c3] btn-interact">
         <ArrowLeft :size="24" />
       </button>
-      <h3 class="text-lg font-bold truncate">{{ chatTitle }}</h3>
+      <h3 class="text-lg font-bold truncate flex-1">{{ chatTitle }}</h3>
+      <button v-if="isGroupChat" @click="openGroupManage" class="rounded-full p-1 text-[#9fb0c3] btn-interact">
+        <Settings :size="20" />
+      </button>
     </header>
 
     <div
@@ -207,7 +295,7 @@ onUnmounted(() => {
         v-for="msg in chatList"
         :key="msg.id"
         class="flex flex-col"
-        :class="msg.self ? 'items-end' : 'items-start'"
+        :class="msg.type === 'system_notice' ? 'items-center' : (msg.self ? 'items-end' : 'items-start')"
       >
         <template v-if="msg.type === 'transfer'">
           <div class="w-[240px] rounded-3xl border border-[#2b4254] bg-[#132331] px-4 py-4 shadow-sm" :class="msg.self ? 'rounded-tr-none' : 'rounded-tl-none'">
@@ -220,8 +308,63 @@ onUnmounted(() => {
             <p v-if="msg.note" class="mt-1 text-xs text-[#8e9bb0]">{{ t('chat.transfer.noteLabel') }}{{ msg.note }}</p>
           </div>
         </template>
+        <template v-else-if="msg.type === 'friend_request'">
+          <div class="w-[280px] rounded-3xl border border-[#2b4254] bg-[#132331] px-4 py-4 shadow-sm rounded-tl-none">
+            <p class="text-sm font-bold text-white">{{ msg.targetNickname || '用户' }} 申请添加好友</p>
+            <p class="mt-1 text-xs text-[#8e9bb0]">{{ msg.targetUid }}</p>
+            <p class="mt-2 text-xs text-[#dbe5ef]">留言：{{ msg.requestMessage || '你好，我想添加你为好友。' }}</p>
+
+            <div v-if="msg.requestStatus === 'pending' && msg.requestDirection !== 'outbound'" class="mt-3 space-y-2">
+              <input
+                v-model="rejectNoteMap[msg.requestId]"
+                type="text"
+                placeholder="拒绝留言（可选）"
+                class="w-full rounded-xl border border-[#304255] bg-[#101b28] px-3 py-2 text-xs text-white outline-none placeholder:text-[#6f8093]"
+              />
+              <div class="flex gap-2">
+                <button
+                  @click="handleApproveRequest(msg)"
+                  class="flex-1 rounded-xl bg-[#19c58a] px-3 py-2 text-xs font-bold text-white btn-interact"
+                >
+                  {{ handlingRequest[msg.requestId] ? '处理中...' : '通过申请' }}
+                </button>
+                <button
+                  @click="handleRejectRequest(msg)"
+                  class="flex-1 rounded-xl border border-[#7f1d1d] bg-[#3f1d1d] px-3 py-2 text-xs font-bold text-white btn-interact"
+                >
+                  {{ handlingRequest[msg.requestId] ? '处理中...' : '拒绝申请' }}
+                </button>
+              </div>
+            </div>
+            <p v-else-if="msg.requestStatus === 'pending'" class="mt-3 text-xs text-[#8e9bb0]">已发送好友申请，等待对方处理</p>
+            <p v-else-if="msg.requestStatus === 'accepted'" class="mt-3 text-xs text-[#34d399]">已通过该好友申请</p>
+            <p v-else class="mt-3 text-xs text-[#fca5a5]">已拒绝该好友申请{{ msg.rejectNote ? `：${msg.rejectNote}` : '' }}</p>
+          </div>
+        </template>
+        <template v-else-if="msg.type === 'system_notice'">
+          <div class="rounded-full bg-[#1b2430] px-4 py-1.5 text-xs text-[#9aa7b7]">
+            {{ msg.text }}
+          </div>
+        </template>
         <template v-else>
+          <div v-if="isGroupChat" class="flex items-start gap-2" :class="msg.self ? 'flex-row-reverse' : ''">
+            <img
+              :src="messageAvatar(msg)"
+              :alt="messageSenderName(msg)"
+              class="h-7 w-7 shrink-0 rounded-full border border-[#2a3a4d] bg-[#152131]"
+            />
+            <div class="flex max-w-[80%] flex-col" :class="msg.self ? 'items-end' : 'items-start'">
+              <span class="mb-1 px-1 text-[10px] text-[#8ea1b6]">{{ messageSenderName(msg) }}</span>
+              <div
+                class="rounded-2xl px-4 py-2.5 text-sm shadow-sm"
+                :class="msg.self ? 'bg-[#c99b18] text-white rounded-tr-none' : 'bg-[#1a2735] text-[#ecf2f9] rounded-tl-none border border-[#273647]'"
+              >
+                {{ msg.text }}
+              </div>
+            </div>
+          </div>
           <div
+            v-else
             class="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm shadow-sm"
             :class="msg.self ? 'bg-[#c99b18] text-white rounded-tr-none' : 'bg-[#1a2735] text-[#ecf2f9] rounded-tl-none border border-[#273647]'"
           >
@@ -255,14 +398,14 @@ onUnmounted(() => {
           </button>
         </div>
         <button
-          v-if="message.trim()"
+          v-show="message.trim()"
           @click="sendMessage()"
           class="btn-interact transition-all text-[#c99b18]"
         >
           <Send :size="24" />
         </button>
         <button
-          v-else
+          v-show="!message.trim()"
           @click="openTransferModal"
           class="btn-interact transition-all text-[#8e9bb0] hover:text-[#c99b18]"
         >

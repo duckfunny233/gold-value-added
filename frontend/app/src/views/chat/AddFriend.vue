@@ -20,6 +20,7 @@ const visibleCount = ref(5)
 const searched = ref(false)
 
 const canSendRequest = computed(() => selectedUser.value && !requestState.value)
+const isRecommendationMode = computed(() => String(keyword.value || '').trim().length === 0)
 
 const sortedResults = computed(() => {
   return [...results.value].sort((a, b) => b.mutualFriends - a.mutualFriends)
@@ -136,11 +137,14 @@ onMounted(async () => {
             {{ searching ? t('chat.addFriendPage.searching') : t('common.search') }}
           </button>
         </div>
-        <p v-if="searched && !searching && sortedResults.length === 0" class="mt-3 text-sm text-[#f87171]">
+        <p v-if="searched && !searching && !isRecommendationMode && sortedResults.length === 0" class="mt-3 text-center text-sm text-[#8e9bb0]">
           该用户不存在
         </p>
 
         <div class="mt-4 space-y-3">
+          <p v-if="isRecommendationMode && sortedResults.length > 0" class="text-sm font-bold text-[#cfd8e3]">
+            可能认识的人
+          </p>
           <button
             v-for="item in sortedResults.slice(0, visibleCount)"
             :key="item.id"

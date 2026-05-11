@@ -1,9 +1,10 @@
 ﻿<script setup>
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Logo from '../components/Logo.vue'
 import DropdownButton from '../components/common/DropdownButton.vue'
+import { ChatService } from '../services/chat'
 import { Home, MessageSquare, TrendingUp, Landmark, User, Plus, UserPlus, Users, Globe, Scan, QrCode } from 'lucide-vue-next'
 
 defineOptions({ name: 'MainLayout' })
@@ -11,6 +12,8 @@ defineOptions({ name: 'MainLayout' })
 const { t, locale } = useI18n()
 const router = useRouter()
 const route = useRoute()
+const chatUnread = ref(0)
+let unreadTimer = null
 const navItems = computed(() => [
   { name: t('nav.home'), path: '/home', icon: Home },
   { name: t('nav.chat'), path: '/chat', icon: MessageSquare },
@@ -64,6 +67,29 @@ const handleLangMenu = (item) => {
   locale.value = item.action
   localStorage.setItem('locale', item.action)
 }
+
+const refreshUnread = async () => {
+  try {
+    const response = await ChatService.getChatList()
+    const list = Array.isArray(response?.data) ? response.data : []
+    chatUnread.value = list.reduce((sum, item) => sum + Number(item?.unreadCount || 0), 0)
+  } catch (error) {
+    console.error('Load chat unread failed:', error)
+  }
+}
+
+onMounted(() => {
+  refreshUnread()
+  unreadTimer = setInterval(refreshUnread, 5000)
+})
+
+onUnmounted(() => {
+  if (unreadTimer) clearInterval(unreadTimer)
+})
+
+watch(() => route.fullPath, () => {
+  refreshUnread()
+})
 </script>
 
 <template>
@@ -101,9 +127,15 @@ const handleLangMenu = (item) => {
         v-for="item in navItems"
         :key="item.path"
         @click="router.push(item.path)"
-        class="flex flex-col items-center gap-1 transition-colors flex-1 py-1"
+        class="relative flex flex-col items-center gap-1 transition-colors flex-1 py-1"
         :class="route.path === item.path ? 'text-primary' : 'text-[#8e9bb0]'"
       >
+        <span
+          v-if="item.path === '/chat' && chatUnread > 0"
+          class="absolute top-0 right-[28%] min-w-[18px] h-[18px] rounded-full bg-[#ef4444] px-1 text-[10px] leading-[18px] text-white text-center font-bold"
+        >
+          {{ chatUnread > 99 ? '99+' : chatUnread }}
+        </span>
         <component :is="item.icon" :size="20" />
         <span class="text-xs">{{ item.name }}</span>
       </button>

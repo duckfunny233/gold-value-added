@@ -732,6 +732,12 @@ app.post('/api/chat/friend-request', (req, res) => {
 
   friendRequests.unshift(request)
 
+  const systemChat = chats.find(c => c.type === 'system')
+  if (systemChat) {
+    systemChat.lastMsg = '您的账户实名认证已通过'
+    systemChat.time = '10:30'
+  }
+
   res.json({
     code: 200,
     data: request
@@ -1026,6 +1032,8 @@ app.get('/api/user/profile', async (req, res) => {
           { key: 'profile.assets.marketValue', value: formatMoney(marketValue), unit: 'CNY' },
           { key: 'profile.assets.yesterdayProfit', value: `+${formatMoney(profileYesterdayProfit)}`, unit: 'CNY', trend: 'up' },
           { key: 'profile.assets.accumulatedProfit', value: `+${formatMoney(profileAccumulatedProfit)}`, unit: 'CNY', trend: 'up' },
+          // Profile 页面“暂定资产”展示为锁定资产（mock 默认 0）
+          { key: 'profile.tempAssets', value: formatMoney(0), unit: 'CNY' },
         ],
         goldPositions,
         silverPositions

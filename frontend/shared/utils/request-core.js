@@ -57,7 +57,11 @@ export function createApiFetch(config = {}) {
         throw new Error(`接口返回了非 JSON 内容: ${url}`)
       }
 
-      if (!response.ok || (payload.code && payload.code !== 200)) {
+      const businessCode = Number(payload.code)
+      const hasBusinessCode = Number.isFinite(businessCode)
+      const businessFailed = hasBusinessCode && (businessCode < 200 || businessCode >= 300)
+
+      if (!response.ok || businessFailed) {
         const message = payload.message || `请求失败 (${response.status})`
         if (onBusinessError) {
           onBusinessError(message, payload)

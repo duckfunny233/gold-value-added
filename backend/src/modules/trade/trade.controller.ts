@@ -2,7 +2,7 @@ import { Body, Controller, Get, Headers, HttpCode, Post, Query, Req } from '@nes
 import { ApiTags } from '@nestjs/swagger'
 import { Request } from 'express'
 import { AdminProtected } from '../admin-auth/admin-protected.decorator'
-import { AdminTradesQueryDto, TradeDto, TradeQueryDto, TradeRetrySyncDto } from './trade.dto'
+import { AdminTradesQueryDto, TradeBackfillAssetsDto, TradeDto, TradeQueryDto, TradeRetrySyncDto } from './trade.dto'
 import { TradeService } from './trade.service'
 
 type AdminRequest = Request & {
@@ -57,6 +57,16 @@ export class TradeController {
   @AdminProtected()
   retrySync(@Body() body: TradeRetrySyncDto, @Req() req: AdminRequest) {
     return this.tradeService.retrySync(body, {
+      adminUserId: req.user?.adminUserId || 'admin-local',
+      username: req.user?.username || 'admin',
+    })
+  }
+
+  @Post('admin/trades/backfill-assets')
+  @HttpCode(200)
+  @AdminProtected()
+  backfillAssets(@Body() body: TradeBackfillAssetsDto, @Req() req: AdminRequest) {
+    return this.tradeService.backfillAssets(body, {
       adminUserId: req.user?.adminUserId || 'admin-local',
       username: req.user?.username || 'admin',
     })

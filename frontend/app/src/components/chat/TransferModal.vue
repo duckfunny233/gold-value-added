@@ -34,11 +34,16 @@ const selectedTargetId = ref('')
 const amount = ref('')
 const note = ref('')
 
-const isGroupChat = computed(() => props.chatType === 'group')
+const normalizedChatType = computed(() => String(props.chatType || '').trim().toLowerCase())
+const isGroupChat = computed(() => normalizedChatType.value === 'group')
 const selectedTarget = computed(() => targets.value.find((item) => String(item.id) === String(selectedTargetId.value)) || null)
+const showReceiverSelector = computed(() => isGroupChat.value && targets.value.length > 0)
 const canSubmit = computed(() => {
   const amountValue = Number(amount.value)
-  return amountValue > 0 && selectedTarget.value && !submitting.value
+  if (showReceiverSelector.value) {
+    return amountValue > 0 && selectedTarget.value && !submitting.value
+  }
+  return amountValue > 0 && !submitting.value
 })
 
 const resetForm = () => {
@@ -49,6 +54,11 @@ const resetForm = () => {
 
 const loadTargets = async () => {
   if (!props.visible) return
+  if (!isGroupChat.value) {
+    targets.value = []
+    selectedTargetId.value = ''
+    return
+  }
   loading.value = true
   try {
     const response = await ChatService.getTransferTargets(props.chatId, props.chatType, props.chatTitle)
@@ -65,10 +75,11 @@ const submitTransfer = async () => {
   if (!canSubmit.value) return
   submitting.value = true
   try {
+    const recipient = selectedTarget.value
     const response = await ChatService.sendTransfer(props.chatId, {
-      recipientId: selectedTarget.value.id,
-      recipientUid: selectedTarget.value.uid,
-      recipientName: selectedTarget.value.nickname,
+      recipientId: recipient?.id,
+      recipientUid: recipient?.uid,
+      recipientName: recipient?.nickname || props.chatTitle || '',
       amount: Number(amount.value),
       note: note.value.trim(),
       chatType: props.chatType,
@@ -115,9 +126,9 @@ watch(() => props.visible, (value) => {
             {{ t('chat.transfer.loadingTargets') }}
           </div>
 
-          <div v-else>
+          <div v-if="showReceiverSelector">
             <label class="mb-2 block text-xs text-[#8e9bb0]">{{ isGroupChat ? t('chat.transfer.groupReceiver') : t('chat.transfer.receiver') }}</label>
-            <div v-if="isGroupChat" class="space-y-3">
+            <div v-if="showReceiverSelector" class="space-y-3">
               <button
                 v-for="item in targets"
                 :key="item.id"
@@ -134,15 +145,6 @@ watch(() => props.visible, (value) => {
               </button>
             </div>
 
-            <div v-else-if="selectedTarget" class="rounded-2xl border border-[#273647] bg-[#101b28] px-4 py-3">
-              <div class="flex items-center gap-3">
-                <img :src="selectedTarget.avatar" class="h-10 w-10 rounded-full bg-[#223244]" />
-                <div>
-                  <p class="text-sm font-bold">{{ selectedTarget.nickname }}</p>
-                  <p class="mt-1 text-xs text-[#8e9bb0]">{{ selectedTarget.uid }}</p>
-                </div>
-              </div>
-            </div>
           </div>
 
           <label class="block">
