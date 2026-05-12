@@ -604,6 +604,8 @@
     "columns": {
       "sequence": "Sequence",
       "nickname": "Nickname",
+      "asset": "Asset",
+      "grams": "Grams",
       "time": "Time"
     },
     "metrics": {

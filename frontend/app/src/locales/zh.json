@@ -522,7 +522,7 @@
       "title": "关于我们",
       "sectionVersion": "版本信息",
       "sectionNotices": "系统公告",
-      "sectionPolicies": "协议与政策（仅查看入口）",
+      "sectionPolicies": "协议与政策",
       "currentVersion": "当前版本：",
       "buildDate": "构建日期：",
       "userAgreement": "用户协议",
@@ -694,8 +694,10 @@
     "tradeInfo": "买入 {buy} 笔 / 卖出 {sell} 笔",
     "columns": {
       "sequence": "序号",
-      "nickname": "昵称",
-      "time": "时间"
+      "nickname": "用户昵称",
+      "asset": "买入品种",
+      "grams": "买入克数",
+      "time": "买入时间"
     },
     "metrics": {
       "trade": "买卖数据",

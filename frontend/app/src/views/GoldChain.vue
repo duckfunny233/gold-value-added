@@ -1,20 +1,31 @@
-﻿<script setup>
-import { ref, onMounted } from 'vue'
+<script setup>
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { RefreshCw } from 'lucide-vue-next'
+import { RefreshCw, ArrowLeft } from 'lucide-vue-next'
 import { UserService } from '../services/user'
 import { showToast } from '../composables/useToast'
 
 defineOptions({ name: 'GoldChain' })
 const { t } = useI18n()
+const router = useRouter()
 
 const loading = ref(false)
 const list = ref([])
+let refreshTimer = null
 
-const shortText = (value, max = 24) => {
-  const raw = String(value || '')
-  if (raw.length <= max) return raw
-  return `${raw.slice(0, max)}...`
+const formatGrams = (value) => {
+  return Number(value || 0).toFixed(4)
+}
+
+const getAssetName = (assetCode) => {
+  const assetNames = {
+    'AU9999': 'AU9999 黄金',
+    'AU9995': 'AU9995 黄金',
+    'AG9999': 'AG9999 白银',
+    'AG9995': 'AG9995 白银',
+  }
+  return assetNames[assetCode] || assetCode || '-'
 }
 
 async function fetchChainData() {
@@ -26,10 +37,11 @@ async function fetchChainData() {
     list.value = Array.isArray(rows)
       ? rows.map((item, index) => ({
           sequenceNo: item.sequenceNo || 100000 + index + 1,
-          traceId: String(item.traceId || '-'),
-          hashValue: String(item.hashValue || '-'),
-          chainSyncStatus: String(item.chainSyncStatus || item.syncStatus || '-'),
-          createdAt: String(item.createdAt || item.updatedAt || '-'),
+          nickname: String(item.nickname || '匿名用户'),
+          assetCode: String(item.assetCode || '-'),
+          quantityGrams: formatGrams(item.quantityGrams),
+          submittedAt: String(item.submittedAt || '-'),
+          orderId: String(item.orderId || '-'),
         }))
       : []
   } catch (error) {
@@ -41,15 +53,39 @@ async function fetchChainData() {
   }
 }
 
-onMounted(fetchChainData)
+const startRefreshTimer = () => {
+  if (refreshTimer) clearInterval(refreshTimer)
+  refreshTimer = setInterval(fetchChainData, 5000)
+}
+
+const stopRefreshTimer = () => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+}
+
+onMounted(() => {
+  fetchChainData()
+  startRefreshTimer()
+})
+
+onUnmounted(() => {
+  stopRefreshTimer()
+})
 </script>
 
 <template>
   <div class="chain-page">
     <header class="chain-header">
-      <div>
-        <p class="header-kicker">CHAIN BOARD</p>
-        <h1 class="title">{{ t('goldChain.title') }}</h1>
+      <div class="header-left">
+        <button @click="router.back()" class="back-button">
+          <ArrowLeft :size="20" />
+        </button>
+        <div>
+          <p class="header-kicker">CHAIN BOARD</p>
+          <h1 class="title">{{ t('goldChain.title') }}</h1>
+        </div>
       </div>
       <div class="sync-mark">
         <RefreshCw :size="14" class="sync-icon" :class="{ spinning: loading }" />
@@ -66,18 +102,18 @@ onMounted(fetchChainData)
         <div class="chain-table">
           <div class="chain-row chain-head">
             <span class="col-seq">{{ t('goldChain.columns.sequence') }}</span>
-            <span class="col-name">Trace ID</span>
-            <span class="col-trade">Hash</span>
-            <span class="col-gold">同步状态</span>
+            <span class="col-name">{{ t('goldChain.columns.nickname') }}</span>
+            <span class="col-trade">{{ t('goldChain.columns.asset') }}</span>
+            <span class="col-gold">{{ t('goldChain.columns.grams') }}</span>
             <span class="col-time">{{ t('goldChain.columns.time') }}</span>
           </div>
 
-          <article v-for="row in list" :key="row.sequenceNo" class="chain-row">
+          <article v-for="row in list" :key="row.orderId || row.sequenceNo" class="chain-row">
             <span class="col-seq sequence-no">#{{ row.sequenceNo }}</span>
-            <span class="col-name nickname" :title="row.traceId">{{ shortText(row.traceId, 22) }}</span>
-            <span class="col-trade metric-plain" :title="row.hashValue">{{ shortText(row.hashValue, 26) }}</span>
-            <span class="col-gold metric-gold">{{ row.chainSyncStatus }}</span>
-            <span class="col-time time">{{ row.createdAt }}</span>
+            <span class="col-name nickname">{{ row.nickname }}</span>
+            <span class="col-trade metric-plain">{{ getAssetName(row.assetCode) }}</span>
+            <span class="col-gold metric-gold">{{ row.quantityGrams }}g</span>
+            <span class="col-time time">{{ row.submittedAt }}</span>
           </article>
         </div>
       </div>
@@ -101,6 +137,29 @@ onMounted(fetchChainData)
   justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 1rem;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(207, 215, 224, 0.9);
+  cursor: pointer;
+  transition: background 0.2s;
+  border: none;
+}
+
+.back-button:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .header-kicker {
@@ -151,12 +210,12 @@ onMounted(fetchChainData)
 }
 
 .chain-table {
-  min-width: 860px;
+  min-width: 700px;
 }
 
 .chain-row {
   display: grid;
-  grid-template-columns: 110px 240px 300px 130px 180px;
+  grid-template-columns: 100px 160px 180px 140px 180px;
   align-items: center;
   gap: 0;
   min-height: 52px;

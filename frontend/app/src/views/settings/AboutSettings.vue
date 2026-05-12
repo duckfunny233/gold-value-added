@@ -53,16 +53,6 @@ const openEntry = (entry) => {
       </section>
 
       <section class="rounded-3xl border border-[#2b3b4c] bg-[#162331] p-4">
-        <h3 class="mb-3 text-sm font-bold">{{ t('settings.about.sectionNotices') }}</h3>
-        <div class="space-y-2">
-          <div v-for="item in data.notices" :key="item.id" class="rounded-2xl bg-[#101b28] px-4 py-3 text-sm">
-            <p class="font-bold">{{ t(item.title) }}</p>
-            <p class="mt-1 text-xs text-[#8e9bb0]">{{ item.time }}</p>
-          </div>
-        </div>
-      </section>
-
-      <section class="rounded-3xl border border-[#2b3b4c] bg-[#162331] p-4">
         <h3 class="mb-3 text-sm font-bold">{{ t('settings.about.sectionPolicies') }}</h3>
         <div class="grid grid-cols-2 gap-2">
           <button
