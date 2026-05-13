@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AdminAuthService } from '../services/auth'
@@ -15,6 +15,10 @@ const menus = [
   { path: '/risk', label: '权限与风控' },
   { path: '/audit', label: '审计追溯' },
   { path: '/reports', label: '报表中心' },
+  { path: '/realname-audit', label: '实名认证审核' },
+  { path: '/system-config', label: '系统配置' },
+  { path: '/data-archive', label: '数据归档管理' },
+  { path: '/platform-funds', label: '平台资金总览' },
 ]
 
 const activePath = computed(() => route.path)

@@ -1,4 +1,4 @@
-﻿import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 import AdminLayout from '../components/AdminLayout.vue'
 import LoginView from '../views/LoginView.vue'
 import DashboardView from '../views/DashboardView.vue'
@@ -9,6 +9,10 @@ import LeaderboardView from '../views/LeaderboardView.vue'
 import RiskView from '../views/RiskView.vue'
 import AuditView from '../views/AuditView.vue'
 import ReportsView from '../views/ReportsView.vue'
+import RealnameAuditView from '../views/RealnameAuditView.vue'
+import SystemConfigView from '../views/SystemConfigView.vue'
+import DataArchiveView from '../views/DataArchiveView.vue'
+import PlatformFundsView from '../views/PlatformFundsView.vue'
 import { AdminAuthService } from '../services/auth'
 
 const routes = [
@@ -26,6 +30,10 @@ const routes = [
       { path: 'risk', name: 'risk', component: RiskView, meta: { title: '权限与风控' } },
       { path: 'audit', name: 'audit', component: AuditView, meta: { title: '审计追溯' } },
       { path: 'reports', name: 'reports', component: ReportsView, meta: { title: '报表中心' } },
+      { path: 'realname-audit', name: 'realname-audit', component: RealnameAuditView, meta: { title: '实名认证审核' } },
+      { path: 'system-config', name: 'system-config', component: SystemConfigView, meta: { title: '系统配置' } },
+      { path: 'data-archive', name: 'data-archive', component: DataArchiveView, meta: { title: '数据归档管理' } },
+      { path: 'platform-funds', name: 'platform-funds', component: PlatformFundsView, meta: { title: '平台资金总览' } },
     ],
   },
 ]

@@ -21,6 +21,8 @@ const adminUsers = ref([])
 const warnings = ref([])
 const logs = ref([])
 const tradingFlowLabel = ref('')
+const currentRules = ref({})
+const ruleVersions = ref([])
 const loading = ref(false)
 const dialogLoading = ref(false)
 const error = ref('')
@@ -32,6 +34,22 @@ const ruleDialog = reactive({
   singleWithdrawalLimit: '50000',
   dailyWithdrawalLimit: '100000',
   abnormalTradeThreshold: '200000',
+  effectiveType: 'immediate',
+  effectiveTime: '',
+})
+
+const compareDialog = reactive({
+  open: false,
+})
+
+const rollbackDialog = reactive({
+  open: false,
+  versionId: '',
+})
+
+const approveDialog = reactive({
+  open: false,
+  changes: [],
 })
 
 const adminDialog = reactive({
@@ -62,6 +80,51 @@ const filteredAdminUsers = computed(() =>
   }),
 )
 
+const ruleChanges = computed(() => {
+  const changes = []
+  const current = currentRules.value || {}
+  if (String(ruleDialog.withdrawInterceptEnabled) !== String(current.withdrawInterceptEnabled ?? true)) {
+    changes.push({
+      field: '提现拦截',
+      oldValue: current.withdrawInterceptEnabled ? '开启' : '关闭',
+      newValue: ruleDialog.withdrawInterceptEnabled === 'true' ? '开启' : '关闭',
+    })
+  }
+  if (Number(ruleDialog.singleWithdrawalLimit) !== Number(current.singleWithdrawalLimit || 0)) {
+    changes.push({
+      field: '单笔提现上限',
+      oldValue: String(current.singleWithdrawalLimit || 0),
+      newValue: ruleDialog.singleWithdrawalLimit,
+    })
+  }
+  if (Number(ruleDialog.dailyWithdrawalLimit) !== Number(current.dailyWithdrawalLimit || 0)) {
+    changes.push({
+      field: '日提现上限',
+      oldValue: String(current.dailyWithdrawalLimit || 0),
+      newValue: ruleDialog.dailyWithdrawalLimit,
+    })
+  }
+  if (Number(ruleDialog.abnormalTradeThreshold) !== Number(current.abnormalTradeThreshold || 0)) {
+    changes.push({
+      field: '异常交易阈值',
+      oldValue: String(current.abnormalTradeThreshold || 0),
+      newValue: ruleDialog.abnormalTradeThreshold,
+    })
+  }
+  return changes
+})
+
+const hasMajorChange = computed(() => {
+  return ruleChanges.value.some((c) => {
+    if (c.field === '单笔提现上限' || c.field === '日提现上限') {
+      const oldVal = Number(c.oldValue)
+      const newVal = Number(c.newValue)
+      return oldVal > 0 && Math.abs(newVal - oldVal) / oldVal > 0.3
+    }
+    return false
+  })
+})
+
 function formatAdminStatus(status) {
   if (status === 'ACTIVE') {
     return '启用'
@@ -86,6 +149,8 @@ async function loadData() {
     adminUsers.value = securityUsers.rows || []
     warnings.value = data.warnings || []
     logs.value = data.logs || []
+    currentRules.value = data.currentRules || {}
+    ruleVersions.value = data.ruleVersions || []
   } catch (err) {
     error.value = err.message || '风控数据加载失败'
   } finally {
@@ -109,13 +174,63 @@ async function runAction(handler, successMessage) {
 }
 
 function openRuleDialog() {
+  const current = currentRules.value || {}
+  ruleDialog.withdrawInterceptEnabled = String(current.withdrawInterceptEnabled ?? true)
+  ruleDialog.singleWithdrawalLimit = String(current.singleWithdrawalLimit || 50000)
+  ruleDialog.dailyWithdrawalLimit = String(current.dailyWithdrawalLimit || 100000)
+  ruleDialog.abnormalTradeThreshold = String(current.abnormalTradeThreshold || 200000)
+  ruleDialog.effectiveType = 'immediate'
+  ruleDialog.effectiveTime = ''
   ruleDialog.open = true
 }
 
-function submitRuleDialog() {
-  error.value = ''
-  actionMessage.value = `已记录风控规则更新申请：单笔 ${ruleDialog.singleWithdrawalLimit} / 单日 ${ruleDialog.dailyWithdrawalLimit} / 阈值 ${ruleDialog.abnormalTradeThreshold}`
+function openCompareDialog() {
+  compareDialog.open = true
+}
+
+function openRollbackDialog() {
+  rollbackDialog.versionId = ruleVersions.value[0]?.versionId || ''
+  rollbackDialog.open = true
+}
+
+async function submitRollbackDialog() {
+  if (!rollbackDialog.versionId) {
+    error.value = '请选择要回滚的版本'
+    return
+  }
+  await runAction(
+    () => AdminService.updateRiskRules({ rollbackToVersion: rollbackDialog.versionId }),
+    `已回滚到版本 ${rollbackDialog.versionId}`,
+  )
+  rollbackDialog.open = false
+}
+
+async function submitRuleDialog() {
+  if (hasMajorChange.value) {
+    approveDialog.changes = ruleChanges.value
+    approveDialog.open = true
+    return
+  }
+  await doUpdateRules()
+}
+
+async function doUpdateRules() {
+  const payload = {
+    withdrawInterceptEnabled: ruleDialog.withdrawInterceptEnabled === 'true',
+    singleWithdrawalLimit: Number(ruleDialog.singleWithdrawalLimit),
+    dailyWithdrawalLimit: Number(ruleDialog.dailyWithdrawalLimit),
+    abnormalTradeThreshold: Number(ruleDialog.abnormalTradeThreshold),
+    effectiveType: ruleDialog.effectiveType,
+    effectiveTime: ruleDialog.effectiveType === 'scheduled' ? ruleDialog.effectiveTime : undefined,
+  }
+  await runAction(
+    () => AdminService.updateRiskRules(payload),
+    ruleDialog.effectiveType === 'scheduled' && ruleDialog.effectiveTime
+      ? `风控规则已更新，将于 ${ruleDialog.effectiveTime} 生效`
+      : '风控规则已更新并立即生效',
+  )
   ruleDialog.open = false
+  approveDialog.open = false
 }
 
 function openAdminDialog() {
@@ -190,9 +305,23 @@ onMounted(loadData)
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查询' }}</button>
       <button @click="openAdminDialog">增加管理员</button>
       <button @click="openRuleDialog">更新风控规则</button>
+      <button @click="openRollbackDialog" v-if="ruleVersions.length">规则回滚</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
     <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
+  </section>
+
+  <section class="panel" v-if="currentRules && Object.keys(currentRules).length">
+    <div class="panel-head">
+      <h2>当前风控规则</h2>
+      <span class="muted">版本 {{ currentRules.versionId || '-' }} | 更新于 {{ currentRules.updatedAt || '-' }}</span>
+    </div>
+    <div class="kv-list">
+      <div class="kv-item"><strong>提现拦截</strong><span>{{ currentRules.withdrawInterceptEnabled ? '开启' : '关闭' }}</span></div>
+      <div class="kv-item"><strong>单笔提现上限</strong><span>{{ currentRules.singleWithdrawalLimit }}</span></div>
+      <div class="kv-item"><strong>日提现上限</strong><span>{{ currentRules.dailyWithdrawalLimit }}</span></div>
+      <div class="kv-item"><strong>异常交易阈值</strong><span>{{ currentRules.abnormalTradeThreshold }}</span></div>
+    </div>
   </section>
 
   <section class="panel">
@@ -213,6 +342,9 @@ onMounted(loadData)
           <td>{{ row.role }}</td>
           <td>{{ row.permission }}</td>
           <td>{{ row.status }}</td>
+        </tr>
+        <tr v-if="!roles.length">
+          <td colspan="3" class="table-empty">暂无角色数据</td>
         </tr>
       </tbody>
     </table>
@@ -273,6 +405,9 @@ onMounted(loadData)
           <td>{{ row.traceId }}</td>
           <td>{{ row.time }}</td>
         </tr>
+        <tr v-if="!logs.length">
+          <td colspan="5" class="table-empty">暂无风控日志</td>
+        </tr>
       </tbody>
     </table>
   </section>
@@ -280,8 +415,9 @@ onMounted(loadData)
   <ActionDialog
     :open="ruleDialog.open"
     title="更新风控规则"
-    description="根据问题文档，这里先改为页面弹框编辑，不直接触发规则变更接口。"
+    description="修改风控规则参数，支持立即生效或定时生效。"
     confirm-text="确认保存"
+    :loading="dialogLoading"
     @close="ruleDialog.open = false"
     @confirm="submitRuleDialog"
   >
@@ -305,6 +441,122 @@ onMounted(loadData)
         异常交易阈值
         <input v-model="ruleDialog.abnormalTradeThreshold" placeholder="请输入异常交易阈值" />
       </label>
+    </div>
+    <div class="form-row" style="margin-top: 12px;">
+      <label class="radio-label">
+        <input v-model="ruleDialog.effectiveType" type="radio" value="immediate" />
+        立即生效
+      </label>
+      <label class="radio-label">
+        <input v-model="ruleDialog.effectiveType" type="radio" value="scheduled" />
+        定时生效
+      </label>
+    </div>
+    <label v-if="ruleDialog.effectiveType === 'scheduled'" class="dialog-label">
+      生效时间
+      <input v-model="ruleDialog.effectiveTime" type="datetime-local" />
+    </label>
+    <div v-if="ruleChanges.length" class="compare-preview">
+      <h3>变更预览</h3>
+      <table class="compare-table">
+        <thead>
+          <tr><th>规则项</th><th>当前值</th><th>新值</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="change in ruleChanges" :key="change.field">
+            <td>{{ change.field }}</td>
+            <td class="old-value">{{ change.oldValue }}</td>
+            <td class="new-value">{{ change.newValue }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </ActionDialog>
+
+  <ActionDialog
+    :open="compareDialog.open"
+    title="规则版本对比"
+    description="当前规则与上一版本对比"
+    confirm-text="关闭"
+    :cancel-text="''"
+    @close="compareDialog.open = false"
+    @confirm="compareDialog.open = false"
+  >
+    <div v-if="ruleVersions.length >= 2" class="compare-preview">
+      <table class="compare-table">
+        <thead>
+          <tr><th>规则项</th><th>上一版本</th><th>当前版本</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>提现拦截</td>
+            <td>{{ ruleVersions[1].withdrawInterceptEnabled ? '开启' : '关闭' }}</td>
+            <td>{{ currentRules.withdrawInterceptEnabled ? '开启' : '关闭' }}</td>
+          </tr>
+          <tr>
+            <td>单笔提现上限</td>
+            <td>{{ ruleVersions[1].singleWithdrawalLimit }}</td>
+            <td>{{ currentRules.singleWithdrawalLimit }}</td>
+          </tr>
+          <tr>
+            <td>日提现上限</td>
+            <td>{{ ruleVersions[1].dailyWithdrawalLimit }}</td>
+            <td>{{ currentRules.dailyWithdrawalLimit }}</td>
+          </tr>
+          <tr>
+            <td>异常交易阈值</td>
+            <td>{{ ruleVersions[1].abnormalTradeThreshold }}</td>
+            <td>{{ currentRules.abnormalTradeThreshold }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p v-else class="muted">暂无历史版本可对比</p>
+  </ActionDialog>
+
+  <ActionDialog
+    :open="rollbackDialog.open"
+    title="规则回滚"
+    description="选择历史版本进行回滚"
+    confirm-text="确认回滚"
+    :loading="dialogLoading"
+    danger
+    @close="rollbackDialog.open = false"
+    @confirm="submitRollbackDialog"
+  >
+    <label class="dialog-label">
+      选择版本
+      <select v-model="rollbackDialog.versionId">
+        <option v-for="v in ruleVersions" :key="v.versionId" :value="v.versionId">
+          版本 {{ v.versionId }} - {{ v.updatedAt }}
+        </option>
+      </select>
+    </label>
+  </ActionDialog>
+
+  <ActionDialog
+    :open="approveDialog.open"
+    title="重大规则变更确认"
+    description="检测到重大规则变更（变动幅度超过30%），需要二次确认。"
+    confirm-text="确认变更"
+    :loading="dialogLoading"
+    danger
+    @close="approveDialog.open = false"
+    @confirm="doUpdateRules"
+  >
+    <div class="compare-preview">
+      <table class="compare-table">
+        <thead>
+          <tr><th>规则项</th><th>当前值</th><th>新值</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="change in approveDialog.changes" :key="change.field">
+            <td>{{ change.field }}</td>
+            <td class="old-value">{{ change.oldValue }}</td>
+            <td class="new-value">{{ change.newValue }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </ActionDialog>
 
@@ -342,3 +594,63 @@ onMounted(loadData)
     </div>
   </ActionDialog>
 </template>
+
+<style scoped>
+.radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.radio-label input[type="radio"] {
+  width: 16px;
+  height: 16px;
+}
+.dialog-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--text-primary, #111827);
+}
+.dialog-label input,
+.dialog-label select {
+  padding: 8px 10px;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 6px;
+  font-size: 14px;
+}
+.compare-preview {
+  margin-top: 16px;
+}
+.compare-preview h3 {
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: var(--text-primary, #111827);
+}
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.compare-table th,
+.compare-table td {
+  padding: 8px 10px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  text-align: left;
+}
+.compare-table th {
+  background: var(--bg-secondary, #f3f4f6);
+  font-weight: 600;
+}
+.old-value {
+  color: var(--text-muted, #6b7280);
+  text-decoration: line-through;
+}
+.new-value {
+  color: var(--success, #10b981);
+  font-weight: 600;
+}
+</style>

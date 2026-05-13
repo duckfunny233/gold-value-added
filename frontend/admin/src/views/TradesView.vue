@@ -24,15 +24,26 @@ const sessions = ref([])
 const syncOverview = ref({})
 const selectedTradeNo = ref('')
 const loading = ref(false)
+const dialogLoading = ref(false)
 const error = ref('')
 const actionMessage = ref('')
+const tradingStatus = ref('normal')
 
 const systemDialog = reactive({
   open: false,
   action: 'pause',
+  reason: '',
 })
 
 const systemDialogTitle = computed(() => (systemDialog.action === 'pause' ? '全站停盘' : '恢复交易'))
+
+const statusBadgeClass = computed(() => {
+  return tradingStatus.value === 'paused' ? 'badge-danger' : 'badge-success'
+})
+
+const statusText = computed(() => {
+  return tradingStatus.value === 'paused' ? '停盘中' : '交易正常'
+})
 
 async function loadData() {
   loading.value = true
@@ -45,6 +56,7 @@ async function loadData() {
     monitorCards.value = data.monitorCards || []
     sessions.value = data.sessions || []
     syncOverview.value = data.syncOverview || {}
+    tradingStatus.value = data.tradingStatus || 'normal'
     selectedTradeNo.value = trades.value[0]?.tradeNo || ''
   } catch (err) {
     error.value = err.message || '交易数据加载失败'
@@ -59,17 +71,60 @@ function getSelectedTrade() {
 
 function openSystemDialog(action) {
   systemDialog.action = action
+  systemDialog.reason = ''
   systemDialog.open = true
 }
 
-function submitSystemDialog() {
-  const selected = getSelectedTrade()
+async function submitSystemDialog() {
+  dialogLoading.value = true
   error.value = ''
-  actionMessage.value =
-    systemDialog.action === 'pause'
-      ? `已记录全站停盘操作${selected ? `，当前选中交易 ${selected.tradeNo}` : ''}，本期不直接调用停盘接口`
-      : `已记录恢复交易操作${selected ? `，当前选中交易 ${selected.tradeNo}` : ''}，本期不直接调用恢复接口`
-  systemDialog.open = false
+  actionMessage.value = ''
+  try {
+    if (systemDialog.action === 'pause') {
+      await AdminService.pauseTrading()
+      actionMessage.value = systemDialog.reason
+        ? `全站已停盘，原因：${systemDialog.reason}`
+        : '全站已停盘'
+      tradingStatus.value = 'paused'
+    } else {
+      await AdminService.resumeTrading()
+      actionMessage.value = '交易已恢复正常'
+      tradingStatus.value = 'normal'
+    }
+  } catch (err) {
+    error.value = err.message || '操作失败'
+  } finally {
+    dialogLoading.value = false
+    systemDialog.open = false
+  }
+}
+
+function handleExportTrades() {
+  if (!trades.value.length) {
+    error.value = '暂无可导出的交易记录'
+    return
+  }
+  const headers = ['交易号', '交易类型', '用户UID', '昵称', '金额', '克数', '状态', '同步状态', '创建时间']
+  const rows = trades.value.map((row) => [
+    row.tradeNo,
+    row.tradeType,
+    row.uid,
+    row.nickname,
+    row.amount,
+    row.grams,
+    row.status,
+    row.syncStatus,
+    row.createdAt,
+  ])
+  const content = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `trades-${Date.now()}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+  actionMessage.value = '交易流水已导出'
 }
 
 onMounted(loadData)
@@ -79,6 +134,10 @@ onMounted(loadData)
   <PageHeader title="交易管理" description="完成买卖交易全流程管控、撮合监控与上金所交易时段同步状态查看。" />
 
   <section class="panel">
+    <div class="status-bar">
+      <span class="status-label">当前交易状态：</span>
+      <span class="badge" :class="statusBadgeClass">{{ statusText }}</span>
+    </div>
     <div class="form-row">
       <label>交易号<input v-model="filters.tradeNo" placeholder="请输入交易号" /></label>
       <label>
@@ -103,8 +162,9 @@ onMounted(loadData)
     <div class="actions">
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查询' }}</button>
       <button @click="loadData" :disabled="loading">刷新状态</button>
-      <button class="warn" @click="openSystemDialog('pause')">全站停盘</button>
-      <button @click="openSystemDialog('resume')">恢复交易</button>
+      <button class="warn" @click="openSystemDialog('pause')" :disabled="tradingStatus === 'paused'">全站停盘</button>
+      <button @click="openSystemDialog('resume')" :disabled="tradingStatus === 'normal'">恢复交易</button>
+      <button @click="handleExportTrades">导出流水</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
     <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
@@ -154,6 +214,9 @@ onMounted(loadData)
             <td>{{ row.status }}</td>
             <td>{{ row.syncStatus }}</td>
             <td>{{ row.createdAt }}</td>
+          </tr>
+          <tr v-if="!trades.length">
+            <td colspan="9" class="table-empty">暂无交易记录</td>
           </tr>
         </tbody>
       </table>
@@ -219,6 +282,9 @@ onMounted(loadData)
           <td>{{ item.session }}</td>
           <td>{{ item.status }}</td>
         </tr>
+        <tr v-if="!sessions.length">
+          <td colspan="3" class="table-empty">暂无时段数据</td>
+        </tr>
       </tbody>
     </table>
   </section>
@@ -226,17 +292,46 @@ onMounted(loadData)
   <ActionDialog
     :open="systemDialog.open"
     :title="systemDialogTitle"
-    description="根据问题文档，交易管理里的停盘与恢复交易当前仅保留页面确认弹框。"
-    confirm-text="确认"
+    :description="systemDialog.action === 'pause' ? '停盘后所有用户将无法提交买卖订单。' : '恢复交易后用户可正常提交买卖订单。'"
+    :confirm-text="systemDialog.action === 'pause' ? '确认停盘' : '确认恢复'"
+    :loading="dialogLoading"
+    :danger="systemDialog.action === 'pause'"
     @close="systemDialog.open = false"
     @confirm="submitSystemDialog"
   >
-    <p class="dialog-tip">
-      {{
-        systemDialog.action === 'pause'
-          ? '确认记录一次全站停盘操作？当前版本不会直接切换后台停盘状态。'
-          : '确认记录一次恢复交易操作？当前版本不会直接切换后台交易状态。'
-      }}
-    </p>
+    <label v-if="systemDialog.action === 'pause'" class="dialog-label">
+      停盘原因
+      <textarea v-model="systemDialog.reason" rows="3" placeholder="请输入停盘原因（会记录到操作日志）"></textarea>
+    </label>
+    <p v-else class="dialog-tip">确认恢复全站交易？</p>
   </ActionDialog>
 </template>
+
+<style scoped>
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+.status-label {
+  font-size: 14px;
+  color: var(--text-primary, #111827);
+}
+.dialog-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text-primary, #111827);
+}
+.dialog-label textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 6px;
+  font-size: 14px;
+  resize: vertical;
+}
+</style>

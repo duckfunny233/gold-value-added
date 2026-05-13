@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import ActionDialog from '../components/ActionDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useQueryFilters } from '../composables/useQueryFilters'
@@ -39,7 +39,57 @@ const fundDialog = reactive({
   reason: '',
 })
 
+const rechargeDetailDialog = reactive({
+  open: false,
+  row: {},
+})
+
+const withdrawDetail = reactive({
+  open: false,
+  row: {},
+})
+
+const rejectDialog = reactive({
+  open: false,
+  orderId: '',
+  reason: '',
+})
+
+const selectedWithdrawIds = ref([])
+
 useQueryFilters(filters, ['orderType', 'uid', 'channel', 'status', 'timeRange'])
+
+const rechargeStats = computed(() => {
+  const todayTotal = rechargeRows.value.reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+  const pendingCount = rechargeRows.value.filter((r) => r.status === '对账中').length
+  return [
+    { label: '今日充值总额', value: '¥' + todayTotal.toFixed(2), note: '当前筛选范围内' },
+    { label: '待对账笔数', value: pendingCount + ' 笔', note: '状态为对账中' },
+  ]
+})
+
+const withdrawStats = computed(() => {
+  const pendingCount = withdrawRows.value.filter((r) => r.status === WITHDRAW_STATUS.PENDING_REVIEW).length
+  const todayTotal = withdrawRows.value.reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+  const processingAmount = withdrawRows.value
+    .filter((r) => r.status === WITHDRAW_STATUS.TRANSFER_PROCESSING)
+    .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+  return [
+    { label: '待审核笔数', value: pendingCount + ' 笔', note: '需尽快处理' },
+    { label: '今日提现总额', value: '¥' + todayTotal.toFixed(2), note: '当前筛选范围内' },
+    { label: '审核中金额', value: '¥' + processingAmount.toFixed(2), note: '转账处理中' },
+  ]
+})
+
+const currentStats = computed(() => {
+  if (activeTab.value === 'recharge') return rechargeStats.value
+  return withdrawStats.value
+})
+
+const filteredWithdrawRows = computed(() => {
+  if (!filters.channel) return withdrawRows.value
+  return withdrawRows.value.filter((r) => r.channel === filters.channel)
+})
 
 async function loadData() {
   loading.value = true
@@ -52,6 +102,7 @@ async function loadData() {
     ledgerRows.value = data.ledgerRows || []
     reconcileItems.value = data.reconcileItems || []
     selectedWithdrawalId.value = withdrawRows.value[0]?.orderId || ''
+    selectedWithdrawIds.value = []
   } catch (err) {
     error.value = err.message || '资金数据加载失败'
   } finally {
@@ -61,6 +112,11 @@ async function loadData() {
 
 function getSelectedWithdrawal() {
   return withdrawRows.value.find((item) => item.orderId === selectedWithdrawalId.value) || null
+}
+
+function maskPhone(phone) {
+  if (!phone || phone.length < 7) return phone
+  return phone.slice(0, 3) + '****' + phone.slice(-4)
 }
 
 async function runAction(handler, successMessage) {
@@ -146,6 +202,125 @@ async function submitFundDialog() {
   fundDialog.open = false
 }
 
+function openRechargeDetail(row) {
+  rechargeDetailDialog.row = row
+  rechargeDetailDialog.open = true
+}
+
+async function handleReconcile(row, status) {
+  await runAction(
+    () => AdminService.updateRechargeStatus(row.orderId, status),
+    `订单 ${row.orderId} 已标记为${status === 'reconciled' ? '已对账' : '异常'}`,
+  )
+}
+
+function openWithdrawDetail(row) {
+  withdrawDetail.row = row
+  withdrawDetail.open = true
+}
+
+async function handleApproveWithdrawal(orderId) {
+  await runAction(
+    () => AdminService.approveWithdrawal(orderId),
+    `提现订单 ${orderId} 已通过审核`,
+  )
+}
+
+function openRejectDialog(orderId) {
+  rejectDialog.orderId = orderId
+  rejectDialog.reason = ''
+  rejectDialog.open = true
+}
+
+async function submitRejectDialog() {
+  if (!rejectDialog.reason.trim()) {
+    error.value = '请填写拒绝原因'
+    return
+  }
+  await runAction(
+    () => AdminService.rejectWithdrawal(rejectDialog.orderId, rejectDialog.reason),
+    `提现订单 ${rejectDialog.orderId} 已拒绝`,
+  )
+  rejectDialog.open = false
+}
+
+async function handleConfirmCompleted(orderId) {
+  await runAction(
+    () => AdminService.confirmWithdrawalCompleted(orderId),
+    `提现订单 ${orderId} 已标记转账完成`,
+  )
+}
+
+async function handleMuteAlert(orderId) {
+  await runAction(
+    () => AdminService.muteWithdrawalAlert(orderId),
+    `提现订单 ${orderId} 提醒已静音`,
+  )
+}
+
+function toggleSelectWithdraw(orderId) {
+  const index = selectedWithdrawIds.value.indexOf(orderId)
+  if (index >= 0) {
+    selectedWithdrawIds.value.splice(index, 1)
+  } else {
+    selectedWithdrawIds.value.push(orderId)
+  }
+}
+
+function selectAllWithdraw() {
+  const ids = filteredWithdrawRows.value.map((r) => r.orderId)
+  const allSelected = ids.every((id) => selectedWithdrawIds.value.includes(id))
+  if (allSelected) {
+    selectedWithdrawIds.value = selectedWithdrawIds.value.filter((id) => !ids.includes(id))
+  } else {
+    ids.forEach((id) => {
+      if (!selectedWithdrawIds.value.includes(id)) {
+        selectedWithdrawIds.value.push(id)
+      }
+    })
+  }
+}
+
+async function batchApprove() {
+  if (!selectedWithdrawIds.value.length) {
+    error.value = '请先选择要审核的订单'
+    return
+  }
+  dialogLoading.value = true
+  error.value = ''
+  actionMessage.value = ''
+  try {
+    await Promise.all(selectedWithdrawIds.value.map((id) => AdminService.approveWithdrawal(id)))
+    actionMessage.value = `批量通过完成，共 ${selectedWithdrawIds.value.length} 笔`
+    selectedWithdrawIds.value = []
+    await loadData()
+  } catch (err) {
+    error.value = err.message || '批量审核失败'
+  } finally {
+    dialogLoading.value = false
+  }
+}
+
+async function batchReject() {
+  if (!selectedWithdrawIds.value.length) {
+    error.value = '请先选择要审核的订单'
+    return
+  }
+  dialogLoading.value = true
+  error.value = ''
+  actionMessage.value = ''
+  try {
+    await Promise.all(selectedWithdrawIds.value.map((id) => AdminService.rejectWithdrawal(id, '批量拒绝')))
+    actionMessage.value = `批量拒绝完成，共 ${selectedWithdrawIds.value.length} 笔`
+    selectedWithdrawIds.value = []
+    await loadData()
+  } catch (err) {
+    error.value = err.message || '批量审核失败'
+  } finally {
+    dialogLoading.value = false
+  }
+}
+
 onMounted(loadData)
 </script>
 
@@ -201,6 +376,22 @@ onMounted(loadData)
     </article>
   </section>
 
+  <section class="grid-4" v-if="activeTab === 'recharge'">
+    <article class="stat-card" v-for="card in rechargeStats" :key="card.label">
+      <p class="stat-label">{{ card.label }}</p>
+      <p class="stat-value">{{ card.value }}</p>
+      <p class="note">{{ card.note }}</p>
+    </article>
+  </section>
+
+  <section class="grid-4" v-if="activeTab === 'withdraw'">
+    <article class="stat-card" v-for="card in withdrawStats" :key="card.label">
+      <p class="stat-label">{{ card.label }}</p>
+      <p class="stat-value">{{ card.value }}</p>
+      <p class="note">{{ card.note }}</p>
+    </article>
+  </section>
+
   <section class="split-main-aside">
     <article class="panel">
       <div class="tabs">
@@ -219,11 +410,12 @@ onMounted(loadData)
               <th>订单号</th>
               <th>用户UID</th>
               <th>昵称</th>
+              <th>手机号</th>
               <th>支付渠道</th>
               <th>金额</th>
               <th>状态</th>
               <th>创建时间</th>
-              <th>追踪号</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -231,11 +423,21 @@ onMounted(loadData)
               <td>{{ row.orderId }}</td>
               <td>{{ row.uid }}</td>
               <td>{{ row.nickname }}</td>
+              <td>{{ maskPhone(row.phone) }}</td>
               <td>{{ row.channel }}</td>
               <td>{{ row.amount }}</td>
               <td>{{ row.status }}</td>
               <td>{{ row.createdAt }}</td>
-              <td>{{ row.traceId }}</td>
+              <td>
+                <div class="cell-actions">
+                  <button class="primary" type="button" @click="openRechargeDetail(row)">详情</button>
+                  <button v-if="row.status === '对账中'" type="button" @click="handleReconcile(row, 'reconciled')">对账</button>
+                  <button v-if="row.status === '对账中'" class="warn" type="button" @click="handleReconcile(row, 'abnormal')">异常</button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!rechargeRows.length">
+              <td colspan="9" class="table-empty">暂无充值订单</td>
             </tr>
           </tbody>
         </table>
@@ -246,9 +448,17 @@ onMounted(loadData)
           <h2>提现审核队列</h2>
           <span class="muted">按提交时间顺序排队，需展示收款信息</span>
         </div>
+        <div class="form-row" v-if="selectedWithdrawIds.length">
+          <span class="muted">已选择 {{ selectedWithdrawIds.length }} 笔</span>
+          <div class="actions compact">
+            <button class="primary" @click="batchApprove" :disabled="dialogLoading">批量通过</button>
+            <button class="warn" @click="batchReject" :disabled="dialogLoading">批量拒绝</button>
+          </div>
+        </div>
         <table>
           <thead>
             <tr>
+              <th><input type="checkbox" @change="selectAllWithdraw" /></th>
               <th>订单号</th>
               <th>用户UID</th>
               <th>昵称</th>
@@ -257,15 +467,23 @@ onMounted(loadData)
               <th>审核状态</th>
               <th>提醒状态</th>
               <th>收款信息</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
             <tr
-              v-for="row in withdrawRows"
+              v-for="row in filteredWithdrawRows"
               :key="row.orderId"
               @click="selectedWithdrawalId = row.orderId"
               :class="{ 'is-selected': selectedWithdrawalId === row.orderId }"
             >
+              <td @click.stop>
+                <input
+                  type="checkbox"
+                  :checked="selectedWithdrawIds.includes(row.orderId)"
+                  @change="toggleSelectWithdraw(row.orderId)"
+                />
+              </td>
               <td>{{ row.orderId }}</td>
               <td>{{ row.uid }}</td>
               <td>{{ row.nickname }}</td>
@@ -274,6 +492,43 @@ onMounted(loadData)
               <td>{{ getWithdrawStatusLabel(row.status) }}</td>
               <td>{{ getWithdrawAlertStatusLabel(row.alertStatus) }}</td>
               <td>{{ row.payout }}</td>
+              <td>
+                <div class="cell-actions">
+                  <button class="primary" type="button" @click.stop="openWithdrawDetail(row)">详情</button>
+                  <button
+                    v-if="row.status === WITHDRAW_STATUS.PENDING_REVIEW"
+                    type="button"
+                    @click.stop="handleApproveWithdrawal(row.orderId)"
+                  >
+                    通过
+                  </button>
+                  <button
+                    v-if="row.status === WITHDRAW_STATUS.PENDING_REVIEW"
+                    class="warn"
+                    type="button"
+                    @click.stop="openRejectDialog(row.orderId)"
+                  >
+                    拒绝
+                  </button>
+                  <button
+                    v-if="row.status === WITHDRAW_STATUS.TRANSFER_PROCESSING"
+                    type="button"
+                    @click.stop="handleConfirmCompleted(row.orderId)"
+                  >
+                    完成
+                  </button>
+                  <button
+                    v-if="row.alertStatus !== 'muted'"
+                    type="button"
+                    @click.stop="handleMuteAlert(row.orderId)"
+                  >
+                    静音
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!filteredWithdrawRows.length">
+              <td colspan="10" class="table-empty">暂无提现订单</td>
             </tr>
           </tbody>
         </table>
@@ -335,6 +590,9 @@ onMounted(loadData)
           <td>{{ row.operator }}</td>
           <td>{{ row.updatedAt }}</td>
         </tr>
+        <tr v-if="!ledgerRows.length">
+          <td colspan="6" class="table-empty">暂无流水记录</td>
+        </tr>
       </tbody>
     </table>
   </section>
@@ -371,4 +629,96 @@ onMounted(loadData)
       </label>
     </div>
   </ActionDialog>
+
+  <ActionDialog
+    :open="rechargeDetailDialog.open"
+    title="充值订单详情"
+    description="完整充值订单信息"
+    confirm-text="关闭"
+    :cancel-text="''"
+    @close="rechargeDetailDialog.open = false"
+    @confirm="rechargeDetailDialog.open = false"
+  >
+    <div class="kv-list">
+      <div class="kv-item"><strong>订单号</strong><span>{{ rechargeDetailDialog.row.orderId }}</span></div>
+      <div class="kv-item"><strong>用户UID</strong><span>{{ rechargeDetailDialog.row.uid }}</span></div>
+      <div class="kv-item"><strong>昵称</strong><span>{{ rechargeDetailDialog.row.nickname }}</span></div>
+      <div class="kv-item"><strong>手机号</strong><span>{{ maskPhone(rechargeDetailDialog.row.phone) }}</span></div>
+      <div class="kv-item"><strong>支付渠道</strong><span>{{ rechargeDetailDialog.row.channel }}</span></div>
+      <div class="kv-item"><strong>金额</strong><span>{{ rechargeDetailDialog.row.amount }}</span></div>
+      <div class="kv-item"><strong>状态</strong><span>{{ rechargeDetailDialog.row.status }}</span></div>
+      <div class="kv-item"><strong>创建时间</strong><span>{{ rechargeDetailDialog.row.createdAt }}</span></div>
+      <div class="kv-item"><strong>追踪号</strong><span>{{ rechargeDetailDialog.row.traceId }}</span></div>
+    </div>
+  </ActionDialog>
+
+  <ActionDialog
+    :open="withdrawDetail.open"
+    title="提现详情"
+    description="提现订单详细信息"
+    confirm-text="关闭"
+    :cancel-text="''"
+    @close="withdrawDetail.open = false"
+    @confirm="withdrawDetail.open = false"
+  >
+    <div class="kv-list">
+      <div class="kv-item"><strong>订单号</strong><span>{{ withdrawDetail.row.orderId }}</span></div>
+      <div class="kv-item"><strong>用户UID</strong><span>{{ withdrawDetail.row.uid }}</span></div>
+      <div class="kv-item"><strong>昵称</strong><span>{{ withdrawDetail.row.nickname }}</span></div>
+      <div class="kv-item"><strong>手机号</strong><span>{{ maskPhone(withdrawDetail.row.phone) }}</span></div>
+      <div class="kv-item"><strong>提现金额</strong><span>{{ withdrawDetail.row.amount }}</span></div>
+      <div class="kv-item"><strong>支付渠道</strong><span>{{ withdrawDetail.row.channel }}</span></div>
+      <div class="kv-item"><strong>收款账户</strong><span>{{ withdrawDetail.row.payout }}</span></div>
+      <div class="kv-item"><strong>申请时间</strong><span>{{ withdrawDetail.row.createdAt }}</span></div>
+      <div class="kv-item"><strong>审核状态</strong><span>{{ getWithdrawStatusLabel(withdrawDetail.row.status) }}</span></div>
+      <div class="kv-item"><strong>提醒状态</strong><span>{{ getWithdrawAlertStatusLabel(withdrawDetail.row.alertStatus) }}</span></div>
+    </div>
+    <div class="dialog-actions-row" v-if="withdrawDetail.row.status === WITHDRAW_STATUS.PENDING_REVIEW">
+      <button class="primary" @click="handleApproveWithdrawal(withdrawDetail.row.orderId); withdrawDetail.open = false">通过</button>
+      <button class="warn" @click="openRejectDialog(withdrawDetail.row.orderId); withdrawDetail.open = false">拒绝</button>
+    </div>
+    <div class="dialog-actions-row" v-if="withdrawDetail.row.status === WITHDRAW_STATUS.TRANSFER_PROCESSING">
+      <button class="primary" @click="handleConfirmCompleted(withdrawDetail.row.orderId); withdrawDetail.open = false">标记转账完成</button>
+    </div>
+  </ActionDialog>
+
+  <ActionDialog
+    :open="rejectDialog.open"
+    title="拒绝提现"
+    description="请填写拒绝原因"
+    confirm-text="确认拒绝"
+    :loading="dialogLoading"
+    danger
+    @close="rejectDialog.open = false"
+    @confirm="submitRejectDialog"
+  >
+    <label class="dialog-label">
+      拒绝原因
+      <textarea v-model="rejectDialog.reason" rows="3" placeholder="请输入拒绝原因"></textarea>
+    </label>
+  </ActionDialog>
 </template>
+
+<style scoped>
+.dialog-actions-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color, #e5e7eb);
+}
+.dialog-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text-primary, #111827);
+}
+.dialog-label textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 6px;
+  font-size: 14px;
+  resize: vertical;
+}
+</style>
