@@ -86,14 +86,28 @@ const serializeRiskRules = (payload) => ({
   blacklistUids: Array.isArray(payload.blacklistUids) ? payload.blacklistUids : [],
 })
 
+const REPORT_TYPE_LABELS = {
+  operate: '运营数据报表',
+  finance: '财务/交易数据报表',
+  risk: '风控规则报表',
+  audit: '审计追溯报表',
+}
+
+const REPORT_SOURCE_MODULES = {
+  operate: '用户管理、排行榜治理',
+  finance: '交易管理、资金管理',
+  risk: '权限与风控',
+  audit: '审计追溯',
+}
+
 const normalizeReportJobRows = (rows = []) =>
   rows.map((item) => ({
     jobId: item.jobId,
-    name: item.templateName || `${item.reportType} 报表任务`,
+    name: item.templateName || item.name || REPORT_TYPE_LABELS[item.reportType] || `${item.reportType} 报表任务`,
     generatedAt: item.finishedAt || item.createdAt,
     generatedBy: item.generatedBy || '系统',
     aggregationRule: item.aggregationRule || '按筛选条件汇总',
-    dataSourceModules: item.dataSourceModules || item.reportType,
+    dataSourceModules: item.dataSourceModules || REPORT_SOURCE_MODULES[item.reportType] || item.reportType,
     status:
       item.status === 'SUCCEEDED'
         ? '已完成'

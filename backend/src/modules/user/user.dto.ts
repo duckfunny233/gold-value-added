@@ -50,6 +50,14 @@ export class AdminUsersQueryDto {
   @IsOptional()
   @IsIn(TIME_RANGES)
   timeRange?: (typeof TIME_RANGES)[number]
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  page?: number
+
+  @ApiPropertyOptional({ default: 10 })
+  @IsOptional()
+  pageSize?: number
 }
 
 export class AdminUserManualCheckDto {

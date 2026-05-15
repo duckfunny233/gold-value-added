@@ -14,6 +14,7 @@ const filters = reactive({
 const noticeForm = reactive({
   title: '',
   content: '',
+  enabled: false,
 })
 
 const noticeDialog = reactive({
@@ -26,11 +27,6 @@ const deleteDialog = reactive({
   open: false,
   noticeId: '',
   title: '',
-})
-
-const systemDialog = reactive({
-  open: false,
-  action: 'pause',
 })
 
 useQueryFilters(filters, ['date', 'module', 'severity'])
@@ -46,10 +42,13 @@ const loading = ref(false)
 const dialogLoading = ref(false)
 const error = ref('')
 const actionMessage = ref('')
+const tradingStatus = ref('normal')
 
 const noticeDialogTitle = computed(() => (noticeDialog.mode === 'edit' ? '编辑公告' : '新增公告'))
 const noticeDialogConfirmText = computed(() => (noticeDialog.mode === 'edit' ? '确认编辑' : '确认发布'))
-const systemDialogTitle = computed(() => (systemDialog.action === 'pause' ? '全站停盘' : '恢复交易'))
+const statusBadgeClass = computed(() => (tradingStatus.value === 'paused' ? 'badge-danger' : 'badge-success'))
+const statusText = computed(() => (tradingStatus.value === 'paused' ? '停盘中' : '交易正常'))
+const recentEvents = computed(() => events.value.slice(0, 5))
 
 async function loadData() {
   loading.value = true
@@ -62,6 +61,7 @@ async function loadData() {
     events.value = data.events || []
     monitors.value = data.monitors || []
     ruleReminders.value = data.ruleReminders || []
+    tradingStatus.value = data.tradingStatus || 'normal'
     selectedNoticeId.value = notices.value[0]?.id || ''
   } catch (err) {
     error.value = err.message || '仪表盘数据加载失败'
@@ -148,25 +148,44 @@ async function submitDeleteNoticeDialog() {
   deleteDialog.open = false
 }
 
-function openSystemDialog(action) {
-  systemDialog.action = action
-  systemDialog.open = true
+async function submitGlobalNotice() {
+  await runAction(
+    () =>
+      AdminService.updateSystemConfig({
+        globalNotice: {
+          enabled: noticeForm.enabled,
+          content: noticeForm.content,
+        },
+      }),
+    '全局公告配置已保存',
+  )
 }
 
-function submitSystemDialog() {
-  actionMessage.value =
-    systemDialog.action === 'pause'
-      ? '已记录全站停盘操作，本期按文档要求仅保留确认弹框，不直接触发停盘接口'
-      : '已记录恢复交易操作，本期按文档要求仅保留确认弹框，不直接触发恢复接口'
-  error.value = ''
-  systemDialog.open = false
+function getModuleLabel(module) {
+  const map = {
+    funds: '资金管理',
+    trades: '交易管理',
+    risk: '权限与风控',
+    audit: '审计追溯',
+  }
+  return map[module] || module
+}
+
+function getModuleBadgeClass(module) {
+  const map = {
+    funds: 'badge-success',
+    trades: 'badge-success',
+    risk: 'badge-danger',
+    audit: 'badge-success',
+  }
+  return map[module] || ''
 }
 
 onMounted(loadData)
 </script>
 
 <template>
-  <PageHeader title="首页仪表盘" description="承接全局总览、待办提醒、系统监控、事件流、规则提醒和公告轮播管理。" />
+  <PageHeader title="首页仪表盘" />
 
   <section class="panel">
     <div class="form-row">
@@ -197,11 +216,22 @@ onMounted(loadData)
           <option value="low">低</option>
         </select>
       </label>
+      <div class="search-container">
+        <button class="primary search-btn" @click="loadData" :disabled="loading">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+          </svg>
+          {{ loading ? '搜索中...' : '搜索' }}
+        </button>
+      </div>
+    </div>
+    <div class="status-bar">
+      <span class="status-label">当前交易状态：</span>
+      <span class="badge" :class="statusBadgeClass">{{ statusText }}</span>
     </div>
     <div class="actions">
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '刷新仪表盘' }}</button>
-      <button class="warn" @click="openSystemDialog('pause')">全站停盘</button>
-      <button @click="openSystemDialog('resume')">恢复交易</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
     <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
@@ -219,7 +249,6 @@ onMounted(loadData)
     <article class="panel">
       <div class="panel-head">
         <h2>待处理单据</h2>
-        <span class="muted">当前无待处理单据时显示空态</span>
       </div>
       <table>
         <thead>
@@ -248,22 +277,8 @@ onMounted(loadData)
     <aside class="stack">
       <article class="panel">
         <div class="panel-head">
-          <h2>系统监控</h2>
-          <span class="muted">覆盖同步延迟、重排与对账</span>
-        </div>
-        <div class="kv-list">
-          <div class="kv-item" v-for="item in monitors" :key="item.key">
-            <strong>{{ item.label }}</strong>
-            <span>{{ item.value }}</span>
-          </div>
-        </div>
-      </article>
-
-      <article class="panel">
-        <div class="panel-head">
-          <h2>公告管理</h2>
-          <span class="muted">发布后首页轮巡展示</span>
-        </div>
+        <h2>公告管理</h2>
+      </div>
         <table>
           <thead>
             <tr>
@@ -281,7 +296,7 @@ onMounted(loadData)
               @click="selectedNoticeId = item.id"
               :class="{ 'is-selected': selectedNoticeId === item.id }"
             >
-              <td>{{ item.title }}</td>
+              <td class="notice-title">{{ item.title }}</td>
               <td>{{ item.status }}</td>
               <td>{{ item.publishAt }}</td>
               <td>{{ item.pollingEnabled }}</td>
@@ -320,37 +335,47 @@ onMounted(loadData)
   <section class="split-main-bottom">
     <article class="panel">
       <div class="panel-head">
-        <h2>实时事件流</h2>
-        <span class="muted">当前无实时事件时显示空态</span>
+        <h2>最近事件速览</h2>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th>追踪号</th>
-            <th>模块</th>
-            <th>事件</th>
-            <th>时间</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="item in events" :key="item.traceId">
-            <td>{{ item.traceId }}</td>
-            <td>{{ item.module }}</td>
-            <td>{{ item.detail }}</td>
-            <td>{{ item.time }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div v-if="!recentEvents.length" class="empty-state">
+        <p class="muted">暂无实时事件</p>
+      </div>
+      <div v-else class="event-list">
+        <div v-for="item in recentEvents" :key="item.traceId" class="event-item">
+          <div class="event-main">
+            <span class="badge" :class="getModuleBadgeClass(item.module)">{{ getModuleLabel(item.module) }}</span>
+            <span class="event-detail">{{ item.detail }}</span>
+          </div>
+          <span class="muted event-time">{{ item.time }}</span>
+        </div>
+      </div>
+      <div class="event-more">
+        <RouterLink to="/audit" class="event-more-link">查看更多事件详情 →</RouterLink>
+      </div>
     </article>
 
     <article class="panel">
       <div class="panel-head">
-        <h2>规则提醒</h2>
-        <span class="muted">关键校验同步到各模块</span>
+        <h2>全局公告编辑</h2>
       </div>
-      <ul class="list-plain">
-        <li v-for="item in ruleReminders" :key="item">{{ item }}</li>
-      </ul>
+      <div class="form-row">
+        <label class="checkbox-label">
+          <input v-model="noticeForm.enabled" type="checkbox" />
+          <span>启用全局公告</span>
+        </label>
+      </div>
+      <div class="divider"></div>
+      <label class="full-width">
+        公告内容
+        <textarea v-model="noticeForm.content" rows="6" placeholder="请输入公告内容，支持 HTML 标签"></textarea>
+      </label>
+      <div v-if="noticeForm.enabled && noticeForm.content" class="notice-preview">
+        <h3>预览</h3>
+        <div class="notice-box" v-html="noticeForm.content"></div>
+      </div>
+      <div class="actions">
+        <button class="primary" @click="submitGlobalNotice">保存配置</button>
+      </div>
     </article>
   </section>
 
@@ -389,20 +414,115 @@ onMounted(loadData)
     <p class="dialog-tip">确认删除公告「{{ deleteDialog.title || '未命名公告' }}」吗？</p>
   </ActionDialog>
 
-  <ActionDialog
-    :open="systemDialog.open"
-    :title="systemDialogTitle"
-    description="根据问题文档，这里先保留页面确认弹框，不直接触发后台停盘状态切换。"
-    confirm-text="确认"
-    @close="systemDialog.open = false"
-    @confirm="submitSystemDialog"
-  >
-    <p class="dialog-tip">
-      {{
-        systemDialog.action === 'pause'
-          ? '确认记录一次全站停盘操作说明？本次不会直接更改后台交易状态。'
-          : '确认记录一次恢复交易操作说明？本次不会直接更改后台交易状态。'
-      }}
-    </p>
-  </ActionDialog>
 </template>
+
+<style scoped>
+.notice-title {
+  max-width: 168px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.search-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  width: fit-content;
+}
+.search-btn {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  white-space: nowrap;
+  width: auto;
+}
+.event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.event-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--bg-secondary, #f3f4f6);
+  border-radius: 6px;
+}
+.event-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.event-detail {
+  font-size: 14px;
+  color: var(--text-primary, #111827);
+}
+.event-time {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.empty-state {
+  padding: 24px;
+  text-align: center;
+}
+.event-more {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color, #e5e7eb);
+}
+.event-more-link {
+  color: var(--primary, #0b7285);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.event-more-link:hover {
+  text-decoration: underline;
+}
+.notice-preview {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--bg-secondary, #f3f4f6);
+  border-radius: 6px;
+}
+.notice-preview h3 {
+  font-size: 13px;
+  margin-bottom: 8px;
+  color: var(--text-muted, #6b7280);
+}
+.notice-box {
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.full-width {
+  grid-column: 1 / -1;
+}
+.divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 12px 0;
+}
+.checkbox-label {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  width: fit-content;
+}
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+</style>

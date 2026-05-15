@@ -11,8 +11,6 @@ import AuditView from '../views/AuditView.vue'
 import ReportsView from '../views/ReportsView.vue'
 import RealnameAuditView from '../views/RealnameAuditView.vue'
 import SystemConfigView from '../views/SystemConfigView.vue'
-import DataArchiveView from '../views/DataArchiveView.vue'
-import PlatformFundsView from '../views/PlatformFundsView.vue'
 import { AdminAuthService } from '../services/auth'
 
 const routes = [
@@ -32,8 +30,6 @@ const routes = [
       { path: 'reports', name: 'reports', component: ReportsView, meta: { title: '报表中心' } },
       { path: 'realname-audit', name: 'realname-audit', component: RealnameAuditView, meta: { title: '实名认证审核' } },
       { path: 'system-config', name: 'system-config', component: SystemConfigView, meta: { title: '系统配置' } },
-      { path: 'data-archive', name: 'data-archive', component: DataArchiveView, meta: { title: '数据归档管理' } },
-      { path: 'platform-funds', name: 'platform-funds', component: PlatformFundsView, meta: { title: '平台资金总览' } },
     ],
   },
 ]

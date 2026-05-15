@@ -268,7 +268,7 @@ onMounted(loadData)
 </script>
 
 <template>
-  <PageHeader title="权限与风控" description="处理账号权限、角色管理、冻结拦截、停盘控制和风险预警。" />
+  <PageHeader title="权限与风控" />
 
   <section class="panel">
     <div class="form-row">
@@ -322,32 +322,6 @@ onMounted(loadData)
       <div class="kv-item"><strong>日提现上限</strong><span>{{ currentRules.dailyWithdrawalLimit }}</span></div>
       <div class="kv-item"><strong>异常交易阈值</strong><span>{{ currentRules.abnormalTradeThreshold }}</span></div>
     </div>
-  </section>
-
-  <section class="panel">
-    <div class="panel-head">
-      <h2>管理员权限与角色区</h2>
-      <span class="muted">角色权限变更即时生效</span>
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th>角色</th>
-          <th>权限</th>
-          <th>状态</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="row in roles" :key="row.role">
-          <td>{{ row.role }}</td>
-          <td>{{ row.permission }}</td>
-          <td>{{ row.status }}</td>
-        </tr>
-        <tr v-if="!roles.length">
-          <td colspan="3" class="table-empty">暂无角色数据</td>
-        </tr>
-      </tbody>
-    </table>
   </section>
 
   <section class="panel">

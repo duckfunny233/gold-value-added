@@ -99,39 +99,31 @@ async function submitSystemDialog() {
   }
 }
 
-function handleExportTrades() {
-  if (!trades.value.length) {
-    error.value = '暂无可导出的交易记录'
-    return
+async function handleGenerateReport() {
+  dialogLoading.value = true
+  error.value = ''
+  actionMessage.value = ''
+  try {
+    await AdminService.generateReport({
+      reportType: 'finance',
+      timeRange: filters.timeRange,
+      uid: filters.uid,
+      format: 'csv',
+      name: '交易流水导出',
+    })
+    actionMessage.value = '报表任务已生成，请前往报表中心下载'
+  } catch (err) {
+    error.value = err.message || '生成报表任务失败'
+  } finally {
+    dialogLoading.value = false
   }
-  const headers = ['交易号', '交易类型', '用户UID', '昵称', '金额', '克数', '状态', '同步状态', '创建时间']
-  const rows = trades.value.map((row) => [
-    row.tradeNo,
-    row.tradeType,
-    row.uid,
-    row.nickname,
-    row.amount,
-    row.grams,
-    row.status,
-    row.syncStatus,
-    row.createdAt,
-  ])
-  const content = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `trades-${Date.now()}.csv`
-  link.click()
-  URL.revokeObjectURL(url)
-  actionMessage.value = '交易流水已导出'
 }
 
 onMounted(loadData)
 </script>
 
 <template>
-  <PageHeader title="交易管理" description="完成买卖交易全流程管控、撮合监控与上金所交易时段同步状态查看。" />
+  <PageHeader title="交易管理" />
 
   <section class="panel">
     <div class="status-bar">
@@ -164,7 +156,7 @@ onMounted(loadData)
       <button @click="loadData" :disabled="loading">刷新状态</button>
       <button class="warn" @click="openSystemDialog('pause')" :disabled="tradingStatus === 'paused'">全站停盘</button>
       <button @click="openSystemDialog('resume')" :disabled="tradingStatus === 'normal'">恢复交易</button>
-      <button @click="handleExportTrades">导出流水</button>
+      <button @click="handleGenerateReport" :disabled="loading">生成报表</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
     <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
@@ -178,67 +170,47 @@ onMounted(loadData)
     </article>
   </section>
 
-  <section class="split-main-aside">
-    <article class="panel">
-      <div class="panel-head">
-        <h2>交易列表</h2>
-        <span class="muted">覆盖买单和卖单，支持同步状态查看</span>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>交易号</th>
-            <th>交易类型</th>
-            <th>用户UID</th>
-            <th>昵称</th>
-            <th>金额</th>
-            <th>克数</th>
-            <th>状态</th>
-            <th>同步状态</th>
-            <th>创建时间</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="row in trades"
-            :key="row.tradeNo"
-            @click="selectedTradeNo = row.tradeNo"
-            :class="{ 'is-selected': selectedTradeNo === row.tradeNo }"
-          >
-            <td>{{ row.tradeNo }}</td>
-            <td>{{ row.tradeType }}</td>
-            <td>{{ row.uid }}</td>
-            <td>{{ row.nickname }}</td>
-            <td>{{ row.amount }}</td>
-            <td>{{ row.grams }}</td>
-            <td>{{ row.status }}</td>
-            <td>{{ row.syncStatus }}</td>
-            <td>{{ row.createdAt }}</td>
-          </tr>
-          <tr v-if="!trades.length">
-            <td colspan="9" class="table-empty">暂无交易记录</td>
-          </tr>
-        </tbody>
-      </table>
-    </article>
-
-    <aside class="stack">
-      <article class="panel">
-        <div class="panel-head">
-          <h2>撮合与同步控制</h2>
-          <span class="muted">固定写入代码的交易控制规则</span>
-        </div>
-        <div class="kv-list">
-          <div class="kv-item" v-for="item in monitorCards" :key="item.key">
-            <strong>{{ item.label }}</strong>
-            <span>{{ item.value }}</span>
-          </div>
-        </div>
-        <ul class="list-plain">
-          <li v-for="item in controlItems" :key="item">{{ item }}</li>
-        </ul>
-      </article>
-    </aside>
+  <section class="panel">
+    <div class="panel-head">
+      <h2>交易列表</h2>
+      <span class="muted">覆盖买单和卖单，支持同步状态查看</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>交易号</th>
+          <th>交易类型</th>
+          <th>用户UID</th>
+          <th>昵称</th>
+          <th>金额</th>
+          <th>克数</th>
+          <th>状态</th>
+          <th>同步状态</th>
+          <th>创建时间</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          v-for="row in trades"
+          :key="row.tradeNo"
+          @click="selectedTradeNo = row.tradeNo"
+          :class="{ 'is-selected': selectedTradeNo === row.tradeNo }"
+        >
+          <td>{{ row.tradeNo }}</td>
+          <td>{{ row.tradeType }}</td>
+          <td>{{ row.uid }}</td>
+          <td>{{ row.nickname }}</td>
+          <td>{{ row.amount }}</td>
+          <td>{{ row.grams }}</td>
+          <td>{{ row.status }}</td>
+          <td>{{ row.syncStatus }}</td>
+          <td>{{ row.createdAt }}</td>
+        </tr>
+        <tr v-if="!trades.length">
+          <td colspan="9" class="table-empty">暂无交易记录</td>
+        </tr>
+      </tbody>
+    </table>
   </section>
 
   <section class="panel">
@@ -308,18 +280,6 @@ onMounted(loadData)
 </template>
 
 <style scoped>
-.status-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-color, #e5e7eb);
-}
-.status-label {
-  font-size: 14px;
-  color: var(--text-primary, #111827);
-}
 .dialog-label {
   display: flex;
   flex-direction: column;

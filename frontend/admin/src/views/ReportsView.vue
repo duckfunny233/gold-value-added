@@ -5,13 +5,21 @@ import { useQueryFilters } from '../composables/useQueryFilters'
 import { AdminService } from '../services/admin'
 
 const filters = reactive({
-  reportType: 'operate',
+  reportType: '',
+  name: '',
+  status: '',
+  generatedBy: '',
   timeRange: '7d',
-  uid: '',
-  channel: '',
 })
 
-useQueryFilters(filters, ['reportType', 'timeRange', 'uid', 'channel'])
+useQueryFilters(filters, ['reportType', 'name', 'status', 'generatedBy', 'timeRange'])
+
+const REPORT_NAME_MAP = {
+  operate: '运营数据',
+  finance: '财务/交易数据',
+  risk: '风控规则',
+  audit: '审计追溯',
+}
 
 const cards = ref([])
 const exportsList = ref([])
@@ -38,7 +46,13 @@ async function loadData() {
   try {
     const [reportData, jobsData] = await Promise.all([
       AdminService.getReports(filters),
-      AdminService.getReportJobs({ reportType: filters.reportType }),
+      AdminService.getReportJobs({
+        reportType: filters.reportType,
+        name: filters.name,
+        status: filters.status,
+        generatedBy: filters.generatedBy,
+        timeRange: filters.timeRange,
+      }),
     ])
     cards.value = reportData.cards || []
     const jobRows = AdminService.normalizeReportJobRows(jobsData.rows || [])
@@ -71,11 +85,10 @@ async function handleGenerateReport() {
   await runAction(
     () =>
       AdminService.generateReport({
-        reportType: filters.reportType,
+        reportType: filters.reportType || 'operate',
         timeRange: filters.timeRange,
-        uid: filters.uid,
-        channel: filters.channel,
         format: 'csv',
+        name: `${REPORT_NAME_MAP[filters.reportType] || '自定义'}报表`,
       }),
     '报表任务已生成',
   )
@@ -103,38 +116,46 @@ onMounted(loadData)
 </script>
 
 <template>
-  <PageHeader title="报表中心" description="生成多模块运营报表、自定义报表和可视化统计。" />
+  <PageHeader title="报表中心" />
 
   <section class="panel">
     <div class="form-row">
       <label>
-        报表类型
+        报表名称
+        <input v-model="filters.name" placeholder="关键词搜索" />
+      </label>
+      <label>
+        来源页面/模块
         <select v-model="filters.reportType">
-          <option value="operate">运营</option>
-          <option value="finance">财务</option>
-          <option value="risk">风控</option>
+          <option value="">全部</option>
+          <option value="user">用户管理</option>
+          <option value="leaderboard">排行榜治理</option>
+          <option value="trade">交易管理</option>
+          <option value="funds">资金管理</option>
         </select>
       </label>
       <label>
-        时间范围
+        状态
+        <select v-model="filters.status">
+          <option value="">全部</option>
+          <option value="SUCCEEDED">已完成</option>
+          <option value="RUNNING">生成中</option>
+          <option value="FAILED">失败</option>
+          <option value="PENDING">待生成</option>
+        </select>
+      </label>
+      <label>
+        生成时间
         <select v-model="filters.timeRange">
           <option value="7d">最近7天</option>
           <option value="30d">最近30天</option>
-        </select>
-      </label>
-      <label>用户UID<input v-model="filters.uid" placeholder="请输入用户UID" /></label>
-      <label>
-        支付渠道
-        <select v-model="filters.channel">
-          <option value="">全部</option>
-          <option value="wechat">微信</option>
-          <option value="alipay">支付宝</option>
-          <option value="bank">银行卡</option>
+          <option value="90d">最近90天</option>
         </select>
       </label>
     </div>
     <div class="actions">
-      <button class="primary" @click="handleGenerateReport" :disabled="loading">{{ loading ? '加载中...' : '生成报表' }}</button>
+      <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查询' }}</button>
+      <button @click="handleGenerateReport" :disabled="loading">生成报表</button>
       <button @click="handleExportReport('csv')">导出 CSV</button>
       <button @click="handleExportReport('excel')">导出 Excel</button>
     </div>
@@ -142,28 +163,19 @@ onMounted(loadData)
     <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
   </section>
 
-  <section class="grid-3">
-    <article class="chart-box" v-for="item in cards" :key="item.key">
-      <strong>{{ item.label }}</strong>
-      <div class="stat-value">{{ item.value }}</div>
-      <div class="metric-bar"><span :style="{ width: item.rate }"></span></div>
-      <p class="note">当前统计进度 {{ item.rate }}</p>
-    </article>
-  </section>
-
   <section class="panel">
     <div class="panel-head">
       <h2>导出列表区</h2>
-      <span class="muted">自定义报表需保留模板和生成记录</span>
+      <span class="muted">点击行选中报表后，可导出 CSV 或 Excel</span>
     </div>
     <table>
       <thead>
         <tr>
-          <th>报表名称</th>
+          <th style="min-width:160px">报表名称</th>
           <th>生成时间</th>
           <th>生成人</th>
           <th>汇总规则</th>
-          <th>数据来源模块</th>
+          <th>来源页面/模块</th>
           <th>状态</th>
         </tr>
       </thead>
@@ -174,14 +186,24 @@ onMounted(loadData)
           @click="selectedJobId = row.jobId || ''"
           :class="{ 'is-selected': selectedJobId === row.jobId }"
         >
-          <td>{{ row.name }}</td>
+          <td class="cell-name">{{ row.name }}</td>
           <td>{{ row.generatedAt }}</td>
           <td>{{ row.generatedBy }}</td>
           <td>{{ row.aggregationRule }}</td>
           <td>{{ row.dataSourceModules }}</td>
           <td>{{ row.status }}</td>
         </tr>
+        <tr v-if="!exportsList.length">
+          <td colspan="6" class="table-empty">暂无报表记录，请先生成报表任务</td>
+        </tr>
       </tbody>
     </table>
   </section>
 </template>
+
+<style scoped>
+.cell-name {
+  font-weight: 600;
+  color: var(--primary, #0b7285);
+}
+</style>

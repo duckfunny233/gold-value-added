@@ -163,7 +163,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageHeader title="实名认证审核" description="管理用户实名认证信息，完成人工审核与记录追溯。" />
+  <PageHeader title="实名认证审核" />
 
   <section class="panel">
     <div class="form-row">

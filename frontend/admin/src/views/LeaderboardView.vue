@@ -57,31 +57,6 @@ const governanceDialogTitle = computed(() => {
   return '校验规则'
 })
 
-function escapeCsv(value) {
-  const normalized = value == null ? '' : String(value)
-  const escaped = normalized.replace(/"/g, '""')
-  return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped
-}
-
-function downloadCsv(fileName, items) {
-  if (!items.length) {
-    error.value = '暂无可导出的排行榜数据'
-    return
-  }
-  const headers = Object.keys(items[0])
-  const content = [
-    headers.join(','),
-    ...items.map((row) => headers.map((header) => escapeCsv(row[header])).join(',')),
-  ].join('\n')
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = fileName
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
 async function loadData() {
   loading.value = true
   error.value = ''
@@ -196,27 +171,24 @@ async function submitCheatDialog() {
   cheatDialog.open = false
 }
 
-function handleExport() {
-  downloadCsv(
-    `leaderboard-${filters.sortRule}-${Date.now()}.csv`,
-    rows.value.map((item) => ({
-      rank: item.rank,
-      uid: item.uid,
-      nickname: item.nickname,
-      goldHoldingGrams: item.goldHoldingGrams,
-      totalAsset: item.totalAsset,
-      syncStatus: item.syncStatus,
-      updatedAt: item.updatedAt,
-    })),
+async function handleGenerateReport() {
+  await runAction(
+    () =>
+      AdminService.generateReport({
+        reportType: 'operate',
+        timeRange: filters.timeRange,
+        format: 'csv',
+        name: '排行榜数据导出',
+      }),
+    '报表任务已生成，请前往报表中心下载',
   )
-  actionMessage.value = '排行榜已基于真实查询结果导出'
 }
 
 onMounted(loadData)
 </script>
 
 <template>
-  <PageHeader title="排行榜治理" description="完成排行榜重排、规则校验和同步监控。" />
+  <PageHeader title="排行榜治理" />
 
   <section class="panel">
     <div class="form-row">
@@ -246,11 +218,11 @@ onMounted(loadData)
       </label>
     </div>
     <div class="actions">
-      <button class="primary" @click="openGovernanceDialog('validate')" :disabled="loading">{{ loading ? '加载中...' : '校验规则' }}</button>
+      <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查询' }}</button>
       <button @click="openGovernanceDialog('update')">更新排序规则</button>
       <button @click="openGovernanceDialog('rebuild')">重建排行榜</button>
       <button @click="openRuleDialog">规则配置</button>
-      <button @click="handleExport">导出</button>
+      <button @click="handleGenerateReport" :disabled="loading">生成报表</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
     <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>

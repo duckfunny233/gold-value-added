@@ -398,19 +398,29 @@ export class UserService {
   }
 
   async getAdminUsers(query: AdminUsersQueryDto) {
+    const where: Prisma.UserWhereInput = {
+      ...(query.userId ? { id: { contains: query.userId } } : {}),
+      ...(query.uid ? { uid: { contains: query.uid, mode: 'insensitive' as const } } : {}),
+      ...(query.realNameStatus ? this.buildRealNameWhere(query.realNameStatus) : {}),
+      ...(query.timeRange ? { createdAt: resolveAdminTimeRange(query.timeRange) } : {}),
+    }
+
+    const total = await this.prisma.user.count({ where })
+
+    const page = Number(query.page) || 1
+    const pageSize = Number(query.pageSize) || 10
+    const skip = (page - 1) * pageSize
+
     const users = await this.prisma.user.findMany({
-      where: {
-        ...(query.userId ? { id: { contains: query.userId } } : {}),
-        ...(query.uid ? { uid: { contains: query.uid, mode: 'insensitive' } } : {}),
-        ...(query.realNameStatus ? this.buildRealNameWhere(query.realNameStatus) : {}),
-        ...(query.timeRange ? { createdAt: resolveAdminTimeRange(query.timeRange) } : {}),
-      },
+      where,
       include: {
         asset: true,
       },
       orderBy: {
         createdAt: 'asc',
       },
+      skip,
+      take: pageSize,
     })
 
     if (!users.length) {
@@ -511,6 +521,7 @@ export class UserService {
     if (!rows.length) {
       return {
         rows: [],
+        total,
         selectedUser: {},
         relatedRecords: { recharge: [], withdraw: [], trade: [], audit: [] },
       }
@@ -527,6 +538,7 @@ export class UserService {
 
     return {
       rows: rows.map(({ _user: _ignored, ...item }) => item),
+      total,
       selectedUser: {
         uid: selectedUser.uid,
           appreciationIncome: formatCurrency(toNumber(selectedUser.asset?.appreciationIncome)),
@@ -966,7 +978,7 @@ export class UserService {
     if (items.length === 0) {
       return '未充值'
     }
-    return items.some((item) => item.status === RechargeStatus.COMPLETED) ? '已充值' : '充值处理中'
+    return items.some((item) => item.status === RechargeStatus.COMPLETED) ? '已充值' : '处理中'
   }
 
   private mapWithdrawability(

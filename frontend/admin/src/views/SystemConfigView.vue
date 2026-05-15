@@ -30,7 +30,6 @@ const config = reactive({
   },
   withdrawRules: {
     minAmount: 100,
-    dailyLimit: 50000,
     arrivalDescription: 'T+1 工作日到账',
   },
   registerLimits: {
@@ -103,11 +102,13 @@ async function handleSave() {
   error.value = ''
   actionMessage.value = ''
   try {
+    const { dailyLimit: _dailyLimit, ...safeWithdrawRules } = config.withdrawRules
+
     await ConfigService.updateSystemConfig({
       tradingHours: { ...config.tradingHours },
       marketRules: { ...config.marketRules },
       fees: { ...config.fees },
-      withdrawRules: { ...config.withdrawRules },
+      withdrawRules: safeWithdrawRules,
       registerLimits: { ...config.registerLimits },
       globalNotice: { ...config.globalNotice },
     })
@@ -136,16 +137,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageHeader title="系统配置" description="管理系统全局参数，包括交易时段、费率、提现规则和注册限制等。" />
+  <PageHeader title="系统配置" />
 
   <section class="panel">
     <div class="tabs">
       <button class="tab-btn" :class="{ active: activeTab === 'trading' }" @click="activeTab = 'trading'">交易时段</button>
       <button class="tab-btn" :class="{ active: activeTab === 'market' }" @click="activeTab = 'market'">休市规则</button>
       <button class="tab-btn" :class="{ active: activeTab === 'fees' }" @click="activeTab = 'fees'">费率配置</button>
-      <button class="tab-btn" :class="{ active: activeTab === 'withdraw' }" @click="activeTab = 'withdraw'">提现规则</button>
       <button class="tab-btn" :class="{ active: activeTab === 'register' }" @click="activeTab = 'register'">注册限制</button>
-      <button class="tab-btn" :class="{ active: activeTab === 'notice' }" @click="activeTab = 'notice'">全局公告</button>
       <button class="tab-btn" :class="{ active: activeTab === 'logs' }" @click="activeTab = 'logs'">变更日志</button>
     </div>
   </section>
@@ -181,6 +180,14 @@ onMounted(() => {
         <input v-model="config.tradingHours.nightClose" type="time" />
       </label>
     </div>
+    <div v-if="activeTab === 'trading'" class="actions-bar">
+      <p v-if="error" class="login-error">{{ error }}</p>
+      <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
+      <div class="actions">
+        <button class="primary" @click="confirmSave" :disabled="saving">{{ saving ? '保存中...' : '保存配置' }}</button>
+        <button @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '重置' }}</button>
+      </div>
+    </div>
   </section>
 
   <section v-if="activeTab === 'market'" class="panel">
@@ -188,18 +195,19 @@ onMounted(() => {
       <h2>休市规则配置</h2>
       <span class="muted">设置周末休市及节假日休市</span>
     </div>
-    <div class="form-row">
+    <div class="form-row" style="justify-content: flex-start;">
       <label class="checkbox-label">
         <input v-model="config.marketRules.weekendClosed" type="checkbox" />
-        周末休市
+        <span>周末休市</span>
       </label>
     </div>
-    <div class="form-row">
+    <div class="divider"></div>
+    <div class="form-row" style="align-items: flex-end;">
       <label>
         添加节假日
         <input v-model="newHoliday" type="date" />
       </label>
-      <button type="button" @click="addHoliday">添加</button>
+      <button type="button" class="primary add-holiday-btn" @click="addHoliday">添加</button>
     </div>
     <div v-if="config.marketRules.holidays.length" class="tag-list">
       <span v-for="(date, index) in config.marketRules.holidays" :key="date" class="tag">
@@ -208,6 +216,14 @@ onMounted(() => {
       </span>
     </div>
     <p v-else class="muted">暂无节假日配置</p>
+    <div class="actions-bar">
+      <p v-if="error" class="login-error">{{ error }}</p>
+      <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
+      <div class="actions">
+        <button class="primary" @click="confirmSave" :disabled="saving">{{ saving ? '保存中...' : '保存配置' }}</button>
+        <button @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '重置' }}</button>
+      </div>
+    </div>
   </section>
 
   <section v-if="activeTab === 'fees'" class="panel">
@@ -229,64 +245,34 @@ onMounted(() => {
         <input v-model.number="config.fees.tradeCommissionRate" type="number" min="0" max="100" step="0.01" />
       </label>
     </div>
-  </section>
-
-  <section v-if="activeTab === 'withdraw'" class="panel">
-    <div class="panel-head">
-      <h2>提现规则</h2>
-      <span class="muted">设置提现金额限制和到账说明</span>
-    </div>
-    <div class="form-grid">
-      <label>
-        最低提现金额 (元)
-        <input v-model.number="config.withdrawRules.minAmount" type="number" min="0" step="1" />
-      </label>
-      <label>
-        单日提现上限 (元)
-        <input v-model.number="config.withdrawRules.dailyLimit" type="number" min="0" step="1" />
-      </label>
-      <label class="full-width">
-        到账时间说明
-        <input v-model="config.withdrawRules.arrivalDescription" type="text" placeholder="例如：T+1 工作日到账" />
-      </label>
+    <div class="actions-bar">
+      <p v-if="error" class="login-error">{{ error }}</p>
+      <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
+      <div class="actions">
+        <button class="primary" @click="confirmSave" :disabled="saving">{{ saving ? '保存中...' : '保存配置' }}</button>
+        <button @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '重置' }}</button>
+      </div>
     </div>
   </section>
 
   <section v-if="activeTab === 'register'" class="panel">
     <div class="panel-head">
       <h2>注册限制</h2>
-      <span class="muted">设置同一IP注册上限和设备指纹限制</span>
+      <span class="muted">设置同一IP注册上限</span>
     </div>
     <div class="form-grid">
       <label>
         同一IP注册上限
         <input v-model.number="config.registerLimits.maxPerIp" type="number" min="1" step="1" />
       </label>
-      <label class="checkbox-label">
-        <input v-model="config.registerLimits.deviceFingerprintEnabled" type="checkbox" />
-        启用设备指纹限制
-      </label>
     </div>
-  </section>
-
-  <section v-if="activeTab === 'notice'" class="panel">
-    <div class="panel-head">
-      <h2>全局公告编辑</h2>
-      <span class="muted">编辑首页全局公告内容</span>
-    </div>
-    <div class="form-row">
-      <label class="checkbox-label">
-        <input v-model="config.globalNotice.enabled" type="checkbox" />
-        启用全局公告
-      </label>
-    </div>
-    <label class="full-width">
-      公告内容
-      <textarea v-model="config.globalNotice.content" rows="6" placeholder="请输入公告内容，支持 HTML 标签"></textarea>
-    </label>
-    <div v-if="config.globalNotice.enabled && config.globalNotice.content" class="notice-preview">
-      <h3>预览</h3>
-      <div class="notice-box" v-html="config.globalNotice.content"></div>
+    <div class="actions-bar">
+      <p v-if="error" class="login-error">{{ error }}</p>
+      <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
+      <div class="actions">
+        <button class="primary" @click="confirmSave" :disabled="saving">{{ saving ? '保存中...' : '保存配置' }}</button>
+        <button @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '重置' }}</button>
+      </div>
     </div>
   </section>
 
@@ -320,14 +306,7 @@ onMounted(() => {
     </table>
   </section>
 
-  <section v-if="activeTab !== 'logs'" class="panel actions-bar">
-    <p v-if="error" class="login-error">{{ error }}</p>
-    <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
-    <div class="actions">
-      <button class="primary" @click="confirmSave" :disabled="saving">{{ saving ? '保存中...' : '保存配置' }}</button>
-      <button @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '重置' }}</button>
-    </div>
-  </section>
+
 
   <ActionDialog
     :open="confirmDialog.open"
@@ -366,15 +345,20 @@ onMounted(() => {
   grid-column: 1 / -1;
 }
 .checkbox-label {
-  display: flex;
+  display: inline-flex;
+  flex-direction: row;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   font-size: 14px;
   cursor: pointer;
+  margin: 0;
+  padding: 0;
 }
 .checkbox-label input[type="checkbox"] {
   width: 16px;
   height: 16px;
+  flex-shrink: 0;
 }
 .tag-list {
   display: flex;
@@ -430,5 +414,39 @@ onMounted(() => {
 }
 .actions-bar .actions {
   justify-content: flex-end;
+}
+.add-holiday-btn {
+  width: 60px;
+  height: 34px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.divider {
+  height: 1px;
+  background: var(--border-color, #e5e7eb);
+  margin: 16px 0;
+}
+.hint-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 10px 14px;
+  background: var(--bg-secondary, #f3f4f6);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.inline-link {
+  color: var(--primary, #0b7285);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.inline-link:hover {
+  opacity: 0.85;
 }
 </style>

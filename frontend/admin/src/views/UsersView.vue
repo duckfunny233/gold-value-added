@@ -25,6 +25,11 @@ const dialogLoading = ref(false)
 const error = ref('')
 const actionMessage = ref('')
 
+const currentPage = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
+const pageSizes = [10, 20, 50, 100]
+
 const freezeDialog = reactive({
   open: false,
   uid: '',
@@ -56,8 +61,13 @@ async function loadData() {
   loading.value = true
   error.value = ''
   try {
-    const data = await AdminService.getUsers(filters)
+    const data = await AdminService.getUsers({
+      ...filters,
+      page: currentPage.value,
+      pageSize: pageSize.value,
+    })
     rows.value = data.rows || []
+    total.value = data.total || rows.value.length
     selectedUser.value = data.selectedUser || {}
     relatedRecords.value = data.relatedRecords || { recharge: [], withdraw: [], trade: [], audit: [] }
     selectedUid.value = data.selectedUser?.uid || rows.value[0]?.uid || ''
@@ -68,29 +78,32 @@ async function loadData() {
   }
 }
 
-function escapeCsv(value) {
-  const normalized = value == null ? '' : String(value)
-  const escaped = normalized.replace(/"/g, '""')
-  return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped
+function handlePageChange(page) {
+  currentPage.value = page
+  loadData()
 }
 
-function downloadCsv(fileName, rowsToExport) {
-  if (!rowsToExport.length) {
-    error.value = '暂无可导出的用户数据'
-    return
+function handlePageSizeChange(size) {
+  pageSize.value = size
+  currentPage.value = 1
+  loadData()
+}
+
+function truncateId(id) {
+  if (!id) return '-'
+  return id.length > 10 ? id.slice(0, 10) + '...' : id
+}
+
+async function copyUserId(id) {
+  try {
+    await navigator.clipboard.writeText(id)
+    actionMessage.value = '用户ID已复制'
+    setTimeout(() => {
+      actionMessage.value = ''
+    }, 2000)
+  } catch (err) {
+    error.value = '复制失败'
   }
-  const headers = Object.keys(rowsToExport[0])
-  const content = [
-    headers.join(','),
-    ...rowsToExport.map((row) => headers.map((header) => escapeCsv(row[header])).join(',')),
-  ].join('\n')
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = fileName
-  link.click()
-  URL.revokeObjectURL(url)
 }
 
 async function selectUser(uid) {
@@ -100,8 +113,7 @@ async function selectUser(uid) {
   loading.value = true
   error.value = ''
   try {
-    const data = await AdminService.getUsers({ ...filters, uid })
-    rows.value = data.rows || []
+    const data = await AdminService.getUsers({ uid })
     selectedUser.value = data.selectedUser || {}
     relatedRecords.value = data.relatedRecords || { recharge: [], withdraw: [], trade: [], audit: [] }
   } catch (err) {
@@ -126,24 +138,18 @@ async function runAction(handler, successMessage) {
   }
 }
 
-function handleExportUsers() {
-  downloadCsv(
-    `admin-users-${Date.now()}.csv`,
-    rows.value.map((item) => ({
-      userId: item.userId,
-      uid: item.uid,
-      sequenceNo: item.sequenceNo,
-      nickname: item.nickname,
-      realNameStatus: item.realNameStatus,
-      rechargeStatus: item.rechargeStatus,
-      withdrawStatus: item.withdrawStatus,
-      cashAsset: item.cashAsset,
-      goldHoldingGrams: item.goldHoldingGrams,
-      totalAsset: item.totalAsset,
-      userStatus: item.userStatus,
-    })),
+async function handleGenerateReport() {
+  await runAction(
+    () =>
+      AdminService.generateReport({
+        reportType: 'operate',
+        timeRange: filters.timeRange,
+        uid: filters.uid,
+        format: 'csv',
+        name: '用户列表导出',
+      }),
+    '报表任务已生成，请前往报表中心下载',
   )
-  actionMessage.value = '用户列表已基于真实查询结果导出'
 }
 
 function openFreezeDialog(row) {
@@ -236,7 +242,7 @@ onMounted(loadData)
 </script>
 
 <template>
-  <PageHeader title="用户管理" description="完成用户全生命周期管理与跨模块关联查询。" />
+  <PageHeader title="用户管理" />
 
   <section class="panel">
     <div class="form-row">
@@ -251,10 +257,19 @@ onMounted(loadData)
           <option value="pending">待实名</option>
         </select>
       </label>
+      <div class="search-container">
+        <button class="primary search-btn" @click="loadData" :disabled="loading">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
+          </svg>
+          搜索
+        </button>
+      </div>
     </div>
     <div class="actions">
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查询' }}</button>
-      <button @click="handleExportUsers">导出用户</button>
+      <button @click="handleGenerateReport" :disabled="loading">生成报表</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
     <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
@@ -277,7 +292,6 @@ onMounted(loadData)
             <th>充值状态</th>
             <th>提现状态</th>
             <th>现金资产</th>
-            <th>持有黄金克数</th>
             <th>总资产</th>
             <th>用户状态</th>
             <th>操作</th>
@@ -290,7 +304,15 @@ onMounted(loadData)
             @click="selectUser(row.uid)"
             :class="{ 'is-selected': selectedUid === row.uid }"
           >
-            <td>{{ row.userId }}</td>
+            <td>
+              <span :title="row.userId" class="truncated-id">{{ truncateId(row.userId) }}</span>
+              <button class="copy-btn" @click.stop="copyUserId(row.userId)" title="复制用户ID">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                </svg>
+              </button>
+            </td>
             <td>{{ row.uid }}</td>
             <td>{{ row.sequenceNo }}</td>
             <td>{{ row.nickname }}</td>
@@ -298,34 +320,34 @@ onMounted(loadData)
             <td>{{ row.rechargeStatus }}</td>
             <td>{{ row.withdrawStatus }}</td>
             <td>{{ row.cashAsset }}</td>
-            <td>{{ row.goldHoldingGrams }}</td>
             <td>{{ row.totalAsset }}</td>
             <td>{{ row.userStatus }}</td>
-            <td>
-              <div class="cell-actions">
-                <button
-                  v-if="row.userStatus !== '冻结'"
-                  class="warn"
-                  type="button"
-                  @click.stop="openFreezeDialog(row)"
-                >
-                  冻结
-                </button>
-                <button
-                  v-else
-                  type="button"
-                  @click.stop="openFreezeDialog(row)"
-                >
-                  解冻
-                </button>
-              </div>
+            <td class="actions-cell">
+              <button
+                :class="{ 'warn': row.userStatus !== '冻结' }"
+                type="button"
+                @click.stop="openFreezeDialog(row)"
+              >
+                {{ row.userStatus !== '冻结' ? '冻结' : '解冻' }}
+              </button>
             </td>
           </tr>
           <tr v-if="!rows.length">
-            <td colspan="12" class="table-empty">暂无符合条件的用户</td>
+            <td colspan="11" class="table-empty">暂无符合条件的用户</td>
           </tr>
         </tbody>
       </table>
+      <div class="pagination-bar">
+        <span class="muted">共 {{ total }} 条，每页</span>
+        <select v-model="pageSize" @change="handlePageSizeChange(pageSize)" class="page-size-select">
+          <option v-for="size in pageSizes" :key="size" :value="size">{{ size }}</option>
+        </select>
+        <span class="muted">条，当前第 {{ currentPage }} 页</span>
+        <div class="actions compact">
+          <button @click="handlePageChange(currentPage - 1)" :disabled="currentPage <= 1">上一页</button>
+          <button @click="handlePageChange(currentPage + 1)" :disabled="currentPage >= Math.ceil(total / pageSize) || total === 0">下一页</button>
+        </div>
+      </div>
     </article>
 
     <aside class="panel">
@@ -380,6 +402,9 @@ onMounted(loadData)
           </div>
         </div>
         <div v-else class="muted">未绑定收款方式</div>
+        <div class="actions" style="margin-top: 12px;">
+          <RouterLink to="/realname-audit" class="primary-btn-link">跳转到实名审核页</RouterLink>
+        </div>
       </div>
 
       <div v-if="activeDetailTab === 'assets'" class="kv-list">
@@ -455,7 +480,14 @@ onMounted(loadData)
     </div>
     <ul class="list-plain">
       <li v-for="item in relatedRecords[activeRecordTab] || []" :key="item">{{ item }}</li>
+      <li v-if="!(relatedRecords[activeRecordTab] || []).length" class="muted">暂无记录</li>
     </ul>
+    <div class="record-link-bar">
+      <RouterLink v-if="activeRecordTab === 'recharge'" to="/funds" class="record-nav-link">查看完整充值记录与对账 →</RouterLink>
+      <RouterLink v-else-if="activeRecordTab === 'withdraw'" to="/funds" class="record-nav-link">进入提现审核队列 →</RouterLink>
+      <RouterLink v-else-if="activeRecordTab === 'trade'" to="/trades" class="record-nav-link">进入交易管理详情 →</RouterLink>
+      <RouterLink v-else-if="activeRecordTab === 'audit'" to="/audit" class="record-nav-link">进入审计追溯详情 →</RouterLink>
+    </div>
   </section>
 
   <ActionDialog
@@ -601,5 +633,106 @@ onMounted(loadData)
   border: 1px solid var(--border-color, #d1d5db);
   border-radius: 6px;
   font-size: 14px;
+}
+.primary-btn-link {
+  display: inline-block;
+  background: var(--primary, #0b7285);
+  color: #fff;
+  border: 1px solid var(--primary, #0b7285);
+  border-radius: 8px;
+  padding: 8px 14px;
+  text-decoration: none;
+  font-size: 14px;
+  cursor: pointer;
+}
+.primary-btn-link:hover {
+  opacity: 0.9;
+}
+.record-link-bar {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color, #e5e7eb);
+}
+.record-nav-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--primary, #0b7285);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  gap: 4px;
+}
+.record-nav-link:hover {
+  text-decoration: underline;
+}
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color, #e5e7eb);
+  flex-wrap: nowrap;
+}
+.page-size-select {
+  padding: 4px 6px;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 4px;
+  font-size: 13px;
+  width: 60px;
+  min-width: 60px;
+  box-sizing: border-box;
+}
+.pagination-bar .actions.compact button {
+  padding: 4px 12px;
+  font-size: 13px;
+}
+.actions-cell {
+  white-space: nowrap;
+}
+.actions-cell button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.truncated-id {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+.copy-btn {
+  display: inline;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  vertical-align: text-bottom;
+}
+.copy-btn:hover {
+  color: #111827;
+}
+.search-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.search-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 14px;
+  width: auto;
+  height: 34px;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 </style>

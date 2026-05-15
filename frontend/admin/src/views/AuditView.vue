@@ -108,13 +108,21 @@ async function handleVerifyHash() {
   await runAction(() => AdminService.verifyAuditTraceHash(traceId), `trace ${traceId} 哈希校验已完成`)
 }
 
-async function handleExportTrace() {
-  const traceId = getCurrentTraceId()
-  if (!traceId) {
-    error.value = '请先选择一条链路'
-    return
-  }
-  await runAction(() => AdminService.exportAuditTrace(traceId, 'csv'), `trace ${traceId} 已导出`)
+async function handleGenerateReport() {
+  await runAction(
+    () =>
+      AdminService.generateReport({
+        reportType: 'audit',
+        timeRange: filters.timeRange,
+        uid: filters.uid,
+        module: filters.module,
+        eventType: filters.eventType,
+        traceId: filters.traceId,
+        format: 'csv',
+        name: '审计链路导出',
+      }),
+    '报表任务已生成，请前往报表中心下载',
+  )
 }
 
 async function handleCompareData() {
@@ -131,7 +139,7 @@ onMounted(loadData)
 </script>
 
 <template>
-  <PageHeader title="审计追溯" description="支持按追踪号追踪全链路操作，完成数据溯源、防伪校验和合规审计。" />
+  <PageHeader title="审计追溯" />
 
   <section class="panel">
     <div class="form-row">
@@ -158,10 +166,8 @@ onMounted(loadData)
       </label>
     </div>
     <div class="actions">
-      <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查看链路' }}</button>
-      <button @click="handleExportTrace">导出链路</button>
-      <button @click="handleVerifyHash">校验哈希</button>
-      <button @click="handleCompareData">对比数据</button>
+      <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查询' }}</button>
+      <button @click="handleGenerateReport" :disabled="loading">生成报表</button>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
     <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>

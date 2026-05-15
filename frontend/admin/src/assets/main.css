@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --bg: #f4f6f8;
   --panel: #ffffff;
   --text: #122230;
@@ -172,7 +172,7 @@ body {
 
 .form-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
   gap: 10px;
 }
 
@@ -550,6 +550,43 @@ th {
   justify-content: space-between;
   gap: 12px;
   margin-top: 14px;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.status-label {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.badge-success {
+  color: var(--success);
+  background: #ecfdf3;
+}
+
+.badge-warn {
+  color: var(--accent);
+  background: #fffbeb;
+}
+
+.badge-danger {
+  color: var(--danger);
+  background: #fef3f2;
 }
 
 @media (max-width: 1100px) {
