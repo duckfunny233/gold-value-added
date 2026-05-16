@@ -4,6 +4,9 @@ import ActionDialog from '../components/ActionDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useQueryFilters } from '../composables/useQueryFilters'
 import { AdminService } from '../services/admin'
+import { MVP_SHOW_RISK_RULES } from '../constants/mvp-features'
+
+const showRiskRules = MVP_SHOW_RISK_RULES
 
 const filters = reactive({
   uid: '',
@@ -139,20 +142,26 @@ async function loadData() {
   loading.value = true
   error.value = ''
   try {
-    const [data, securityRoles, securityUsers] = await Promise.all([
-      AdminService.getRisk(filters),
+    const securityTasks = [
       AdminService.getAdminSecurityRoles().catch(() => ({ rows: [] })),
       AdminService.getAdminSecurityUsers().catch(() => ({ rows: [] })),
+    ]
+    const [securityRoles, securityUsers, data] = await Promise.all([
+      ...securityTasks,
+      showRiskRules ? AdminService.getRisk(filters) : Promise.resolve(null),
     ])
-    roles.value = data.roles || []
     adminRoleOptions.value = securityRoles.rows || []
     adminUsers.value = securityUsers.rows || []
-    warnings.value = data.warnings || []
-    logs.value = data.logs || []
-    currentRules.value = data.currentRules || {}
-    ruleVersions.value = data.ruleVersions || []
+    if (showRiskRules && data) {
+      roles.value = data.roles || []
+      warnings.value = data.warnings || []
+      logs.value = data.logs || []
+      currentRules.value = data.currentRules || {}
+      ruleVersions.value = data.ruleVersions || []
+      tradingFlowLabel.value = data.tradingFlowLabel || ''
+    }
   } catch (err) {
-    error.value = err.message || '风控数据加载失败'
+    error.value = err.message || '数据加载失败'
   } finally {
     loading.value = false
   }
@@ -268,11 +277,11 @@ onMounted(loadData)
 </script>
 
 <template>
-  <PageHeader title="权限与风控" />
+  <PageHeader title="权限管理" />
 
   <section class="panel">
     <div class="form-row">
-      <label>用户UID<input v-model="filters.uid" placeholder="请输入用户UID" /></label>
+      <label>账号/显示名<input v-model="filters.uid" placeholder="搜索管理员账号或显示名" /></label>
       <label>
         角色类型
         <select v-model="filters.role">
@@ -282,36 +291,40 @@ onMounted(loadData)
           <option value="audit">审计</option>
         </select>
       </label>
-      <label>
-        风险类型
-        <select v-model="filters.riskType">
-          <option value="">全部</option>
-          <option value="freeze">冻结</option>
-          <option value="withdraw">提现拦截</option>
-          <option value="warning">风险预警</option>
-        </select>
-      </label>
-      <label>
-        预警级别
-        <select v-model="filters.warningLevel">
-          <option value="">全部</option>
-          <option value="high">高</option>
-          <option value="medium">中</option>
-          <option value="low">低</option>
-        </select>
-      </label>
+      <template v-if="showRiskRules">
+        <label>
+          风险类型
+          <select v-model="filters.riskType">
+            <option value="">全部</option>
+            <option value="freeze">冻结</option>
+            <option value="withdraw">提现拦截</option>
+            <option value="warning">风险预警</option>
+          </select>
+        </label>
+        <label>
+          预警级别
+          <select v-model="filters.warningLevel">
+            <option value="">全部</option>
+            <option value="high">高</option>
+            <option value="medium">中</option>
+            <option value="low">低</option>
+          </select>
+        </label>
+      </template>
     </div>
     <div class="actions">
       <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查询' }}</button>
       <button @click="openAdminDialog">增加管理员</button>
-      <button @click="openRuleDialog">更新风控规则</button>
-      <button @click="openRollbackDialog" v-if="ruleVersions.length">规则回滚</button>
+      <template v-if="showRiskRules">
+        <button @click="openRuleDialog">更新风控规则</button>
+        <button @click="openRollbackDialog" v-if="ruleVersions.length">规则回滚</button>
+      </template>
     </div>
     <p v-if="error" class="login-error">{{ error }}</p>
     <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
   </section>
 
-  <section class="panel" v-if="currentRules && Object.keys(currentRules).length">
+  <section v-if="showRiskRules && currentRules && Object.keys(currentRules).length" class="panel">
     <div class="panel-head">
       <h2>当前风控规则</h2>
       <span class="muted">版本 {{ currentRules.versionId || '-' }} | 更新于 {{ currentRules.updatedAt || '-' }}</span>
@@ -356,7 +369,7 @@ onMounted(loadData)
     </table>
   </section>
 
-  <section class="panel">
+  <section v-if="showRiskRules" class="panel">
     <div class="panel-head">
       <h2>风控日志</h2>
       <span class="muted">所有规则调整和权限变更必须留痕</span>
@@ -386,6 +399,7 @@ onMounted(loadData)
     </table>
   </section>
 
+  <template v-if="showRiskRules">
   <ActionDialog
     :open="ruleDialog.open"
     title="更新风控规则"
@@ -533,6 +547,7 @@ onMounted(loadData)
       </table>
     </div>
   </ActionDialog>
+  </template>
 
   <ActionDialog
     :open="adminDialog.open"

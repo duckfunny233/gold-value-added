@@ -16,6 +16,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "seed:volume": "ts-node scripts/seed-volume-v2.ts",
+    "backfill:register-audit": "ts-node scripts/backfill-user-register-audit.ts",
+    "backfill:register-ip": "ts-node scripts/backfill-register-ip.ts",
     "test": "jest",
     "test:watch": "jest --watch"
   },

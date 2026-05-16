@@ -181,18 +181,50 @@ async function createVolumeData(count: number) {
         const baseTentative = baseCash + baseAppreciation
         const baseTotal = baseTentative + baseGold * GOLD_REFERENCE_PRICE
 
+        const demoPhone = `138${String(10000000 + i).padStart(8, '0')}`
+        const demoIdNumber =
+          realNameStatus === RealNameStatus.VERIFIED
+            ? `11010119900301${String(i + 1).padStart(4, '0')}`
+            : null
+
         const user = await tx.user.create({
           data: {
             uid,
             username,
             passwordHash: 'seeded-password-hash',
             nickname,
+            phone: demoPhone,
             status: userStatus,
             realNameStatus,
             createdAt,
             updatedAt: createdAt,
           },
         })
+
+        if (realNameStatus === RealNameStatus.VERIFIED && demoIdNumber) {
+          await tx.auditLog.create({
+            data: {
+              userId: user.id,
+              actorType: 'USER',
+              actorId: user.id,
+              module: 'auth',
+              action: 'register',
+              traceId: randomUUID(),
+              payload: {
+                uid,
+                username,
+                phone: demoPhone,
+                realName: nickname,
+                idNumber: demoIdNumber,
+                idNumberHash: sha256(demoIdNumber),
+                registerChannel: 'seed',
+                registerIp: `10.20.${Math.floor(i / 250) + 1}.${(i % 250) + 1}`,
+              } as Prisma.InputJsonValue,
+              createdAt,
+            },
+          })
+          auditCount += 1
+        }
 
         await tx.paymentProfile.create({
           data: {

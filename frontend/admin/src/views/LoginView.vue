@@ -25,7 +25,7 @@ const submit = async () => {
     localStorage.setItem('admin_token', result.token)
     localStorage.setItem('admin_user', JSON.stringify(result.adminUser))
     localStorage.setItem('admin_roles', JSON.stringify(result.adminUser.roleCodes || []))
-    router.push('/dashboard')
+    router.push('/users')
   } catch (e) {
     error.value = e.message || '登录失败，请重试'
   } finally {

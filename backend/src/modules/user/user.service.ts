@@ -46,6 +46,23 @@ type AppPaymentMethod = {
   updatedAt: string
 }
 
+type MarketUnitPrices = {
+  goldPricePerGram: number
+  silverPricePerGram: number
+}
+
+type LiveAssetMetrics = {
+  tentativeAsset: number
+  cashAsset: number
+  goldGrams: number
+  silverGrams: number
+  marketValue: number
+  availableBalance: number
+  totalAsset: number
+  appreciationIncome: number
+  withdrawFrozenAmount: number
+}
+
 const METAL_SPECS = [1, 10, 50, 100, 1000, 5000] as const
 const GOLD_UNIT_PRICE = 1046.2
 const SILVER_UNIT_PRICE = 18.83
@@ -178,63 +195,40 @@ export class UserService {
       throw new NotFoundException('用户资产不存在')
     }
 
+    const metrics = await this.computeLiveAssetMetrics(user.id, user.asset)
+
     return {
       uid: user.uid,
       username: user.username,
-      tentativeAsset: toNumber(user.asset.tentativeAsset),
-      cashAsset: toNumber(user.asset.cashAsset),
-      appreciationIncome: toNumber(user.asset.appreciationIncome),
-      goldHoldingGrams: toNumber(user.asset.goldHoldingGrams),
-      withdrawFrozenAmount: toNumber(user.asset.withdrawFrozenAmount),
-      totalAsset: toNumber(user.asset.totalAsset),
+      tentativeAsset: metrics.tentativeAsset,
+      cashAsset: metrics.cashAsset,
+      appreciationIncome: metrics.appreciationIncome,
+      goldHoldingGrams: metrics.goldGrams,
+      withdrawFrozenAmount: metrics.withdrawFrozenAmount,
+      marketValue: metrics.marketValue,
+      totalAsset: metrics.totalAsset,
       updatedAt: user.asset.updatedAt,
     }
   }
 
   async getAppProfile(query: UserQueryDto = {}) {
     const user = await this.resolveAppUser(query)
-    const asset = user.asset
-    const goldGrams = toNumber(asset?.goldHoldingGrams)
-    const silverGrams = await this.getUserSilverHoldingGrams(user.id)
-    const tentativeAsset = toNumber(asset?.tentativeAsset)
-    const appreciationIncome = toNumber(asset?.appreciationIncome)
-    const withdrawFrozenAmount = toNumber(asset?.withdrawFrozenAmount)
+    const metrics = await this.computeLiveAssetMetrics(user.id, user.asset)
+    const {
+      goldGrams,
+      silverGrams,
+      tentativeAsset,
+      appreciationIncome,
+      withdrawFrozenAmount,
+      marketValue,
+      availableBalance,
+      totalAsset,
+    } = metrics
+    const { goldPricePerGram, silverPricePerGram } = await this.resolveMarketUnitPrices()
 
     const userAvatar =
       user.avatar ||
       `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.uid)}`
-
-    // 使用真实行情计算持仓市值；失败时回退到常量基准价，避免页面不可用
-    let goldPricePerGram = GOLD_UNIT_PRICE
-    let silverPricePerGram = SILVER_UNIT_PRICE
-    if (this.marketService) {
-      const [goldResult, silverResult] = await Promise.allSettled([
-        this.marketService.getTicker('AU9999'),
-        this.marketService.getTicker('AG9999'),
-      ])
-
-      if (goldResult.status === 'fulfilled') {
-        const price = Number(goldResult.value?.price)
-        if (Number.isFinite(price) && price > 0) {
-          goldPricePerGram = price
-        }
-      }
-      if (silverResult.status === 'fulfilled') {
-        const price = Number(silverResult.value?.price)
-        if (Number.isFinite(price) && price > 0) {
-          silverPricePerGram = price
-        }
-      }
-    }
-
-    const marketValue = goldGrams * goldPricePerGram + silverGrams * silverPricePerGram
-
-    // 业务口径：
-    // 1) 暂定资产 = 充值/支付资金沉淀，不随金价波动
-    // 2) 持仓市值 = 实时行情价 * 持仓克数
-    // 3) 总资产 = 暂定资产 + 持仓市值
-    const availableBalance = Math.max(tentativeAsset, 0)
-    const totalAsset = availableBalance + marketValue
 
     const principalBalance = Math.max(totalAsset - appreciationIncome, 0)
     const withdrawablePrincipal = Math.max(principalBalance - withdrawFrozenAmount, 0)
@@ -398,183 +392,82 @@ export class UserService {
   }
 
   async getAdminUsers(query: AdminUsersQueryDto) {
+    const page = Math.max(1, Number(query.page) || 1)
+    const pageSize = Math.min(100, Math.max(1, Number(query.pageSize) || 10))
+    const emptyPayload = {
+      rows: [] as Array<Record<string, unknown>>,
+      total: 0,
+      selectedUser: {},
+      relatedRecords: { recharge: [], withdraw: [], trade: [], audit: [] },
+    }
+
+    const exactUid = query.uid?.trim()
+    if (exactUid) {
+      const exactUser = await this.prisma.user.findUnique({
+        where: { uid: exactUid },
+        include: { asset: true },
+      })
+      if (exactUser) {
+        return this.composeAdminUsersPayload({
+          query,
+          page,
+          pageSize,
+          users: [exactUser],
+          total: 1,
+          selectedUserId: exactUser.id,
+        })
+      }
+    }
+
     const where: Prisma.UserWhereInput = {
-      ...(query.userId ? { id: { contains: query.userId } } : {}),
-      ...(query.uid ? { uid: { contains: query.uid, mode: 'insensitive' as const } } : {}),
+      ...(query.userId?.trim() ? { id: { contains: query.userId.trim() } } : {}),
+      ...(exactUid ? { uid: { contains: exactUid, mode: 'insensitive' as const } } : {}),
       ...(query.realNameStatus ? this.buildRealNameWhere(query.realNameStatus) : {}),
       ...(query.timeRange ? { createdAt: resolveAdminTimeRange(query.timeRange) } : {}),
     }
 
-    const total = await this.prisma.user.count({ where })
+    const needsPostFilter = Boolean(
+      query.sequenceNo?.trim() || query.rechargeStatus?.trim() || query.withdrawStatus?.trim(),
+    )
 
-    const page = Number(query.page) || 1
-    const pageSize = Number(query.pageSize) || 10
-    const skip = (page - 1) * pageSize
+    if (needsPostFilter) {
+      const users = await this.prisma.user.findMany({
+        where,
+        include: { asset: true },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      })
+      if (!users.length) {
+        return emptyPayload
+      }
+      return this.composeAdminUsersPayload({
+        query,
+        page,
+        pageSize,
+        users,
+        postFilter: true,
+      })
+    }
+
+    const total = await this.prisma.user.count({ where })
+    if (!total) {
+      return emptyPayload
+    }
 
     const users = await this.prisma.user.findMany({
       where,
-      include: {
-        asset: true,
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-      skip,
+      include: { asset: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      skip: (page - 1) * pageSize,
       take: pageSize,
     })
 
-    if (!users.length) {
-      return {
-        rows: [],
-        selectedUser: {},
-        relatedRecords: { recharge: [], withdraw: [], trade: [], audit: [] },
-      }
-    }
-
-    const userIds = users.map((item) => item.id)
-    const [rechargeOrders, withdrawalOrders, tradeOrders, auditLogs] = await Promise.all([
-      this.prisma.rechargeOrder.findMany({
-        where: { userId: { in: userIds } },
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.withdrawalOrder.findMany({
-        where: { userId: { in: userIds } },
-        orderBy: { submittedAt: 'desc' },
-      }),
-      this.prisma.tradeOrder.findMany({
-        where: { userId: { in: userIds } },
-        orderBy: { submittedAt: 'desc' },
-      }),
-      this.prisma.auditLog.findMany({
-        where: { userId: { in: userIds } },
-        orderBy: { createdAt: 'desc' },
-      }),
-    ])
-
-    const hashRecords =
-      rechargeOrders.length || withdrawalOrders.length || tradeOrders.length
-        ? await this.prisma.hashRecord.findMany({
-            where: {
-              OR: [
-                { rechargeOrderId: { in: unique(rechargeOrders.map((item) => item.id)) } },
-                { withdrawalOrderId: { in: unique(withdrawalOrders.map((item) => item.id)) } },
-                { tradeOrderId: { in: unique(tradeOrders.map((item) => item.id)) } },
-              ],
-            },
-            orderBy: { createdAt: 'desc' },
-          })
-        : []
-
-    const rechargeByUserId = new Map<string, typeof rechargeOrders>()
-    const withdrawByUserId = new Map<string, typeof withdrawalOrders>()
-    const tradeByUserId = new Map<string, typeof tradeOrders>()
-    const auditByUserId = new Map<string, typeof auditLogs>()
-
-    for (const item of rechargeOrders) {
-      const rows = rechargeByUserId.get(item.userId) || []
-      rows.push(item)
-      rechargeByUserId.set(item.userId, rows)
-    }
-    for (const item of withdrawalOrders) {
-      const rows = withdrawByUserId.get(item.userId) || []
-      rows.push(item)
-      withdrawByUserId.set(item.userId, rows)
-    }
-    for (const item of tradeOrders) {
-      const rows = tradeByUserId.get(item.userId) || []
-      rows.push(item)
-      tradeByUserId.set(item.userId, rows)
-    }
-    for (const item of auditLogs) {
-      if (!item.userId) {
-        continue
-      }
-      const rows = auditByUserId.get(item.userId) || []
-      rows.push(item)
-      auditByUserId.set(item.userId, rows)
-    }
-
-    const rows = users
-      .map((user, index) => {
-        const recharges = rechargeByUserId.get(user.id) || []
-        const withdrawals = withdrawByUserId.get(user.id) || []
-
-        return {
-          userId: user.id,
-          uid: user.uid,
-          sequenceNo: this.createSequenceNo(index + 1),
-          nickname: user.nickname || user.username,
-          realNameStatus: this.mapRealNameLabel(user.realNameStatus),
-          rechargeStatus: this.mapRechargeLabel(recharges),
-          withdrawStatus: this.mapWithdrawability(user.status, user.asset?.tentativeAsset, user.asset?.withdrawFrozenAmount),
-          cashAsset: formatCurrency(toNumber(user.asset?.cashAsset)),
-          goldHoldingGrams: formatGrams(toNumber(user.asset?.goldHoldingGrams)),
-          totalAsset: formatCurrency(toNumber(user.asset?.totalAsset)),
-          userStatus: this.mapUserStatus(user.status),
-          _user: user,
-        }
-      })
-      .filter((item) => this.matchesSequenceNo(item.sequenceNo, query.sequenceNo))
-      .filter((item) => this.matchesRechargeStatus(item.rechargeStatus, query.rechargeStatus))
-      .filter((item) => this.matchesWithdrawStatus(item.withdrawStatus, query.withdrawStatus))
-
-    if (!rows.length) {
-      return {
-        rows: [],
-        total,
-        selectedUser: {},
-        relatedRecords: { recharge: [], withdraw: [], trade: [], audit: [] },
-      }
-    }
-
-    const selectedRow =
-      rows.find((item) => item.uid === query.uid || item.userId === query.userId || item.sequenceNo === query.sequenceNo) ||
-      rows[0]
-    const selectedUser = selectedRow._user
-    const selectedRecharges = rechargeByUserId.get(selectedUser.id) || []
-    const selectedWithdrawals = withdrawByUserId.get(selectedUser.id) || []
-    const selectedTrades = tradeByUserId.get(selectedUser.id) || []
-    const selectedAudits = auditByUserId.get(selectedUser.id) || []
-
-    return {
-      rows: rows.map(({ _user: _ignored, ...item }) => item),
+    return this.composeAdminUsersPayload({
+      query,
+      page,
+      pageSize,
+      users,
       total,
-      selectedUser: {
-        uid: selectedUser.uid,
-          appreciationIncome: formatCurrency(toNumber(selectedUser.asset?.appreciationIncome)),
-          payoutProfileSummary: this.buildPayoutProfileSummary(selectedWithdrawals),
-          riskStatus: this.buildRiskStatus(
-            selectedUser.status,
-            selectedWithdrawals,
-            hashRecords.filter((item) =>
-              selectedRecharges.some((order) => order.id === item.rechargeOrderId) ||
-              selectedWithdrawals.some((order) => order.id === item.withdrawalOrderId) ||
-              selectedTrades.some((order) => order.id === item.tradeOrderId),
-            ),
-          ),
-          lastTradeAt: formatDateTime(selectedTrades[0]?.submittedAt),
-        latestTraceId:
-          selectedAudits[0]?.traceId ||
-          selectedTrades[0]?.traceId ||
-          selectedWithdrawals[0]?.traceId ||
-          selectedRecharges[0]?.traceId ||
-          '-',
-      },
-      relatedRecords: {
-        recharge: selectedRecharges.slice(0, 3).map((item) => {
-          return `充值订单 ${item.id} / ${this.mapRechargeRecordStatus(item.status)} / ${formatDateTime(item.createdAt)}`
-        }),
-        withdraw: selectedWithdrawals.slice(0, 3).map((item: WithdrawalOrder) => {
-          return `提现单 ${item.id} / ${this.mapWithdrawalRecordStatus(item.status)} / ${formatDateTime(item.submittedAt)}`
-        }),
-        trade: selectedTrades.slice(0, 3).map((item: TradeOrder) => {
-          return `交易单 ${item.id} / ${item.side === 'BUY' ? '买入' : '卖出'} / ${this.mapTradeStatus(item.status)}`
-        }),
-        audit: selectedAudits.slice(0, 3).map((item) => {
-          return `审计日志 ${item.traceId} / ${this.mapModuleLabel(item.module)} / ${this.mapAuditAction(item.action)}`
-        }),
-      },
-    }
+    })
   }
 
   async manualCheckUser(uid: string, body: AdminUserManualCheckDto, actor: AdminActor) {
@@ -958,6 +851,454 @@ export class UserService {
         createdAt: 'asc',
       },
     })
+  }
+
+  private async composeAdminUsersPayload(input: {
+    query: AdminUsersQueryDto
+    page: number
+    pageSize: number
+    users: Array<
+      Prisma.UserGetPayload<{
+        include: { asset: true }
+      }>
+    >
+    total?: number
+    selectedUserId?: string
+    postFilter?: boolean
+  }) {
+    const sequenceMap = await this.buildUserSequenceMap()
+    const userIds = input.users.map((item) => item.id)
+    const bundles = await this.loadAdminUserRelationBundles(userIds)
+    const marketPrices = await this.resolveMarketUnitPrices()
+
+    let rowCandidates = await Promise.all(
+      input.users.map(async (user) => {
+        const recharges = bundles.rechargeByUserId.get(user.id) || []
+        const withdrawals = bundles.withdrawByUserId.get(user.id) || []
+        const metrics = await this.computeLiveAssetMetrics(user.id, user.asset, marketPrices)
+
+        return {
+          userId: user.id,
+          uid: user.uid,
+          sequenceNo: sequenceMap.get(user.id) || '-',
+          nickname: user.nickname || user.username,
+          realNameStatus: this.mapRealNameLabel(user.realNameStatus),
+          rechargeStatus: this.mapRechargeLabel(recharges),
+          withdrawStatus: this.mapWithdrawability(
+            user.status,
+            user.asset?.tentativeAsset,
+            user.asset?.withdrawFrozenAmount,
+          ),
+          cashAsset: formatCurrency(metrics.cashAsset),
+          goldHoldingGrams: formatGrams(metrics.goldGrams),
+          totalAsset: formatCurrency(metrics.totalAsset),
+          userStatus: this.mapUserStatus(user.status),
+          _user: user,
+        }
+      }),
+    )
+
+    rowCandidates = rowCandidates
+      .filter((item) => this.matchesSequenceNo(item.sequenceNo, input.query.sequenceNo))
+      .filter((item) => this.matchesRechargeStatus(item.rechargeStatus, input.query.rechargeStatus))
+      .filter((item) => this.matchesWithdrawStatus(item.withdrawStatus, input.query.withdrawStatus))
+
+    const total = input.postFilter ? rowCandidates.length : input.total ?? rowCandidates.length
+    const skip = (input.page - 1) * input.pageSize
+    const pagedRows = input.postFilter ? rowCandidates.slice(skip, skip + input.pageSize) : rowCandidates
+
+    if (!pagedRows.length) {
+      return {
+        rows: [],
+        total,
+        selectedUser: {},
+        relatedRecords: { recharge: [], withdraw: [], trade: [], audit: [] },
+      }
+    }
+
+    const selectedRow =
+      pagedRows.find(
+        (item) =>
+          item.userId === input.selectedUserId ||
+          item.uid === input.query.uid?.trim() ||
+          item.userId === input.query.userId?.trim() ||
+          item.sequenceNo === input.query.sequenceNo?.trim(),
+      ) || pagedRows[0]
+    const selectedUser = selectedRow._user
+    const selectedRecharges = bundles.rechargeByUserId.get(selectedUser.id) || []
+    const selectedWithdrawals = bundles.withdrawByUserId.get(selectedUser.id) || []
+    const selectedTrades = bundles.tradeByUserId.get(selectedUser.id) || []
+    const selectedAudits = bundles.auditByUserId.get(selectedUser.id) || []
+    const selectedHashRecords = bundles.hashRecords.filter(
+      (item) =>
+        selectedRecharges.some((order) => order.id === item.rechargeOrderId) ||
+        selectedWithdrawals.some((order) => order.id === item.withdrawalOrderId) ||
+        selectedTrades.some((order) => order.id === item.tradeOrderId),
+    )
+
+    const selectedUserDetail = await this.buildAdminSelectedUserDetail(
+      selectedUser,
+      selectedWithdrawals,
+      selectedRecharges,
+      selectedTrades,
+      selectedAudits,
+      selectedHashRecords,
+      input.query,
+    )
+
+    return {
+      rows: pagedRows.map(({ _user: _ignored, ...item }) => item),
+      total,
+      selectedUser: selectedUserDetail,
+      relatedRecords: {
+        recharge: selectedRecharges.slice(0, 3).map((item) => {
+          return `充值订单 ${item.id} / ${this.mapRechargeRecordStatus(item.status)} / ${formatDateTime(item.createdAt)}`
+        }),
+        withdraw: selectedWithdrawals.slice(0, 3).map((item: WithdrawalOrder) => {
+          return `提现单 ${item.id} / ${this.mapWithdrawalRecordStatus(item.status)} / ${formatDateTime(item.submittedAt)}`
+        }),
+        trade: selectedTrades.slice(0, 3).map((item: TradeOrder) => {
+          return `交易单 ${item.id} / ${item.side === 'BUY' ? '买入' : '卖出'} / ${this.mapTradeStatus(item.status)}`
+        }),
+        audit: selectedAudits.slice(0, 3).map((item) => {
+          return `审计日志 ${item.traceId} / ${this.mapModuleLabel(item.module)} / ${this.mapAuditAction(item.action)}`
+        }),
+      },
+    }
+  }
+
+  private async buildUserSequenceMap() {
+    const orderedUsers = await this.prisma.user.findMany({
+      select: { id: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    })
+
+    const sequenceMap = new Map<string, string>()
+    orderedUsers.forEach((user, index) => {
+      sequenceMap.set(user.id, this.createSequenceNo(index + 1))
+    })
+    return sequenceMap
+  }
+
+  private async loadAdminUserRelationBundles(userIds: string[]) {
+    if (!userIds.length) {
+      return {
+        rechargeByUserId: new Map<string, Awaited<ReturnType<PrismaService['rechargeOrder']['findMany']>>>(),
+        withdrawByUserId: new Map<string, Awaited<ReturnType<PrismaService['withdrawalOrder']['findMany']>>>(),
+        tradeByUserId: new Map<string, Awaited<ReturnType<PrismaService['tradeOrder']['findMany']>>>(),
+        auditByUserId: new Map<string, Awaited<ReturnType<PrismaService['auditLog']['findMany']>>>(),
+        hashRecords: [] as Awaited<ReturnType<PrismaService['hashRecord']['findMany']>>,
+      }
+    }
+
+    const [rechargeOrders, withdrawalOrders, tradeOrders, auditLogs] = await Promise.all([
+      this.prisma.rechargeOrder.findMany({
+        where: { userId: { in: userIds } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.withdrawalOrder.findMany({
+        where: { userId: { in: userIds } },
+        orderBy: { submittedAt: 'desc' },
+      }),
+      this.prisma.tradeOrder.findMany({
+        where: { userId: { in: userIds } },
+        orderBy: { submittedAt: 'desc' },
+      }),
+      this.prisma.auditLog.findMany({
+        where: { userId: { in: userIds } },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ])
+
+    const hashRecords =
+      rechargeOrders.length || withdrawalOrders.length || tradeOrders.length
+        ? await this.prisma.hashRecord.findMany({
+            where: {
+              OR: [
+                { rechargeOrderId: { in: unique(rechargeOrders.map((item) => item.id)) } },
+                { withdrawalOrderId: { in: unique(withdrawalOrders.map((item) => item.id)) } },
+                { tradeOrderId: { in: unique(tradeOrders.map((item) => item.id)) } },
+              ],
+            },
+            orderBy: { createdAt: 'desc' },
+          })
+        : []
+
+    const rechargeByUserId = new Map<string, typeof rechargeOrders>()
+    const withdrawByUserId = new Map<string, typeof withdrawalOrders>()
+    const tradeByUserId = new Map<string, typeof tradeOrders>()
+    const auditByUserId = new Map<string, typeof auditLogs>()
+
+    for (const item of rechargeOrders) {
+      const rows = rechargeByUserId.get(item.userId) || []
+      rows.push(item)
+      rechargeByUserId.set(item.userId, rows)
+    }
+    for (const item of withdrawalOrders) {
+      const rows = withdrawByUserId.get(item.userId) || []
+      rows.push(item)
+      withdrawByUserId.set(item.userId, rows)
+    }
+    for (const item of tradeOrders) {
+      const rows = tradeByUserId.get(item.userId) || []
+      rows.push(item)
+      tradeByUserId.set(item.userId, rows)
+    }
+    for (const item of auditLogs) {
+      if (!item.userId) {
+        continue
+      }
+      const rows = auditByUserId.get(item.userId) || []
+      rows.push(item)
+      auditByUserId.set(item.userId, rows)
+    }
+
+    return {
+      rechargeByUserId,
+      withdrawByUserId,
+      tradeByUserId,
+      auditByUserId,
+      hashRecords,
+    }
+  }
+
+  private async buildAdminSelectedUserDetail(
+    user: Prisma.UserGetPayload<{ include: { asset: true } }>,
+    withdrawals: WithdrawalOrder[],
+    recharges: Array<{ id: string; status: RechargeStatus; traceId: string; createdAt: Date }>,
+    trades: TradeOrder[],
+    audits: Array<{ id: string; module: string; action: string; traceId: string; createdAt: Date; payload: Prisma.JsonValue }>,
+    hashRecords: Array<{ traceId: string; syncStatus: string }>,
+    query: AdminUsersQueryDto = {},
+  ) {
+    const [registerLog, loginSessions, earliestLoginSession, earliestLoginAudit, paymentConfig] =
+      await Promise.all([
+        this.prisma.auditLog.findFirst({
+          where: {
+            userId: user.id,
+            module: 'auth',
+            action: 'register',
+          },
+          orderBy: { createdAt: 'asc' },
+        }),
+        this.prisma.userLoginSession.findMany({
+          where: { userId: user.id },
+          orderBy: { lastSeenAt: 'desc' },
+          take: 10,
+        }),
+        this.prisma.userLoginSession.findFirst({
+          where: { userId: user.id },
+          orderBy: { createdAt: 'asc' },
+        }),
+        this.prisma.auditLog.findFirst({
+          where: {
+            userId: user.id,
+            module: 'auth',
+            action: 'login',
+          },
+          orderBy: { createdAt: 'asc' },
+        }),
+        this.prisma.systemConfig.findUnique({
+          where: { configKey: this.paymentMethodConfigKey(user.id) },
+        }),
+      ])
+
+    const registerPayload = getJsonRecord(registerLog?.payload)
+    const metrics = await this.computeLiveAssetMetrics(user.id, user.asset)
+    const paymentMethod = this.parsePaymentMethodConfig(paymentConfig?.configValue)
+    const payoutMethods = paymentMethod
+      ? [
+          {
+            type: paymentMethod.type,
+            account: paymentMethod.account,
+            bankName: paymentMethod.bankName,
+            isDefault: true,
+          },
+        ]
+      : []
+
+    return {
+      uid: user.uid,
+      userId: user.id,
+      userStatus: this.mapUserStatus(user.status),
+      appreciationIncome: formatCurrency(toNumber(user.asset?.appreciationIncome)),
+      payoutProfileSummary: this.buildPayoutProfileSummary(withdrawals),
+      riskStatus: this.buildRiskStatus(user.status, withdrawals, hashRecords),
+      lastTradeAt: formatDateTime(trades[0]?.submittedAt),
+      latestTraceId:
+        audits[0]?.traceId || trades[0]?.traceId || withdrawals[0]?.traceId || recharges[0]?.traceId || '-',
+      registeredAt: formatDateTime(user.createdAt),
+      registerChannel: String(registerPayload.registerChannel || '-'),
+      registerIp: this.resolveAdminRegisterIp(registerPayload, earliestLoginSession, earliestLoginAudit),
+      deviceModel: loginSessions[0]?.deviceName || '-',
+      phone: user.phone || '-',
+      realName: String(registerPayload.realName || user.nickname || user.username),
+      idCard: this.resolveAdminIdNumber(registerPayload, audits),
+      realNameStatus: this.mapRealNameLabel(user.realNameStatus),
+      realNameVerifiedAt:
+        user.realNameStatus === RealNameStatus.VERIFIED ? formatDateTime(user.updatedAt) : '-',
+      payoutMethods,
+      availableBalance: formatCurrency(metrics.availableBalance),
+      frozenAmount: formatCurrency(metrics.withdrawFrozenAmount),
+      holdingValue: formatCurrency(metrics.marketValue),
+      totalProfit: formatCurrency(metrics.appreciationIncome),
+      cashAsset: formatCurrency(metrics.cashAsset),
+      goldHoldingGrams: formatGrams(metrics.goldGrams),
+      totalAsset: formatCurrency(metrics.totalAsset),
+      devices: loginSessions.map((item) => ({
+        deviceId: item.id,
+        deviceName: item.deviceName,
+        ip: item.ipLast || '-',
+        lastLoginAt: formatDateTime(item.lastSeenAt),
+      })),
+      ...(await this.loadUserOperationLogs(
+        user.id,
+        query.operationLogPage,
+        query.operationLogPageSize,
+      )),
+    }
+  }
+
+  private async loadUserOperationLogs(userId: string, pageInput?: number, pageSizeInput?: number) {
+    const page = Math.max(1, Number(pageInput) || 1)
+    const pageSize = Math.min(100, Math.max(1, Number(pageSizeInput) || 10))
+    const skip = (page - 1) * pageSize
+
+    const where = { userId }
+    const [total, rows] = await Promise.all([
+      this.prisma.auditLog.count({ where }),
+      this.prisma.auditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+    ])
+
+    return {
+      operationLogs: rows.map((item) => ({
+        id: item.id,
+        createdAt: formatDateTime(item.createdAt),
+        action: this.mapAuditAction(item.action),
+        detail: `${this.mapModuleLabel(item.module)} / ${item.traceId}`,
+      })),
+      operationLogsTotal: total,
+      operationLogPage: page,
+      operationLogPageSize: pageSize,
+    }
+  }
+
+  /** 与 C 端 profile 一致：暂定资产 + 实时持仓市值 */
+  private async resolveMarketUnitPrices(): Promise<MarketUnitPrices> {
+    let goldPricePerGram = GOLD_UNIT_PRICE
+    let silverPricePerGram = SILVER_UNIT_PRICE
+
+    if (this.marketService) {
+      const [goldResult, silverResult] = await Promise.allSettled([
+        this.marketService.getTicker('AU9999'),
+        this.marketService.getTicker('AG9999'),
+      ])
+
+      if (goldResult.status === 'fulfilled') {
+        const price = Number(goldResult.value?.price)
+        if (Number.isFinite(price) && price > 0) {
+          goldPricePerGram = price
+        }
+      }
+      if (silverResult.status === 'fulfilled') {
+        const price = Number(silverResult.value?.price)
+        if (Number.isFinite(price) && price > 0) {
+          silverPricePerGram = price
+        }
+      }
+    }
+
+    return { goldPricePerGram, silverPricePerGram }
+  }
+
+  private async computeLiveAssetMetrics(
+    userId: string,
+    asset:
+      | {
+          tentativeAsset?: Prisma.Decimal | number | string | null
+          cashAsset?: Prisma.Decimal | number | string | null
+          goldHoldingGrams?: Prisma.Decimal | number | string | null
+          appreciationIncome?: Prisma.Decimal | number | string | null
+          withdrawFrozenAmount?: Prisma.Decimal | number | string | null
+        }
+      | null
+      | undefined,
+    prices?: MarketUnitPrices,
+  ): Promise<LiveAssetMetrics> {
+    const priceBundle = prices ?? (await this.resolveMarketUnitPrices())
+    const goldGrams = toNumber(asset?.goldHoldingGrams)
+    const silverGrams = await this.getUserSilverHoldingGrams(userId)
+    const tentativeAsset = toNumber(asset?.tentativeAsset)
+    const cashAsset = toNumber(asset?.cashAsset)
+    const appreciationIncome = toNumber(asset?.appreciationIncome)
+    const withdrawFrozenAmount = toNumber(asset?.withdrawFrozenAmount)
+    const marketValue =
+      goldGrams * priceBundle.goldPricePerGram + silverGrams * priceBundle.silverPricePerGram
+    const availableBalance = Math.max(tentativeAsset, 0)
+    const totalAsset = availableBalance + marketValue
+
+    return {
+      tentativeAsset,
+      cashAsset,
+      goldGrams,
+      silverGrams,
+      marketValue,
+      availableBalance,
+      totalAsset,
+      appreciationIncome,
+      withdrawFrozenAmount,
+    }
+  }
+
+  /** 注册 IP：优先注册审计，其次首次登录审计 / 最早登录会话 */
+  private resolveAdminRegisterIp(
+    registerPayload: Record<string, unknown>,
+    earliestLoginSession: { ipLast: string } | null,
+    earliestLoginAudit: { payload: Prisma.JsonValue } | null,
+  ) {
+    const fromRegister = String(registerPayload.registerIp || registerPayload.ip || '').trim()
+    if (fromRegister) {
+      return fromRegister
+    }
+
+    const loginPayload = getJsonRecord(earliestLoginAudit?.payload)
+    const fromLoginAudit = String(loginPayload.ip || '').trim()
+    if (fromLoginAudit) {
+      return fromLoginAudit
+    }
+
+    const fromSession = String(earliestLoginSession?.ipLast || '').trim()
+    if (fromSession) {
+      return fromSession
+    }
+
+    return '-'
+  }
+
+  /** 管理端展示完整身份证号：优先注册审计明文，兼容历史审计载荷 */
+  private resolveAdminIdNumber(
+    registerPayload: Record<string, unknown>,
+    audits: Array<{ payload: Prisma.JsonValue }>,
+  ) {
+    const fromRegister = String(registerPayload.idNumber || '').trim()
+    if (fromRegister) {
+      return fromRegister
+    }
+
+    for (const item of audits) {
+      const payload = getJsonRecord(item.payload)
+      const idNumber = String(payload.idNumber || '').trim()
+      if (idNumber) {
+        return idNumber
+      }
+    }
+
+    return '-'
   }
 
   private createSequenceNo(sequence: number) {

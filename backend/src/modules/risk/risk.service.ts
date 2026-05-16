@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import { Prisma, UserStatus, WithdrawalStatus } from '@prisma/client'
 import { randomUUID } from 'crypto'
 import { formatDateTime, getJsonRecord, resolveAdminTimeRange } from '../../common/utils/admin-view.util'
@@ -327,7 +327,7 @@ export class RiskService {
       throw new NotFoundException('用户不存在')
     }
     if (user.status === UserStatus.FROZEN) {
-      throw new BadRequestException('当前用户已冻结')
+      throw new ConflictException('当前用户已冻结')
     }
 
     const traceId = randomUUID()
@@ -384,6 +384,9 @@ export class RiskService {
     })
     if (!user) {
       throw new NotFoundException('用户不存在')
+    }
+    if (user.status === UserStatus.ACTIVE) {
+      throw new ConflictException('当前用户未冻结')
     }
 
     const traceId = randomUUID()

@@ -6,45 +6,65 @@ describe('UserService admin users', () => {
   const decimal = (value: number) => new Prisma.Decimal(value)
   const resolved = <T,>(value: T) => jest.fn<() => Promise<T>>().mockResolvedValue(value)
 
-  it('filters users by computed sequenceNo and returns selected user details', async () => {
-    const prisma = {
+  const buildUsers = () => [
+    {
+      id: 'user-1',
+      uid: 'U0001',
+      username: 'alice',
+      nickname: '金影子A',
+      phone: '13800000001',
+      status: UserStatus.ACTIVE,
+      realNameStatus: RealNameStatus.VERIFIED,
+      createdAt: new Date('2026-04-01T08:00:00.000Z'),
+      updatedAt: new Date('2026-04-01T08:00:00.000Z'),
+      asset: {
+        cashAsset: decimal(1200),
+        goldHoldingGrams: decimal(2.5),
+        totalAsset: decimal(1600),
+        tentativeAsset: decimal(1200),
+        withdrawFrozenAmount: decimal(0),
+        appreciationIncome: decimal(400),
+      },
+    },
+    {
+      id: 'user-2',
+      uid: 'U0002',
+      username: 'bob',
+      nickname: '金影子B',
+      phone: '13800000002',
+      status: UserStatus.FROZEN,
+      realNameStatus: RealNameStatus.PENDING,
+      createdAt: new Date('2026-04-02T08:00:00.000Z'),
+      updatedAt: new Date('2026-04-02T08:00:00.000Z'),
+      asset: {
+        cashAsset: decimal(800),
+        goldHoldingGrams: decimal(0),
+        totalAsset: decimal(800),
+        tentativeAsset: decimal(0),
+        withdrawFrozenAmount: decimal(0),
+        appreciationIncome: decimal(0),
+      },
+    },
+  ]
+
+  const buildPrisma = () => {
+    const users = buildUsers()
+    return {
       user: {
-        findMany: resolved([
-          {
-            id: 'user-1',
-            uid: 'U0001',
-            username: 'alice',
-            nickname: '金影子A',
-            status: UserStatus.ACTIVE,
-            realNameStatus: RealNameStatus.VERIFIED,
-            createdAt: new Date('2026-04-01T08:00:00.000Z'),
-            asset: {
-              cashAsset: decimal(1200),
-              goldHoldingGrams: decimal(2.5),
-              totalAsset: decimal(1600),
-              tentativeAsset: decimal(1200),
-              withdrawFrozenAmount: decimal(0),
-              appreciationIncome: decimal(400),
-            },
-          },
-          {
-            id: 'user-2',
-            uid: 'U0002',
-            username: 'bob',
-            nickname: '金影子B',
-            status: UserStatus.FROZEN,
-            realNameStatus: RealNameStatus.PENDING,
-            createdAt: new Date('2026-04-02T08:00:00.000Z'),
-            asset: {
-              cashAsset: decimal(800),
-              goldHoldingGrams: decimal(0),
-              totalAsset: decimal(800),
-              tentativeAsset: decimal(0),
-              withdrawFrozenAmount: decimal(0),
-              appreciationIncome: decimal(0),
-            },
-          },
-        ]),
+        findUnique: jest.fn(async ({ where }: { where: { uid?: string } }) =>
+          users.find((item) => item.uid === where.uid) || null,
+        ),
+        findMany: jest.fn(async (args?: { where?: { id?: { contains?: string } }; skip?: number; take?: number }) => {
+          let rows = [...users]
+          if (args?.where?.id?.contains) {
+            rows = rows.filter((item) => item.id.includes(args.where!.id!.contains!))
+          }
+          if (typeof args?.skip === 'number' && typeof args?.take === 'number') {
+            rows = rows.slice(args.skip, args.skip + args.take)
+          }
+          return rows
+        }),
+        count: resolved(users.length),
       },
       rechargeOrder: {
         findMany: resolved([
@@ -93,21 +113,56 @@ describe('UserService admin users', () => {
             action: 'withdraw.create',
             traceId: 'trace-wd-1',
             createdAt: new Date('2026-04-05T08:05:00.000Z'),
+            payload: {},
           },
         ]),
+        findFirst: resolved(null),
+        count: resolved(1),
       },
       hashRecord: {
         findMany: resolved([]),
       },
+      userLoginSession: {
+        findMany: resolved([]),
+        findFirst: resolved(null),
+      },
+      systemConfig: {
+        findUnique: resolved(null),
+      },
     } as any
+  }
 
+  it('filters users by computed sequenceNo and returns selected user details', async () => {
+    const prisma = buildPrisma()
     const service = new UserService(prisma)
     const result = await service.getAdminUsers({ sequenceNo: 'S00000002' })
 
     expect(result.rows).toHaveLength(1)
     expect(result.rows[0].uid).toBe('U0002')
-    expect(result.selectedUser.uid).toBe('U0002')
+    expect(result.rows[0].sequenceNo).toBe('S00000002')
+    expect((result.selectedUser as { uid: string }).uid).toBe('U0002')
     expect(result.relatedRecords.withdraw[0]).toContain('提现单 wd-1')
+  })
+
+  it('uses live asset formula for admin list totalAsset', async () => {
+    const prisma = buildPrisma()
+    const service = new UserService(prisma)
+    const result = await service.getAdminUsers({ page: 1, pageSize: 10 })
+
+    const row = result.rows.find((item) => item.uid === 'U0001')
+    expect(row).toBeTruthy()
+    // 暂定 1200 + 黄金 2.5g * 基准金价 1046.2
+    expect(row?.totalAsset).toBe('¥3,815.50')
+  })
+
+  it('loads selected user by exact uid even when not on current page', async () => {
+    const prisma = buildPrisma()
+    const service = new UserService(prisma)
+    const result = await service.getAdminUsers({ uid: 'U0002', page: 1, pageSize: 1 })
+
+    expect(result.rows).toHaveLength(1)
+    expect((result.selectedUser as { uid: string; userStatus: string }).uid).toBe('U0002')
+    expect((result.selectedUser as { userStatus: string }).userStatus).toBe('冻结')
   })
 })
 

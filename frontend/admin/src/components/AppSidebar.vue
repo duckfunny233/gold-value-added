@@ -2,22 +2,27 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AdminAuthService } from '../services/auth'
+import { MVP_MENU_ORDER } from '../constants/mvp-menu'
 
 const route = useRoute()
 const router = useRouter()
 
-const menus = [
-  { path: '/dashboard', label: '首页仪表盘' },
-  { path: '/users', label: '用户管理' },
-  { path: '/trades', label: '交易管理' },
-  { path: '/funds', label: '资金管理' },
-  { path: '/leaderboard', label: '排行榜治理' },
-  { path: '/risk', label: '权限与风控' },
-  { path: '/audit', label: '审计追溯' },
-  { path: '/reports', label: '报表中心' },
-  { path: '/realname-audit', label: '实名认证审核' },
-  { path: '/system-config', label: '系统配置' },
-]
+const menus = computed(() => {
+  const layoutRoute = router.options.routes.find((item) => item.path === '/')
+  const children = layoutRoute?.children || []
+  const orderIndex = (path) => {
+    const index = MVP_MENU_ORDER.indexOf(path)
+    return index === -1 ? 999 : index
+  }
+
+  return children
+    .filter((child) => child.meta?.title && !child.meta?.mvpHidden && child.path)
+    .sort((a, b) => orderIndex(a.path) - orderIndex(b.path))
+    .map((child) => ({
+      path: `/${child.path}`,
+      label: child.meta.title,
+    }))
+})
 
 const activePath = computed(() => route.path)
 

@@ -1,4 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
+import { Type } from 'class-transformer'
 import { IsIn, IsOptional, IsString } from 'class-validator'
 
 const TIME_RANGES = ['today', '7d', '30d'] as const
@@ -53,11 +54,23 @@ export class AdminUsersQueryDto {
 
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
+  @Type(() => Number)
   page?: number
 
   @ApiPropertyOptional({ default: 10 })
   @IsOptional()
+  @Type(() => Number)
   pageSize?: number
+
+  @ApiPropertyOptional({ description: '用户详情-操作记录页码', default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  operationLogPage?: number
+
+  @ApiPropertyOptional({ description: '用户详情-操作记录每页条数', default: 10 })
+  @IsOptional()
+  @Type(() => Number)
+  operationLogPageSize?: number
 }
 
 export class AdminUserManualCheckDto {

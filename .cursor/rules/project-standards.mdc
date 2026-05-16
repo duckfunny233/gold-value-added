@@ -1,0 +1,63 @@
+---
+description: 金影子项目规范（代码风格、注释、目录结构、AI 语言）
+alwaysApply: true
+---
+
+# 金影子 · 项目规范
+
+## 语言与沟通
+
+- AI 回复、说明、提交说明草稿：一律使用**简体中文**。
+- 用户可见文案（界面、错误提示）：走 `frontend/app/src/locales/zh.json`，勿硬编码英文。
+
+## 目录结构
+
+```text
+金影子/
+├── backend/              # NestJS + Prisma + PostgreSQL
+│   └── src/modules/      # 按业务域拆分：auth、user、fund、trade、system…
+├── frontend/
+│   ├── app/              # 用户端 Vue 3 + Vite + Tauri
+│   ├── admin/            # 管理端
+│   └── shared/           # 前后端共享资源
+└── 接口文档/             # API 与后台管理文档
+```
+
+- 新后端能力：在 `backend/src/modules/<域>/` 下扩展，复用 `common/` 中的过滤器、拦截器、工具。
+- 新前端页面：`frontend/app/src/views/`，API 封装在 `src/services/`，通用请求用 `src/utils/request.js` 的 `apiFetch`。
+- 生产功能对接**真实后端**，勿用 mock/localStorage 假数据（`settings.js` 中 `STORAGE_KEY` 仅作遗留清理参考）。
+
+## 代码风格
+
+### 后端（TypeScript / NestJS）
+
+- 单文件模块模式与现有 `*.module.ts` 一致：`@Module` + `@Controller` + `@Injectable` 同文件。
+- DTO 使用 `class-validator`；对外响应保持 `{ code, message, traceId, data }`。
+- 数据库变更：Prisma schema + `prisma migrate dev`，禁止手改生产库。
+- Node 版本：`>=22`（见 `backend/package.json` engines）。
+
+### 前端（Vue 3）
+
+- 使用 `<script setup>` + Composition API；样式优先 Tailwind，与现有页面一致。
+- 服务层：`src/services/*.js` 导出异步函数，统一 `apiFetch`，不直接在组件里拼 URL。
+- 路由、视图命名：PascalCase 组件文件，kebab-case 路由 path。
+
+## 注释
+
+- **业务规则、资金/交易/风控逻辑**：中文注释，写清「为什么」和边界条件。
+- **类型、框架样板、显而易见的一行实现**：可不注释或简短英文。
+- 禁止空 `catch`、禁止无说明的 `// TODO` 长期遗留。
+
+## 示例
+
+```typescript
+// ✅ 撮合：价格优先，同价时间优先
+async matchOrders(buy, sell) { /* ... */ }
+```
+
+```javascript
+// ❌ 设备列表继续写死 mock
+const devices = [{ id: 'fake_1', name: 'iPhone' }]
+// ✅ 调用 settings API / 后端 UserLoginSession
+const devices = await fetchSecurityDevices()
+```

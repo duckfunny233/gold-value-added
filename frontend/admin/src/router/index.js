@@ -19,17 +19,17 @@ const routes = [
     path: '/',
     component: AdminLayout,
     children: [
-      { path: '', redirect: '/dashboard' },
-      { path: 'dashboard', name: 'dashboard', component: DashboardView, meta: { title: '首页仪表盘' } },
+      { path: '', redirect: '/users' },
+      { path: 'dashboard', name: 'dashboard', component: DashboardView, meta: { title: '首页仪表盘', mvpHidden: true } },
       { path: 'users', name: 'users', component: UsersView, meta: { title: '用户管理' } },
-      { path: 'trades', name: 'trades', component: TradesView, meta: { title: '交易管理' } },
       { path: 'funds', name: 'funds', component: FundsView, meta: { title: '资金管理' } },
-      { path: 'leaderboard', name: 'leaderboard', component: LeaderboardView, meta: { title: '排行榜治理' } },
-      { path: 'risk', name: 'risk', component: RiskView, meta: { title: '权限与风控' } },
+      { path: 'trades', name: 'trades', component: TradesView, meta: { title: '交易管理' } },
+      { path: 'leaderboard', name: 'leaderboard', component: LeaderboardView, meta: { title: '排行榜治理', mvpHidden: true } },
+      { path: 'risk', name: 'risk', component: RiskView, meta: { title: '权限管理' } },
       { path: 'audit', name: 'audit', component: AuditView, meta: { title: '审计追溯' } },
-      { path: 'reports', name: 'reports', component: ReportsView, meta: { title: '报表中心' } },
-      { path: 'realname-audit', name: 'realname-audit', component: RealnameAuditView, meta: { title: '实名认证审核' } },
-      { path: 'system-config', name: 'system-config', component: SystemConfigView, meta: { title: '系统配置' } },
+      { path: 'reports', name: 'reports', component: ReportsView, meta: { title: '报表中心', mvpHidden: true } },
+      { path: 'realname-audit', name: 'realname-audit', component: RealnameAuditView, meta: { title: '实名认证审核', mvpHidden: true } },
+      { path: 'system-config', name: 'system-config', component: SystemConfigView, meta: { title: '系统配置', mvpHidden: true } },
     ],
   },
 ]
@@ -49,7 +49,7 @@ router.beforeEach((to, from, next) => {
     return
   }
   if (to.name === 'login' && isAuthenticated) {
-    next({ name: 'dashboard' })
+    next({ name: 'users' })
     return
   }
   next()

@@ -37,13 +37,6 @@ const freezeDialog = reactive({
   action: 'freeze',
 })
 
-const phoneVerifyDialog = reactive({
-  open: false,
-  phone: '',
-  code: '',
-  verified: false,
-})
-
 const kickDeviceDialog = reactive({
   open: false,
   deviceId: '',
@@ -54,6 +47,11 @@ const resetPasswordDialog = reactive({
   open: false,
   uid: '',
 })
+
+const operationLogPage = ref(1)
+const operationLogPageSize = ref(10)
+const operationLogsTotal = ref(0)
+const logsLoading = ref(false)
 
 useQueryFilters(filters, ['userId', 'uid', 'sequenceNo', 'realNameStatus', 'rechargeStatus', 'withdrawStatus'])
 
@@ -71,6 +69,8 @@ async function loadData() {
     selectedUser.value = data.selectedUser || {}
     relatedRecords.value = data.relatedRecords || { recharge: [], withdraw: [], trade: [], audit: [] }
     selectedUid.value = data.selectedUser?.uid || rows.value[0]?.uid || ''
+    operationLogsTotal.value = data.selectedUser?.operationLogsTotal || 0
+    operationLogPage.value = data.selectedUser?.operationLogPage || 1
   } catch (err) {
     error.value = err.message || '用户数据加载失败'
   } finally {
@@ -106,16 +106,71 @@ async function copyUserId(id) {
   }
 }
 
+async function loadOperationLogs() {
+  const uid = selectedUid.value || selectedUser.value?.uid
+  if (!uid) {
+    return
+  }
+
+  logsLoading.value = true
+  error.value = ''
+  try {
+    const data = await AdminService.getUsers({
+      uid,
+      operationLogPage: operationLogPage.value,
+      operationLogPageSize: operationLogPageSize.value,
+    })
+    const detail = data.selectedUser || {}
+    selectedUser.value = {
+      ...selectedUser.value,
+      operationLogs: detail.operationLogs || [],
+      operationLogsTotal: detail.operationLogsTotal ?? 0,
+      operationLogPage: detail.operationLogPage ?? operationLogPage.value,
+    }
+    operationLogsTotal.value = detail.operationLogsTotal ?? 0
+    operationLogPage.value = detail.operationLogPage ?? operationLogPage.value
+  } catch (err) {
+    error.value = err.message || '操作记录加载失败'
+  } finally {
+    logsLoading.value = false
+  }
+}
+
+function switchDetailTab(tab) {
+  activeDetailTab.value = tab
+  if (tab === 'logs') {
+    operationLogPage.value = 1
+    loadOperationLogs()
+  }
+}
+
+function handleOperationLogPageChange(page) {
+  if (page < 1) {
+    return
+  }
+  const maxPage = Math.max(1, Math.ceil(operationLogsTotal.value / operationLogPageSize.value))
+  if (page > maxPage) {
+    return
+  }
+  operationLogPage.value = page
+  loadOperationLogs()
+}
+
 async function selectUser(uid) {
   selectedUid.value = uid
   activeDetailTab.value = 'overview'
-  phoneVerifyDialog.verified = false
+  operationLogPage.value = 1
   loading.value = true
   error.value = ''
   try {
-    const data = await AdminService.getUsers({ uid })
+    const data = await AdminService.getUsers({
+      uid,
+      operationLogPage: 1,
+      operationLogPageSize: operationLogPageSize.value,
+    })
     selectedUser.value = data.selectedUser || {}
     relatedRecords.value = data.relatedRecords || { recharge: [], withdraw: [], trade: [], audit: [] }
+    operationLogsTotal.value = data.selectedUser?.operationLogsTotal || 0
   } catch (err) {
     error.value = err.message || '用户详情加载失败'
   } finally {
@@ -174,34 +229,25 @@ async function submitFreezeDialog() {
   freezeDialog.open = false
 }
 
-function maskPhone(phone) {
-  if (!phone || phone.length < 7) return phone
-  return phone.slice(0, 3) + '****' + phone.slice(-4)
-}
-
-function maskIdCard(idCard) {
-  if (!idCard || idCard.length < 10) return idCard
-  return idCard.slice(0, 4) + '**********' + idCard.slice(-4)
-}
-
-function maskBankAccount(account) {
-  if (!account || account.length < 8) return account
-  return '****' + account.slice(-4)
-}
-
-function openPhoneVerify(phone) {
-  phoneVerifyDialog.phone = phone
-  phoneVerifyDialog.code = ''
-  phoneVerifyDialog.open = true
-}
-
-function verifyPhoneCode() {
-  if (phoneVerifyDialog.code === '123456') {
-    phoneVerifyDialog.verified = true
-    phoneVerifyDialog.open = false
-  } else {
-    error.value = '验证码错误，请重试'
+/** 收款方式类型码 → 中文展示（管理端不展示英文枚举） */
+function formatPayoutMethodType(type) {
+  const key = String(type || '').toLowerCase()
+  const labels = {
+    alipay: '支付宝',
+    wechat: '微信',
+    bankcard: '银行卡',
+    bank: '银行卡',
   }
+  return labels[key] || type || '-'
+}
+
+function formatPayoutMethodLine(method) {
+  const typeLabel = formatPayoutMethodType(method.type)
+  const account = String(method.account || '').trim()
+  const bankName = String(method.bankName || '').trim()
+  const accountText = bankName && account ? `${bankName} ${account}` : account || bankName
+  const defaultTag = method.isDefault ? '（默认）' : ''
+  return accountText ? `${typeLabel} ${accountText}${defaultTag}` : `${typeLabel}${defaultTag}`
 }
 
 function openKickDevice(device) {
@@ -361,7 +407,7 @@ onMounted(loadData)
         <button class="tab-btn" :class="{ active: activeDetailTab === 'realname' }" @click="activeDetailTab = 'realname'">实名信息</button>
         <button class="tab-btn" :class="{ active: activeDetailTab === 'assets' }" @click="activeDetailTab = 'assets'">资产明细</button>
         <button class="tab-btn" :class="{ active: activeDetailTab === 'devices' }" @click="activeDetailTab = 'devices'">登录设备</button>
-        <button class="tab-btn" :class="{ active: activeDetailTab === 'logs' }" @click="activeDetailTab = 'logs'">操作记录</button>
+        <button class="tab-btn" :class="{ active: activeDetailTab === 'logs' }" @click="switchDetailTab('logs')">操作记录</button>
         <button class="tab-btn" :class="{ active: activeDetailTab === 'control' }" @click="activeDetailTab = 'control'">账户控制</button>
       </div>
 
@@ -378,30 +424,26 @@ onMounted(loadData)
         <div class="kv-item"><strong>注册渠道</strong><span>{{ selectedUser.registerChannel || '-' }}</span></div>
         <div class="kv-item"><strong>注册IP</strong><span>{{ selectedUser.registerIp || '-' }}</span></div>
         <div class="kv-item"><strong>设备型号</strong><span>{{ selectedUser.deviceModel || '-' }}</span></div>
-        <div class="kv-item">
-          <strong>手机号</strong>
-          <span>
-            {{ phoneVerifyDialog.verified ? selectedUser.phone : maskPhone(selectedUser.phone) }}
-            <button v-if="!phoneVerifyDialog.verified" class="link-btn" type="button" @click="openPhoneVerify(selectedUser.phone)">查看完整</button>
-            <span v-else class="badge-success">已验证</span>
-          </span>
-        </div>
+        <div class="kv-item"><strong>手机号</strong><span>{{ selectedUser.phone || '-' }}</span></div>
       </div>
 
       <div v-if="activeDetailTab === 'realname'" class="kv-list">
         <div class="kv-item"><strong>真实姓名</strong><span>{{ selectedUser.realName || '-' }}</span></div>
-        <div class="kv-item"><strong>身份证号</strong><span>{{ maskIdCard(selectedUser.idCard) }}</span></div>
+        <div class="kv-item"><strong>身份证号</strong><span>{{ selectedUser.idCard || '-' }}</span></div>
         <div class="kv-item"><strong>实名状态</strong><span>{{ selectedUser.realNameStatus || '-' }}</span></div>
         <div class="kv-item"><strong>认证时间</strong><span>{{ selectedUser.realNameVerifiedAt || '-' }}</span></div>
-        <div class="kv-item"><strong>收款方式</strong></div>
-        <div v-if="selectedUser.payoutMethods?.length" class="payout-methods">
-          <div v-for="method in selectedUser.payoutMethods" :key="method.type" class="payout-item">
-            <span class="badge">{{ method.type }}</span>
-            <span>{{ maskBankAccount(method.account) }}</span>
-            <span :class="method.isDefault ? 'badge-success' : 'muted'">{{ method.isDefault ? '默认' : '' }}</span>
-          </div>
+        <div class="kv-item"><strong>收款方式</strong>
+          <span v-if="selectedUser.payoutMethods?.length" class="payout-methods-inline">
+            <span
+              v-for="(method, index) in selectedUser.payoutMethods"
+              :key="`${method.type}-${index}`"
+              class="payout-line"
+            >
+              {{ formatPayoutMethodLine(method) }}
+            </span>
+          </span>
+          <span v-else>未绑定收款方式</span>
         </div>
-        <div v-else class="muted">未绑定收款方式</div>
         <div class="actions" style="margin-top: 12px;">
           <RouterLink to="/realname-audit" class="primary-btn-link">跳转到实名审核页</RouterLink>
         </div>
@@ -431,8 +473,9 @@ onMounted(loadData)
         <div v-else class="muted">暂无登录设备记录</div>
       </div>
 
-      <div v-if="activeDetailTab === 'logs'">
-        <ul v-if="selectedUser.operationLogs?.length" class="list-plain">
+      <div v-if="activeDetailTab === 'logs'" class="logs-panel">
+        <p v-if="logsLoading" class="muted">操作记录加载中...</p>
+        <ul v-else-if="selectedUser.operationLogs?.length" class="list-plain">
           <li v-for="log in selectedUser.operationLogs" :key="log.id" class="log-item">
             <span class="muted">{{ log.createdAt }}</span>
             <span>{{ log.action }}</span>
@@ -440,6 +483,25 @@ onMounted(loadData)
           </li>
         </ul>
         <div v-else class="muted">暂无操作记录</div>
+        <div v-if="operationLogsTotal > 0" class="pagination-bar compact">
+          <span class="muted">共 {{ operationLogsTotal }} 条，每页 {{ operationLogPageSize }} 条，当前第 {{ operationLogPage }} 页</span>
+          <div class="actions compact">
+            <button
+              type="button"
+              @click="handleOperationLogPageChange(operationLogPage - 1)"
+              :disabled="operationLogPage <= 1 || logsLoading"
+            >
+              上一页
+            </button>
+            <button
+              type="button"
+              @click="handleOperationLogPageChange(operationLogPage + 1)"
+              :disabled="operationLogPage >= Math.ceil(operationLogsTotal / operationLogPageSize) || logsLoading"
+            >
+              下一页
+            </button>
+          </div>
+        </div>
       </div>
 
       <div v-if="activeDetailTab === 'control'" class="control-panel">
@@ -510,20 +572,6 @@ onMounted(loadData)
   </ActionDialog>
 
   <ActionDialog
-    :open="phoneVerifyDialog.open"
-    title="查看完整手机号"
-    description="请输入验证码以查看完整手机号"
-    confirm-text="验证"
-    @close="phoneVerifyDialog.open = false"
-    @confirm="verifyPhoneCode"
-  >
-    <label class="dialog-label">
-      验证码
-      <input v-model="phoneVerifyDialog.code" placeholder="请输入验证码（演示：123456）" />
-    </label>
-  </ActionDialog>
-
-  <ActionDialog
     :open="kickDeviceDialog.open"
     title="踢下线"
     description="确认将该设备踢下线？"
@@ -572,18 +620,14 @@ onMounted(loadData)
 .link-btn:hover {
   text-decoration: underline;
 }
-.payout-methods {
+.payout-methods-inline {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 4px;
+  gap: 4px;
 }
-.payout-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  padding: 4px 0;
+.payout-line {
+  display: block;
+  line-height: 1.5;
 }
 .device-list {
   display: flex;
@@ -665,6 +709,11 @@ onMounted(loadData)
 .record-nav-link:hover {
   text-decoration: underline;
 }
+.logs-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 .pagination-bar {
   display: flex;
   align-items: center;
@@ -674,6 +723,12 @@ onMounted(loadData)
   padding-top: 16px;
   border-top: 1px solid var(--border-color, #e5e7eb);
   flex-wrap: nowrap;
+}
+.pagination-bar.compact {
+  margin-top: 8px;
+  padding-top: 8px;
+  flex-wrap: wrap;
+  justify-content: space-between;
 }
 .page-size-select {
   padding: 4px 6px;

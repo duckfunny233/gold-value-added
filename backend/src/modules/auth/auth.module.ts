@@ -34,6 +34,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator'
+import { resolveClientIp } from '../../common/utils/client-ip.util'
 import { sha256 } from '../../common/utils/hash.util'
 import { clientFingerprintFromUserAgent, summarizeClient } from '../../common/utils/user-agent.util'
 import { generateUid } from '../../common/utils/uid.util'
@@ -202,7 +203,7 @@ class AuthService {
     }
   }
 
-  async register(payload: RegisterDto) {
+  async register(payload: RegisterDto, registerIp?: string) {
     const username = payload.username.trim()
     const phone = payload.phone.trim()
     const otp = (payload.otp || payload.otpCode || '').trim()
@@ -215,14 +216,19 @@ class AuthService {
       realName: payload.realName?.trim(),
       idNumber: payload.idNumber?.trim(),
       registerChannel: 'json',
+      registerIp,
     })
   }
 
-  async registerWithFiles(payload: RegisterWithFilesDto, files: {
+  async registerWithFiles(
+    payload: RegisterWithFilesDto,
+    files: {
     idCardFront?: UploadedFile[]
     idCardBack?: UploadedFile[]
     proofFile?: UploadedFile[]
-  }) {
+  },
+    registerIp?: string,
+  ) {
     const idCardFront = files.idCardFront?.[0]
     const idCardBack = files.idCardBack?.[0]
     const proofFile = files.proofFile?.[0]
@@ -243,6 +249,7 @@ class AuthService {
       idNumber: payload.idNumber.trim(),
       proofType: payload.proofType,
       registerChannel: 'multipart',
+      registerIp,
       files: {
         idCardFrontName: idCardFront.originalname,
         idCardBackName: idCardBack.originalname,
@@ -270,6 +277,7 @@ class AuthService {
     idNumber?: string
     proofType?: string
     registerChannel: 'json' | 'multipart'
+    registerIp?: string
     files?: {
       idCardFrontName?: string
       idCardBackName?: string
@@ -324,9 +332,11 @@ class AuthService {
             username: createdUser.username,
             phone: createdUser.phone,
             realName: payload.realName || null,
+            idNumber: payload.idNumber?.trim() || null,
             idNumberHash: payload.idNumber ? sha256(payload.idNumber) : null,
             proofType: payload.proofType || null,
             registerChannel: payload.registerChannel,
+            registerIp: payload.registerIp?.trim() || null,
             files: payload.files || null,
           },
         },
@@ -479,8 +489,8 @@ class AuthController {
 
   @Post('register')
   @HttpCode(200)
-  register(@Body() body: RegisterDto) {
-    return this.authService.register(body)
+  register(@Body() body: RegisterDto, @Req() req: { headers?: Record<string, string | string[]>; ip?: string; socket?: { remoteAddress?: string } }) {
+    return this.authService.register(body, resolveClientIp(req))
   }
 
   @Post('register-with-files')
@@ -507,21 +517,17 @@ class AuthController {
       idCardBack?: UploadedFile[]
       proofFile?: UploadedFile[]
     },
+    @Req() req: { headers?: Record<string, string | string[]>; ip?: string; socket?: { remoteAddress?: string } },
   ) {
-    return this.authService.registerWithFiles(body, files)
+    return this.authService.registerWithFiles(body, files, resolveClientIp(req))
   }
 
   @Post('login')
   @HttpCode(200)
-  login(@Body() body: LoginDto, @Req() req: any) {
-    const rawIp =
-      String(req?.headers?.['x-forwarded-for'] || '')
-        .split(',')[0]
-        .trim() ||
-      String(req?.ip || '').trim() ||
-      String(req?.socket?.remoteAddress || '').trim()
-    const userAgent = req?.headers?.['user-agent']
-    return this.authService.login(body, rawIp, userAgent)
+  login(@Body() body: LoginDto, @Req() req: { headers?: Record<string, string | string[]>; ip?: string; socket?: { remoteAddress?: string } }) {
+    const rawAgent = req?.headers?.['user-agent']
+    const userAgent = Array.isArray(rawAgent) ? rawAgent[0] : rawAgent
+    return this.authService.login(body, resolveClientIp(req), userAgent)
   }
 
   @Post('reset-password')

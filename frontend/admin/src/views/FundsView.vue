@@ -6,12 +6,26 @@ import { useQueryFilters } from '../composables/useQueryFilters'
 import { AdminService } from '../services/admin'
 import { PlatformService } from '../services/platform'
 import {
+  MVP_SHOW_FUNDS_CHANNEL_RECONCILE,
+  MVP_SHOW_FUNDS_MANUAL_OPS,
+  MVP_SHOW_FUNDS_OVERVIEW,
+  MVP_SHOW_FUNDS_REPORT_EXPORT,
+} from '../constants/mvp-features'
+import {
   getWithdrawAlertStatusLabel,
   getWithdrawStatusLabel,
   WITHDRAW_STATUS,
 } from '../../../shared/constants/status'
 
 const activeMainTab = ref('orders')
+
+const showFundsOverview = MVP_SHOW_FUNDS_OVERVIEW
+const showFundsManualOps = MVP_SHOW_FUNDS_MANUAL_OPS
+const showFundsChannelReconcile = MVP_SHOW_FUNDS_CHANNEL_RECONCILE
+const showFundsReportExport = MVP_SHOW_FUNDS_REPORT_EXPORT
+const showFundsAside = computed(
+  () => showFundsManualOps || showFundsChannelReconcile,
+)
 
 const filters = reactive({
   orderType: '',
@@ -451,6 +465,9 @@ async function loadPlatformData() {
 }
 
 function switchToMainTab(tab) {
+  if (tab === 'overview' && !showFundsOverview) {
+    return
+  }
   activeMainTab.value = tab
   error.value = ''
   actionMessage.value = ''
@@ -488,7 +505,7 @@ onMounted(loadData)
 <template>
   <PageHeader title="资金管理" />
 
-  <section class="panel">
+  <section v-if="showFundsOverview" class="panel">
     <div class="tabs">
       <button class="tab-btn" :class="{ active: activeMainTab === 'orders' }" @click="switchToMainTab('orders')">订单操作</button>
       <button class="tab-btn" :class="{ active: activeMainTab === 'overview' }" @click="switchToMainTab('overview')">平台总览</button>
@@ -496,7 +513,7 @@ onMounted(loadData)
   </section>
 
   <!-- ========== 订单操作 ========== -->
-  <template v-if="activeMainTab === 'orders'">
+  <template v-if="!showFundsOverview || activeMainTab === 'orders'">
     <section class="panel">
       <div class="form-row">
         <label>
@@ -532,7 +549,7 @@ onMounted(loadData)
       </div>
       <div class="actions">
         <button class="primary" @click="loadData" :disabled="loading">{{ loading ? '加载中...' : '查询' }}</button>
-        <button @click="handleExport">导出</button>
+        <button v-if="showFundsReportExport" @click="handleExport">导出</button>
       </div>
       <p v-if="error" class="login-error">{{ error }}</p>
       <p v-else-if="actionMessage" class="note">{{ actionMessage }}</p>
@@ -705,8 +722,8 @@ onMounted(loadData)
         </div>
       </article>
 
-      <aside class="stack">
-        <article class="panel">
+      <aside v-if="showFundsAside" class="stack">
+        <article v-if="showFundsManualOps" class="panel">
           <div class="panel-head">
             <h2>补款与资产调整</h2>
             <span class="muted">变更必须写入审计日志</span>
@@ -723,7 +740,7 @@ onMounted(loadData)
           </div>
         </article>
 
-        <article class="panel">
+        <article v-if="showFundsChannelReconcile" class="panel">
           <div class="panel-head">
             <h2>渠道对账</h2>
             <span class="muted">覆盖微信、支付宝、银行卡</span>
@@ -737,8 +754,8 @@ onMounted(loadData)
 
     <section class="panel">
       <div class="panel-head">
-        <h2>资金流水审计</h2>
-        <span class="muted">展示手工转账、补款、资产调整等操作记录</span>
+        <h2>资金流水</h2>
+        <span class="muted">充值、提现、交易等资金变动记录</span>
       </div>
       <table>
         <thead>
@@ -768,6 +785,7 @@ onMounted(loadData)
     </section>
 
     <ActionDialog
+      v-if="showFundsManualOps"
       :open="fundDialog.open"
       :title="fundDialog.mode === 'transfer' ? '手工转账' : fundDialog.mode === 'topup' ? '补款处理' : '资产调整'"
       description="变更会直接写入资金流水与审计日志。"
@@ -870,7 +888,7 @@ onMounted(loadData)
   </template>
 
   <!-- ========== 平台总览 ========== -->
-  <template v-else>
+  <template v-else-if="showFundsOverview">
     <section class="panel">
       <div class="actions">
         <button class="primary" @click="loadPlatformData" :disabled="platformLoading">{{ platformLoading ? '刷新中...' : '刷新数据' }}</button>
